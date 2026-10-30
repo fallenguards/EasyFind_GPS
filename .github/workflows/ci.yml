@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  luacheck:
+    name: Luacheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: nebularg/actions-luacheck@v1
+        with:
+          files: '.'
+          args: '--no-color -q'
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      # The tests read EasyFind's own files where GPS meets them: its
+      # checkout beside this one, where the harness looks by default.
+      - uses: actions/checkout@v4
+        with:
+          path: EasyFind_GPS
+      - uses: actions/checkout@v4
+        with:
+          repository: fallenguards/EasyFind
+          path: EasyFind
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: '5.4'
+      - name: Run tests
+        working-directory: EasyFind_GPS
+        run: lua tests/Run.lua
