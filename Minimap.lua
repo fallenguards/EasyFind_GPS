@@ -282,6 +282,7 @@ local function Build()
     frame:SetAllPoints(Minimap)
     frame:EnableMouse(false)
     lines = ns.GPSPreview.NewLines(frame, "CENTER")
+    Mini._lines = lines   -- tests
     if not OWN_MARK then return end
     mark = CreateFrame("Frame", nil, frame)
     mark:SetWidth(MARK + 2 * CASING)
