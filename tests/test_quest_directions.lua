@@ -107,6 +107,18 @@ function tests.logRows_leadWhereTheGamePlacesThem()
     H.assertEq(provider.place(rows[1]).mapID, 1429)
 end
 
+-- The route's end pin is drawn with the destination's category: without
+-- the provider's, the quest mark sat bare on the map's art (iconWell).
+function tests.everyDestination_carriesTheProvidersCategory()
+    local _, menus, provider, navigated = Load()
+    H.assertTrue(provider.iconWell, "the provider asks for the well")
+    H.assertEq(provider.place(provider.rows()[1]).category, provider.key)
+    local root = Root()
+    menus.MENU_QUEST_MAP_LOG_TITLE({ questID = 101 }, root)
+    root.items[2].fn()
+    H.assertEq(navigated[1].category, provider.key, "the menu's Directions too")
+end
+
 function tests.besideTheQuestieExtension_noLogRows()
     local _, menus, provider = Load({ questie = true })
     H.assertNil(provider, "its rows already list the log")

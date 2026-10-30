@@ -59,12 +59,15 @@ local function QuestTitle(questID)
     return nil
 end
 
+local KEY = "logQuests"
+
+-- category: the provider's, so the route's end pin draws the mark in its well.
 local function Destination(questID)
     local mapID, x, y = QuestSpot(questID)
     if not mapID then return nil end
     local done = QL.IsComplete and QL.IsComplete(questID)
     local dest = { name = QuestTitle(questID) or L["APP_GPS"], mapID = mapID, x = x, y = y,
-                   icon = done and ICON_TURN_IN or ICON_IN_PROGRESS }
+                   icon = done and ICON_TURN_IN or ICON_IN_PROGRESS, category = KEY }
     return GPS:CanNavigate(dest) and dest or nil
 end
 
@@ -122,8 +125,6 @@ local function Questie()
 end
 if not (GetQuestUiMapID or QL.GetNextWaypoint) or Questie() then return end
 
-local KEY = "logQuests"
-
 local function Rows()
     local out = {}
     for _, q in ipairs(LogQuests()) do
@@ -149,6 +150,8 @@ EasyFind.API.RegisterSearchProvider({
     label = QUESTS_LABEL or "Quests",
     extension = "gps",
     words = { "quest", "quests" },
+    -- The game's small "?" is lost in the map's art on its pin.
+    iconWell = true,
     rows = Rows,
     place = function(row) return row.questID and Destination(row.questID) or nil end,
     select = function(row)
