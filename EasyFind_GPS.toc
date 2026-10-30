@@ -2,7 +2,8 @@
 ## Title: EasyFind [GPS]
 ## Notes: Step-by-step directions to anywhere EasyFind can find. Requires EasyFind.
 ## Author: justawower
-## Version: 1.0.0
+## X-Curse-Project-ID: 1774025
+## Version:1.0.0
 ## IconTexture: Interface\AddOns\EasyFind\textures\SpyglassMinimap
 ## Group: EasyFind
 ## Category: UI
