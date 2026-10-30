@@ -543,7 +543,7 @@ local function EndOnMap(route, mapID)
     if endSpot.route == route and endSpot.map == mapID then return endSpot.x, endSpot.y end
     endSpot.route, endSpot.map, endSpot.x, endSpot.y = route, mapID, nil, nil
     local dest = route.dest
-    if not (dest and dest.x and dest.mapID and not dest.zone) then return nil end
+    if not (dest and dest.x and dest.mapID) then return nil end
     if dest.mapID == mapID then
         endSpot.x, endSpot.y = dest.x, dest.y
     elseif C_Map.GetMapPosFromWorldPos then
@@ -570,11 +570,12 @@ end
 -- falls, as a click in the map tab leaves it, whichever way the place was
 -- picked (the pop-out's search, a trip's field). Only a place with a face,
 -- an icon or a kind of its own (a vendor, an inn, a dock: its kind's
--- icon): a spot clicked on the map has the emblem for its mark. Placed as
--- the route or the map shown changes, so a pin cleared by hand stays cleared.
+-- icon): a spot clicked on the map, or a zone (its middle), has the emblem
+-- for its mark. Placed as the route or the map shown changes, so a pin
+-- cleared by hand stays cleared.
 local function PinEnd(route, mapID)
     local MapSearch, dest = ns.MapSearch, route.dest
-    if route.arrived or not (MapSearch and MapSearch.PinRouteEnd and dest
+    if route.arrived or not dest or dest.zone or not (MapSearch and MapSearch.PinRouteEnd
         and (dest.icon or dest.displayID or dest.category)) then return end
     local x, y = EndOnMap(route, mapID)
     if not x or PinAtEnd(route, mapID) then return end
