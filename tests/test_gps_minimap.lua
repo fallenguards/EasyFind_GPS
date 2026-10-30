@@ -37,6 +37,16 @@ local function fresh(deadly, west, sealed, zoom, waypoints, settings)
         env.C_Minimap = nil
         env.Minimap.GetZoom = function() return zoom.level end
         env.IsIndoors = function() return zoom.indoors end
+        -- inside, outside: the two zoom cvars; mode: the set the minimap is
+        -- on, which a SetZoom writes to.
+        if zoom.outside then
+            env.GetCVar = function(name) return name == "minimapZoom" and zoom.outside or zoom.inside end
+            zoom.sets = 0
+            env.Minimap.SetZoom = function(_, level)
+                zoom.sets, zoom.level = zoom.sets + 1, level
+                zoom[zoom.mode == "inside" and "inside" or "outside"] = level
+            end
+        end
     end
     env.GetCVarBool = function() return state.rotate end
     env.GetPlayerFacing = function() return state.facing end
@@ -119,6 +129,45 @@ function tests.noViewRadiusCall_theZoomLevelSaysTheReach()
     H.assertTrue(math.abs(b[2] + 100 * 50 / 233.33) < 0.1, "zoom 0, 233 yd: 100 yd behind is 21 px down: " .. b[2])
     drawn = fresh(nil, nil, nil, { level = 5, indoors = true })
     H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "indoors at zoom 5, 25 yd: the rim")
+end
+
+-- Ironforge's minimap is on its inside set while IsIndoors says outdoors
+-- (2026-10-30, the walk drawn through the lava): the set is the zoom
+-- cvar the minimap's zoom matches, not IsIndoors.
+function tests.theMinimapsOwnSet_notIsIndoors()
+    local drawn = fresh(nil, nil, nil, { level = 2, indoors = false, inside = 2, outside = 0 })
+    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "zoom 2 on the inside set, 90 yd: 100 yd behind reaches the rim")
+    drawn = fresh(nil, nil, nil, { level = 2, indoors = true, inside = 0, outside = 2 })
+    local b = drawn.pieces[1].pts
+    H.assertTrue(math.abs(b[2] + 100 * 50 / 166.67) < 0.1, "zoom 2 on the outside set, 167 yd, whatever IsIndoors says: " .. b[2])
+end
+
+-- The two cvars alike say nothing: a zoom step lands in the set the
+-- minimap is on, and is put back at once.
+function tests.zoomSetsAlike_aZoomStepTellsThemApart()
+    local zoom = { level = 2, indoors = false, inside = 2, outside = 2, mode = "inside" }
+    local drawn = fresh(nil, nil, nil, zoom)
+    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "the step landed in the inside cvar: the inside set")
+    H.assertEq(zoom.level, 2, "the zoom put back")
+    H.assertEq(zoom.sets, 2, "one step and its return")
+    zoom = { level = 0, indoors = false, inside = 0, outside = 0, mode = "outside" }
+    drawn = fresh(nil, nil, nil, zoom)
+    local b = drawn.pieces[1].pts
+    H.assertTrue(math.abs(b[2] + 100 * 50 / 233.33) < 0.1, "the step landed in the outside cvar: 233 yd: " .. b[2])
+    H.assertEq(zoom.level, 0, "zoom 0 stepped up and put back")
+end
+
+-- Out of the door the client flips the set and says so: the next drawing reads it again.
+function tests.theSetChanged_readAgainAtTheNextDrawing()
+    local zoom = { level = 2, indoors = false, inside = 2, outside = 0 }
+    local drawn, _, now, Mini = fresh(nil, nil, nil, zoom)
+    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "inside first")
+    zoom.inside, zoom.outside = 0, 2
+    Mini._driver:GetScript("OnEvent")(Mini._driver, "MINIMAP_UPDATE_ZOOM")
+    now.t = now.t + 1
+    Mini._driver:GetScript("OnUpdate")(Mini._driver, 1)
+    local b = drawn.pieces[1].pts
+    H.assertTrue(math.abs(b[2] + 100 * 50 / 166.67) < 0.1, "the outside set after the event: " .. b[2])
 end
 
 -- Era and TBC set no user waypoint, so the game shows no blip at the

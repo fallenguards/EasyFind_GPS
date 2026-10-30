@@ -172,10 +172,28 @@ local ZOOM_RADIUS = {
     outdoors = { 233.33, 200, 166.67, 133.33, 100, 66.67 },
     indoors = { 150, 120, 90, 60, 40, 25 },
 }
+-- Which set the minimap is on: the client zooms it by minimapInsideZoom
+-- inside and minimapZoom outside, and Ironforge is inside to it while
+-- outdoors to IsIndoors (2026-10-30). The two alike, a zoom step apart
+-- tells which one takes it, put back at once.
+local insideMode, reading
+local function ReadInside()
+    if not (GetCVar and Minimap.GetZoom and Minimap.SetZoom) then return IsIndoors and IsIndoors() or false end
+    local zoom = Minimap:GetZoom()
+    local inside, outside = tonumber(GetCVar("minimapInsideZoom")), tonumber(GetCVar("minimapZoom"))
+    if inside ~= outside then return zoom == inside end
+    reading = true
+    Minimap:SetZoom(zoom == 0 and 1 or zoom - 1)
+    local stepped = tonumber(GetCVar("minimapInsideZoom")) ~= outside
+    Minimap:SetZoom(zoom)
+    reading = nil
+    return stepped
+end
+
 local function ViewRadius()
     if C_Minimap and C_Minimap.GetViewRadius then return C_Minimap.GetViewRadius() end
-    local set = ZOOM_RADIUS[(IsIndoors and IsIndoors()) and "indoors" or "outdoors"]
-    return set[(Minimap.GetZoom and Minimap:GetZoom() or 0) + 1]
+    if insideMode == nil then insideMode = ReadInside() end
+    return ZOOM_RADIUS[insideMode and "indoors" or "outdoors"][(Minimap.GetZoom and Minimap:GetZoom() or 0) + 1]
 end
 
 local function Draw()
@@ -310,12 +328,16 @@ function Mini:Refresh()
         if not frame then Build() end
         since = 0
         driver:SetScript("OnUpdate", Tick)
+        if not (C_Minimap and C_Minimap.GetViewRadius) then driver:RegisterEvent("MINIMAP_UPDATE_ZOOM") end
         Draw()
     else
         driver:SetScript("OnUpdate", nil)
+        driver:UnregisterEvent("MINIMAP_UPDATE_ZOOM")
         Hide()
     end
 end
 
 driver = CreateFrame("Frame")
+-- The minimap's set changed (a door passed, a zoom): read again at the next drawing.
+driver:SetScript("OnEvent", function() if not reading then insideMode, drawn.at = nil, nil end end)
 Mini._driver = driver   -- dev tools
