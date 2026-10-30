@@ -215,5 +215,35 @@ function tests.standingStillDrawsNothingAgain()
     H.assertEq(drawn.calls, calls, "the same spot, the same drawing")
 end
 
+-- A flying leg has no way on the ground: it is drawn from where the player
+-- is, the part behind faded, never from where the leg began (a flight
+-- across Eversong kept the line at the take-off spot however far the
+-- player flew).
+function tests.aFlyingLeg_isDrawnFromThePlayer()
+    local drawn, _, now, Mini = fresh(nil, 50)
+    Mini._ns.GPS.CurrentRoute().steps[1].fly = true
+    -- Moved since the last draw: nothing is drawn again while standing still.
+    Mini._ns.GPS.PlayerWorldPos = function() return 1, 10, 50 end
+    now.t = now.t + 1
+    Mini._Draw()
+    local ahead, behind
+    for _, p in ipairs(drawn.pieces) do
+        if p.color == BLUE then ahead = p elseif p.color == PASSED then behind = p end
+    end
+    -- Lines keep clear of the player's arrow: a start at the player sits
+    -- just outside that hole, not 50 px south where the leg began.
+    local function atPlayer(x, y) return x * x + y * y < 10 * 10 end
+    H.assertTrue(ahead ~= nil, "the leg ahead is drawn")
+    H.assertTrue(atPlayer(ahead.pts[1], ahead.pts[2]),
+        "it starts at the player: " .. tostring(ahead.pts[1]) .. "," .. tostring(ahead.pts[2]))
+    local dump = {}
+    for _, p in ipairs(drawn.pieces) do
+        dump[#dump + 1] = (p.color == BLUE and "blue" or p.color == PASSED and "passed" or "other") .. "[" .. table.concat(p.pts, ",") .. "]"
+    end
+    H.assertTrue(behind ~= nil, "the part behind is drawn faded; drawn: " .. table.concat(dump, " "))
+    H.assertTrue(atPlayer(behind.pts[#behind.pts - 1], behind.pts[#behind.pts]), "and ends at the player")
+    H.assertFalse(atPlayer(behind.pts[1], behind.pts[2]), "from where the leg began")
+end
+
 local pass, fail, failures = H.runSuite("GPSMinimap", tests)
 return { pass = pass, fail = fail, failures = failures }

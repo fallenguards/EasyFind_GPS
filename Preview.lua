@@ -598,10 +598,13 @@ local function Draw()
     local active = route.arrived and #route.steps + 1 or (route.active or 1)
     local affine = Affine(mapID)
     local f = ns.GPSFollow and ns.GPSFollow.Now()
+    -- A flying leg, or a walk with no way yet, has no path: drawn from the player.
+    local fromHere = f and f.route == route and not f.path and not f.ride and affine and affine.ci == f.ci and f or nil
     if f and not (f.route == route and f.path and affine and affine.ci == f.ci) then f = nil end
     local qx, qy
-    if f then
-        qx, qy = Frac(affine, f.qx, f.qy)
+    if f or fromHere then
+        local at = f or fromHere
+        qx, qy = Frac(affine, f and at.qx or at.px, f and at.qy or at.py)
         qx, qy = qx * cw, qy * ch
     end
     if not dirty and drawn.route == route and drawn.map == mapID and drawn.span == span and drawn.cw == cw
@@ -645,6 +648,20 @@ local function Draw()
                 PenTo(Frac(affine, f.qx, f.qy))
                 trace.affine, trace.color, trace.alpha, trace.trim = affine, color, alpha, trim
                 Preview.Trace(f.path, f.ci, seg, f.qx, f.qy, f.along, TracePen, TraceTo)
+            elseif fromHere and i == fromHere.index then
+                -- Behind the player faded, ahead straight from where it stands.
+                local sci, sx, sy = World(start)
+                local tci, tx, ty = World(target)
+                if sci == affine.ci then
+                    Pen(PASSED_COLOR, PASSED_ALPHA)
+                    PenTo(Frac(affine, sx, sy))
+                    PenTo(Frac(affine, fromHere.px, fromHere.py))
+                end
+                if tci == affine.ci then
+                    Pen(color, alpha, trim)
+                    PenTo(Frac(affine, fromHere.px, fromHere.py))
+                    PenTo(Frac(affine, tx, ty))
+                end
             elseif affine then
                 -- Its way on foot for a walk, straight otherwise; drawn where
                 -- it lies on this map.

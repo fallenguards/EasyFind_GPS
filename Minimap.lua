@@ -205,6 +205,8 @@ local function Draw()
     local passed, passedAlpha = Preview.PASSED_COLOR, Preview.PASSED_ALPHA
     local active = route.arrived and #route.steps + 1 or (route.active or 1)
     local f = Follow.Now()
+    -- A flying leg, or a walk with no way yet, has no path: drawn from the player.
+    local fromHere = f and f.route == route and not f.path and not f.ride and f or nil
     if f and not (f.route == route and f.path) then f = nil end
     lines:Begin()
     for i = 1, #route.steps do
@@ -227,6 +229,17 @@ local function Draw()
                 To(f.qx, f.qy)
                 traceColor, traceAlpha = color, alpha
                 Preview.Trace(f.path, f.ci, seg, f.qx, f.qy, f.along, TracePen, To)
+            elseif fromHere and i == fromHere.index then
+                -- Behind the player faded, ahead straight from where it stands.
+                local sci, sx, sy = Follow.StartOf(route, i)
+                if sci == ci then
+                    Pen(passed, passedAlpha)
+                    To(sx, sy)
+                    To(px, py)
+                end
+                Pen(color, alpha)
+                To(px, py)
+                To(fromHere.tx, fromHere.ty)
             else
                 local sci, sx, sy, tci, tx, ty
                 if Follow.RIDES[step.kind] then
