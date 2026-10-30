@@ -128,6 +128,8 @@ local function Colors()
         halo2 = mix(base, WHITE_C, 0.25),
         arrow = mix(base, WHITE_C, 0.35),
         edgeGlow = base,
+        -- Under the map's end emblem: the theme's window fill.
+        disc = (pal and (pal.windowFillBottom or pal.windowFill)) or { 0.05, 0.05, 0.06 },
     }
 end
 
@@ -162,9 +164,29 @@ end
 
 -- The addon's mark as the calm beacon wears it: the shape in relief with
 -- its rim lit and a soft glow behind, in the theme's colors, filling
--- whatever size its frame is given. The map's journey's end wears it too.
-function WorldPin.NewEmblem(parent)
+-- whatever size its frame is given. The map's journey's end wears it too,
+-- solid: a disc in the theme's fill under the shape, so the map's pins
+-- and art stop showing through its glass.
+local DISC = 0.86   -- of the frame: up to the ring
+function WorldPin.NewEmblem(parent, solid)
     local seat = CreateFrame("Frame", nil, parent)
+    if solid then
+        local disc = seat:CreateTexture(nil, "ARTWORK", nil, 0)
+        disc:SetTexture(WHITE)
+        disc:SetPoint("CENTER")
+        local m = seat:CreateMaskTexture()
+        m:SetTexture(ns.PORTRAIT_ALPHA_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        m:SetAllPoints(disc)
+        disc:AddMaskTexture(m)
+        Tint(disc, "disc", 0.94)
+        -- The disc sized with the frame by the one call that sizes it: a
+        -- size event is not to be had while the map sizes the mark hidden.
+        function seat:Fit(size)
+            self:SetSize(size, size)
+            disc:SetSize(size * DISC, size * DISC)
+        end
+        seat.disc = disc
+    end
     local glow = seat:CreateTexture(nil, "ARTWORK", nil, 1)
     glow:SetTexture(TEX_FLARE)
     glow:SetBlendMode("ADD")

@@ -85,9 +85,9 @@ local function Build()
     -- A portal's, flight master's or dock's spot: the map's own symbol.
     marks.symbol = overlay:CreateTexture(nil, "OVERLAY", nil, 4)
     marks.symbol:Hide()
-    -- The journey's end: the addon's emblem centered on it, the line
-    -- running up to its ring.
-    marks.dest = ns.GPSWorldPin.NewEmblem(overlay)
+    -- The journey's end: the addon's emblem centered on it, solid over the
+    -- map, the line running up to its ring.
+    marks.dest = ns.GPSWorldPin.NewEmblem(overlay, true)
     marks.dest:Hide()
     -- Or the place's own: a creature's face, a map icon.
     marks.destIcon = overlay:CreateTexture(nil, "OVERLAY", nil, 5)
@@ -757,7 +757,7 @@ local function Draw()
         end
         local size = mark == marks.dest and px(DEST) or px(DEST) * DEST_EDGE * 2
         mark:ClearAllPoints()
-        mark:SetSize(size, size)
+        if mark.Fit then mark:Fit(size) else mark:SetSize(size, size) end
         mark:SetPoint("CENTER", overlay, "TOPLEFT", hovered.b[1], hovered.b[2])
         mark:Show()
         if hovered.final then
