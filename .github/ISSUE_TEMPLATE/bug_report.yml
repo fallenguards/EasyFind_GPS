@@ -1,0 +1,85 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Addon versions
+      description: EasyFind_GPS and EasyFind, from your addon list (AddOns button on the character select screen).
+      placeholder: "e.g. GPS 1.0.1, EasyFind 4.0.2"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: client
+    attributes:
+      label: Which game?
+      options:
+        - Retail
+        - WoW Forever
+        - Classic Era
+        - TBC Anniversary
+        - Mists Classic
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Which part?
+      options:
+        - Planning (the steps, the time, the other ways offered)
+        - Following (the arrow, re-planning, steps completing)
+        - The map and minimap drawing
+        - Trips (several stops, a start of your own, search along the route)
+        - Options / Settings
+        - Other / Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe what went wrong.
+      placeholder: Tell us what you saw.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+      placeholder: Tell us what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we reproduce it?
+      description: Where you were, where you asked to go, and what you did.
+      placeholder: |
+        1. In Stormwind, search "Ironforge" and click GPS
+        2. Take the tram
+        3. ...
+    validations:
+      required: false
+
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message (if any)
+      description: If you saw a Lua error, paste it here. Addons like BugSack or !BugGrabber can help capture these.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, other addons that might conflict, or any other details.
+    validations:
+      required: false

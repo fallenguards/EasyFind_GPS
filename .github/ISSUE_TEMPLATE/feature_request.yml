@@ -1,0 +1,42 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Which part?
+      options:
+        - Planning (the steps, the time, the other ways offered)
+        - Following (the arrow, re-planning, steps completing)
+        - The map and minimap drawing
+        - Trips (several stops, a start of your own, search along the route)
+        - Options / Settings
+        - New feature entirely
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like?
+      description: Describe the feature or improvement you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would this be useful?
+      description: What problem does this solve, or how would it help you?
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Screenshots, mockups, examples.
+    validations:
+      required: false
