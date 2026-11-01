@@ -17,7 +17,12 @@ end
 
 -- The bar's pass (pooled rows) and its nearest-of-a-category lookup, stood in for.
 local function WithBar(pass, nearest, fn)
-    local saved = { MapSearch.SearchForUI, MapSearch.GetCategoryResultsForUI, ns.MapSearchData }
+    local saved = { MapSearch.SearchForUI, MapSearch.GetCategoryResultsForUI, ns.MapSearchData, MapSearch.ZoneOnlyForCategory }
+    -- The map tab's "This zone only" per category (MapSearch/Main.lua), by category here.
+    MapSearch.ZoneOnlyForCategory = function(category)
+        local only = env.EasyFind.db.mapZoneOnly
+        return only and (only.all == true or only[category] == true) or false
+    end
     MapSearch.SearchForUI = function(_, _, filters)
         pass.filters = filters
         local out = {}
@@ -32,10 +37,11 @@ local function WithBar(pass, nearest, fn)
     ns.MapSearchData = { KEYWORD_TO_CATEGORY = { ["herbalism trainer"] = "prof_herbalism" } }
     fn()
     MapSearch.SearchForUI, MapSearch.GetCategoryResultsForUI, ns.MapSearchData = saved[1], saved[2], saved[3]
+    MapSearch.ZoneOnlyForCategory = saved[4]
 end
 
 function tests.placesForQuery_nearestOfTheKindFirstThenThePass()
-    env.EasyFind.db.mapCategoryScope = nil
+    env.EasyFind.db.mapZoneOnly = nil
     local tabFilters = { npcs = true }
     env.EasyFind.db.mapTabFilters = tabFilters
     local trainer = Row("Herbalism Trainer", 84, "prof_herbalism")
@@ -59,7 +65,7 @@ function tests.placesForQuery_nearestOfTheKindFirstThenThePass()
 end
 
 function tests.placesForQuery_localScopeKeepsTheKindToThisZone()
-    env.EasyFind.db.mapCategoryScope = "local"
+    env.EasyFind.db.mapZoneOnly = { all = true }
     WithBar({ Row("Herbalism Trainer", 1, "prof_herbalism"), Row("Herbalist", 84, "vendor") },
         function(_, maxN, _, localOnly)
             H.assertEq(maxN, 8)
@@ -72,7 +78,7 @@ function tests.placesForQuery_localScopeKeepsTheKindToThisZone()
             H.assertEq(rows[1].mapID, 84)
             H.assertEq(rows[2].name, "Herbalist")
         end)
-    env.EasyFind.db.mapCategoryScope = nil
+    env.EasyFind.db.mapZoneOnly = nil
 end
 
 function tests.placesForQuery_plainQueryIsThePass()
