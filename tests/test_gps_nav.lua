@@ -10,6 +10,7 @@ local function fresh()
     local ns = H.newNs(env)
     env.EasyFind._ns = ns
     ns.Caps = { forever = true }
+    env.debugprofilestop = env.debugprofilestop or function() return 1 end
     env.C_EncodingUtil = { DecodeBase64 = Inflate.DecodeBase64, DecompressString = function(s) return Inflate.Raw(s) end }
     H.loadModule("tests/fixtures/nav_elwynn.lua", env, ns)
     H.loadModule("Nav.lua", env, ns)
@@ -461,6 +462,21 @@ function tests.release_letsATilesCostsGoWhileTheContinentIsInUse()
     end
     H.assertEq(w.reachN, kept, "the count follows")
     H.assertTrue(w.used ~= nil, "the continent is still in use")
+end
+
+-- A tile decoded in the planner's coroutine while the main thread decoded
+-- the same one put its key in the order list twice; the next Release read
+-- the tile the first pass had dropped (Nav.lua:1405 in issue #25).
+function tests.tile_decodedTwiceIsKeptOnce()
+    local Nav = fresh()
+    local co = coroutine.create(function() return Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2]) end)
+    Nav.yieldCo, Nav.sliceEnd = co, -math.huge
+    assert(coroutine.resume(co))
+    H.assertEq(coroutine.status(co), "suspended", "the planner paused inside a decode")
+    Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
+    while coroutine.status(co) ~= "dead" do assert(coroutine.resume(co)) end
+    Nav.yieldCo, Nav.sliceEnd = nil, nil
+    H.assertFalse(Nav.Release(0), "every tile let go, none indexed twice")
 end
 
 local pass, fail, failures = H.runSuite("GPSNav", tests)

@@ -322,6 +322,14 @@ local function Tile(w, key)
     end
     t = DecodeTile(w, key)
     if not t then return nil end
+    -- A decode paused in the planner and overtaken by the same tile's on
+    -- the main thread keeps that one, or the key sat in order twice and
+    -- the next Release read a tile the first pass had dropped.
+    local kept = w.tiles[key]
+    if kept then
+        kept.at = GetTime()
+        return kept
+    end
     t.at = GetTime()
     w.tiles[key] = t
     local order = w.order
@@ -1402,7 +1410,8 @@ function Nav.Release(age)
         local order = w.order
         for i = #order, 1, -1 do
             local key = order[i]
-            if w.tiles[key].at + age <= now then
+            local t = w.tiles[key]
+            if not t or t.at + age <= now then
                 w.tiles[key] = nil
                 tremove(order, i)
             end
