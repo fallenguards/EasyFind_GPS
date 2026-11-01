@@ -396,6 +396,9 @@ ns.GPSData = {
         { kind = "portal", n = "Portal to Silvermoon City", dest = "Silvermoon City", from = { m = 1955, x = 0.5323, y = 0.4892, ci = 530, wx = -1900, wy = 5440 }, to = { m = 1954, x = 0.5826, y = 0.1924, ci = 530, wx = 9998, wy = -7107, area = 3487 }, sec = 6, approx = true, faction = "Horde" },
         { kind = "portal", n = "Portal to The Exodar", dest = "The Exodar", from = { m = 1457, x = 0.3893, y = 0.8136, ci = 1, wx = 9664, wy = 2526 }, to = { m = 1947, x = 0.4762, y = 0.5982, ci = 530, wx = -4031, wy = -11570, area = 3557 }, sec = 6, approx = true, faction = "Alliance" },
         { kind = "portal", n = "Portal to Darnassus", dest = "Darnassus", from = { m = 1947, x = 0.4762, y = 0.5982, ci = 530, wx = -4031, wy = -11570 }, to = { m = 1457, x = 0.3893, y = 0.8136, ci = 1, wx = 9664, wy = 2526, area = 1657 }, sec = 6, approx = true, faction = "Alliance" },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 1458, x = 0.6593, y = 0.5072, ci = 0, wx = 1553, wy = 241, area = 153 }, to = { m = 1458, x = 0.6592, y = 0.5375, ci = 0, wx = 1534, wy = 241, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 1458, x = 0.7041, y = 0.4414, ci = 0, wx = 1595, wy = 198, area = 153 }, to = { m = 1458, x = 0.7239, y = 0.4417, ci = 0, wx = 1595, wy = 179, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 1458, x = 0.6155, y = 0.4405, ci = 0, wx = 1596, wy = 283, area = 153 }, to = { m = 1458, x = 0.595, y = 0.4402, ci = 0, wx = 1596, wy = 302, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
     },
     -- Each boat's timetable: its loop in seconds, and per stop where it is, how long
     -- it waits and when it leaves, in seconds after it leaves the first stop.
@@ -749,6 +752,10 @@ ns.GPSData = {
         [3897] = 3703,
         [3898] = 3703,
         [3899] = 3703,
+    },
+    -- A city whose map's middle is no way in: its gate, by the city's map.
+    gates = {
+        [1458] = { m = 1458, x = 0.6566, y = 0.4367, ci = 0, wx = 1598, wy = 243 },
     },
     -- Subzones by zone map, flat triples: area id, x, y (C_Map.GetAreaInfo names them).
     areas = {

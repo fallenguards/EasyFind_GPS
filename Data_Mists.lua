@@ -1303,6 +1303,9 @@ ns.GPSData = {
         { kind = "portal", n = "Portal to Ironforge", dest = "Ironforge", from = { m = 433, x = 0.3588, y = 0.7289, ci = 870, wx = 818, wy = 169 }, to = { m = 87, x = 0.2551, y = 0.0843, ci = 0, wx = -4614, wy = -915, area = nil }, sec = 6, faction = "Alliance" },
         { kind = "portal", n = "Portal to Jade Forest", dest = "Jade Forest", from = { m = 84, x = 0.6802, y = 0.1599, ci = 0, wx = -8181, wy = 541 }, to = { m = 371, x = 0.4624, y = 0.8517, ci = 870, wx = -312, wy = -1777, area = nil }, sec = 6, approx = true, faction = "Alliance", req = { quest = 31733 } },
         { kind = "portal", n = "Portal to Jade Forest", dest = "Jade Forest", from = { m = 85, x = 0.688, y = 0.4042, ci = 1, wx = 2018, wy = -4703 }, to = { m = 379, x = 0.8564, y = 0.6388, ci = 870, wx = 2953, wy = -520, area = nil }, sec = 6, approx = true, faction = "Horde", req = { quest = 31766 } },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 998, x = 0.6593, y = 0.5072, ci = 0, wx = 1553, wy = 241, area = 153 }, to = { m = 998, x = 0.6592, y = 0.5375, ci = 0, wx = 1534, wy = 241, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 998, x = 0.7041, y = 0.4414, ci = 0, wx = 1595, wy = 198, area = 153 }, to = { m = 998, x = 0.7239, y = 0.4417, ci = 0, wx = 1595, wy = 179, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 998, x = 0.6155, y = 0.4405, ci = 0, wx = 1596, wy = 283, area = 153 }, to = { m = 998, x = 0.595, y = 0.4402, ci = 0, wx = 1596, wy = 302, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
     },
     -- Each boat's timetable: its loop in seconds, and per stop where it is, how long
     -- it waits and when it leaves, in seconds after it leaves the first stop.
@@ -1945,5 +1948,9 @@ ns.GPSData = {
         [6701] = 6661,
         [6702] = 6661,
         [6728] = 6661,
+    },
+    -- A city whose map's middle is no way in: its gate, by the city's map.
+    gates = {
+        [998] = { m = 998, x = 0.6566, y = 0.4367, ci = 0, wx = 1598, wy = 243 },
     },
 }

@@ -1055,6 +1055,49 @@ function tests.walk_fromInsideACityStartsWithLeavingIt()
     H.assertEq(out[1].enter, 10, "done on entering the zone around it")
 end
 
+-- A city's map reaches past its walls: read mid-walk (Undercity's over the
+-- lake road), or at the start of a walk not set out from inside it, it is
+-- no step of its own; walked to, or set out from, it stays.
+function tests.walk_aCityReadPastItsWallsIsTheZones()
+    local isCity = function(m) return m == 99 end
+    local function cityMid(_, x, y)
+        if y >= 300 and y < 600 then return 99, "City" end
+        return zoneAt(nil, x, y)
+    end
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local steps, start = walk(Route)
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = cityMid, isCity = isCity })
+    H.assertEq(#out, 3, "Alpha, Bravo, Charlie: the city read on the way is Alpha's")
+    H.assertEq(out[1].walkZone, 10)
+    H.assertEq(out[1].enter, 11)
+    H.assertTrue(out[1].arrive.wy >= 600 and out[1].arrive.wy <= 700, "the border past the city's map")
+    local function cityFirst(_, x, y)
+        if y < 300 then return 99, "City" end
+        return zoneAt(nil, x, y)
+    end
+    out = Route.SplitWalks(steps, start, data(), { zoneAt = cityFirst, isCity = isCity })
+    H.assertEq(#out, 3, "set out beside the city, not inside it: Alpha from the start")
+    H.assertEq(out[1].walkZone, 10)
+    H.assertTrue(out[1].arrive.wy >= 500 and out[1].arrive.wy <= 600, "Alpha's stretch runs to Bravo's border")
+    out = Route.SplitWalks(steps, start, data(), { zoneAt = cityFirst, isCity = isCity, startCity = { map = 99, name = "City" } })
+    H.assertEq(#out, 4, "set out from inside it: leaving the city comes first")
+    H.assertEq(out[1].walkZone, 99)
+    local function cityLast(_, x, y)
+        if y >= 500 and x >= 500 then return 99, "City" end
+        return zoneAt(nil, x, y)
+    end
+    local target = steps[1].go
+    target.m = 99
+    out = Route.SplitWalks(steps, start, data(), { zoneAt = cityLast, isCity = isCity })
+    H.assertEq(#out, 3, "walked to: the city's own stretch stays")
+    H.assertEq(out[3].walkZone, 99)
+    H.assertEq(out[3].arrive, target)
+    out = Route.SplitWalks(steps, start, data(), { zoneAt = cityLast, isCity = isCity, goalZone = 99 })
+    H.assertEq(#out, 2, "a zone goal: the walk ends on entering the city")
+    H.assertEq(out[2].enter, 99)
+end
+
 function tests.walk_wholeWalksStayOneStep()
     local _, ns, Route = fresh()
     withNav(ns, junction)
@@ -1406,6 +1449,47 @@ function tests.stepsCode_neverFailsOnAnEndlessTime()
     local _, _, Route = fresh()
     local code = Route.StepsCode({ { kind = "travel", sec = math.huge, arrive = { m = 1439 } } })
     H.assertEq(code, "travel>1439/-1")
+end
+
+-- A lift (Undercity's, 2026-11-01): a step of its own, named by the level
+-- it reaches, the hall's or the city's, whichever way it is ridden.
+local function liftTrip()
+    local d = data()
+    d.nodes, d.legs, d.abilities = {}, {}, {}
+    local up, down = P(1, 0.5, 0.5), P(1, 0.9, 0.5)
+    up.area, down.area = 153, 1497
+    d.edges = { { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = up, to = down, sec = 12, wait = 10, bidir = true } }
+    return d
+end
+
+function tests.elevator_isAStepNamedByTheLevelItReaches()
+    local _, ns, Route = fresh(function(env)
+        env.C_Map.GetAreaInfo = function(area) return ({ [153] = "Ruins of Lordaeron", [1497] = "Undercity" })[area] end
+    end)
+    ns.L.GPS_STEP_ELEVATOR_FMT, ns.L.GPS_REACH_ELEVATOR_FMT = "Take the elevator to %s", "Go to the elevator to %s"
+    local down = build(Route, P(1, 0.45, 0.5), { name = "Below", mapID = 1, x = 0.91, y = 0.5 }, { data = liftTrip() })
+    H.assertEq(down[1].kind, "elevator", "the lift beats the long walk round")
+    H.assertEq(down[1].text, "Take the elevator to Undercity")
+    H.assertEq(down[1].reachText, "Go to the elevator to Undercity")
+    local up = build(Route, P(1, 0.95, 0.5), { name = "Above", mapID = 1, x = 0.49, y = 0.5 }, { data = liftTrip() })
+    H.assertEq(up[1].kind, "elevator")
+    H.assertEq(up[1].text, "Take the elevator to Ruins of Lordaeron", "ridden backwards, named by the hall")
+end
+
+-- A city whose map's middle is no way in names its gate: a zone goal
+-- walks there, and only stops inside the zone itself end the trip early.
+function tests.zoneGoal_aCityGateStandsForItsMiddle()
+    local _, ns, Route = fresh()
+    ns.L.GPS_STEP_FLY_TO_FMT, ns.L.GPS_STEP_RIDE_TO_FMT, ns.L.GPS_STEP_WALK_TO_FMT = "Fly to %s", "Ride to %s", "Walk to %s"
+    local d = data()
+    d.abilities, d.edges = {}, {}
+    d.gates = { [2] = P(1, 0.9, 0.5) }
+    local steps = buildAll(Route, P(1, 0.1, 0.5), { name = "Map 2", mapID = 2, x = 0.5, y = 0.5, zone = true },
+        { data = d, known = { [1] = true, [2] = true, [3] = true } })
+    H.assertEq(#steps, 1, "one walk, to the gate: a master on the gate's map is no stop inside the zone")
+    H.assertEq(steps[1].arrive.wx, 9000, "the gate, not the zone's middle")
+    H.assertEq(steps[1].mapID, 1)
+    H.assertTrue(steps[1].text:find("Map 2", 1, true) ~= nil, steps[1].text)
 end
 
 local pass, fail, failures = H.runSuite("GPSRoute", tests)

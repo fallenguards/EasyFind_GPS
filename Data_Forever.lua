@@ -275,6 +275,9 @@ ns.GPSData = {
         { kind = "portal", n = "Portal to Rut'theran Village", dest = "Rut'theran Village", from = { m = 1457, x = 0.2913, y = 0.4121, ci = 1, wx = 9947, wy = 2630 }, to = { m = 1438, x = 0.5587, y = 0.8934, ci = 1, wx = 8799, wy = 970, area = 702 }, sec = 6 },
         { kind = "portal", n = "Portal to Dalaran", dest = "Dalaran", from = { m = 1453, x = 0.4892, y = 0.8799, ci = 0, wx = -9015, wy = 873 }, to = { m = 1416, x = 0.1405, y = 0.5464, ci = 0, wx = 480, wy = 390, area = 279 }, sec = 6, approx = true, faction = "Alliance", race = "Skyborne" },
         { kind = "portal", n = "Portal to Stormwind City", dest = "Stormwind City", from = { m = 1416, x = 0.1405, y = 0.5464, ci = 0, wx = 480, wy = 390 }, to = { m = 1453, x = 0.4892, y = 0.8799, ci = 0, wx = -9015, wy = 873, area = 1519 }, sec = 6, approx = true, faction = "Alliance", race = "Skyborne" },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 1458, x = 0.6593, y = 0.5072, ci = 0, wx = 1553, wy = 241, area = 153 }, to = { m = 1458, x = 0.6592, y = 0.5375, ci = 0, wx = 1534, wy = 241, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 1458, x = 0.7041, y = 0.4414, ci = 0, wx = 1595, wy = 198, area = 153 }, to = { m = 1458, x = 0.7239, y = 0.4417, ci = 0, wx = 1595, wy = 179, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
+        { kind = "elevator", n = "Undercity elevator", dest = "Undercity", from = { m = 1458, x = 0.6155, y = 0.4405, ci = 0, wx = 1596, wy = 283, area = 153 }, to = { m = 1458, x = 0.595, y = 0.4402, ci = 0, wx = 1596, wy = 302, area = 1497 }, sec = 12, wait = 10, bidir = true, approx = true },
     },
     -- Each boat's timetable: its loop in seconds, and per stop where it is, how long
     -- it waits and when it leaves, in seconds after it leaves the first stop.
@@ -515,6 +518,10 @@ ns.GPSData = {
         [1662] = 1657,
         [2197] = 1638,
         [17824] = 279,
+    },
+    -- A city whose map's middle is no way in: its gate, by the city's map.
+    gates = {
+        [1458] = { m = 1458, x = 0.6566, y = 0.4367, ci = 0, wx = 1598, wy = 243 },
     },
     -- Subzones by zone map, flat triples: area id, x, y (C_Map.GetAreaInfo names them).
     areas = {

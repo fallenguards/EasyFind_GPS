@@ -4,6 +4,16 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Undercity**: directions to Undercity no longer lead into Lordamere Lake and the sewers; they end outside the city, in front of the Ruins of Lordaeron, and spots inside are reached by its elevators. The last stretch to the gate is still being worked on
+
+### Fixed
+- **A Lua error while planning a long walk** (Nav.lua line 1405) when the map's ground was read twice at once
+
+---
+
 ## [1.0.0] - 2026-10-29
 
 ### Added

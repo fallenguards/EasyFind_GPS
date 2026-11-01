@@ -688,6 +688,7 @@ local KIND_KEY = {
     portal = "GPS_STEP_PORTAL_FMT", boat = "GPS_STEP_BOAT_FMT", zeppelin = "GPS_STEP_ZEPPELIN_FMT",
     tram = "GPS_STEP_TRAM_FMT", ferry = "GPS_STEP_BOAT_FMT", skyship = "GPS_STEP_SKYSHIP_FMT",
     seam = "GPS_STEP_TRAVEL_FMT", enter = "GPS_STEP_ENTER_FMT", leave = "GPS_STEP_LEAVE_FMT",
+    elevator = "GPS_STEP_ELEVATOR_FMT",
 }
 -- An overland step says how it goes: flown, ridden or on foot, as its time was worked out.
 local function GoKey(g)
@@ -699,7 +700,7 @@ end
 local REACH_KEY = {
     boat = "GPS_REACH_BOAT_FMT", ferry = "GPS_REACH_BOAT_FMT", zeppelin = "GPS_REACH_ZEPPELIN_FMT",
     skyship = "GPS_REACH_SKYSHIP_FMT", tram = "GPS_REACH_TRAM_FMT", portal = "GPS_REACH_PORTAL_FMT",
-    enter = "GPS_REACH_ENTER_FMT", leave = "GPS_REACH_LEAVE_FMT",
+    enter = "GPS_REACH_ENTER_FMT", leave = "GPS_REACH_LEAVE_FMT", elevator = "GPS_REACH_ELEVATOR_FMT",
 }
 -- And once aboard: stay on until it lands.
 local ABOARD_KEY = {
@@ -792,12 +793,12 @@ end
 
 -- A zone goal is reached on entering it: from any stop inside it the goal
 -- is no walk further, so the way in is chosen, not the way to its middle.
-local function ZoneGoal(g)
-    g.zoneGoal = true
+local function ZoneGoal(g, zoneMap)
+    g.zoneGoal, g.zoneMap = true, zoneMap
     local goal = g.nodes[g.goal].p
     for i = 1, #g.nodes do
         local p = g.nodes[i].p
-        if i ~= g.goal and p and p.ci == goal.ci and WithinMap(p.m, goal.m) then
+        if i ~= g.goal and p and p.ci == goal.ci and WithinMap(p.m, zoneMap) then
             g.walkSec[i * WALK_KEY + g.goal], g.walkWind[i * WALK_KEY + g.goal] = 0, nil
         end
     end
@@ -872,7 +873,7 @@ local function Steps(g, path, goalName, goalStep)
             -- A zone goal is reached on entering it: after a step that already
             -- lands inside it, the route ends where that step lands.
             local from = node.kind == "goal" and g.zoneGoal and #steps > 0 and g.nodes[i > 1 and path[i - 1].node or g.start]
-            if from and from.p and WithinMap(from.p.m, node.p.m) then
+            if from and from.p and WithinMap(from.p.m, g.zoneMap) then
                 tinsert(steps, { kind = "travel", text = (L["GPS_STEP_ARRIVE_IN_FMT"]):format(name or "?"),
                                  mapID = from.p.m, x = from.p.x, y = from.p.y, go = from.p, arrive = from.p, sec = 0 })
             else
@@ -997,7 +998,7 @@ local function BestToLearn(ctx, g, total, usedAsOrigin)
         local c = cands[i]
         known[c.id] = true
         local g2 = BuildGraph(trial)
-        if g.zoneGoal then ZoneGoal(g2) end
+        if g.zoneGoal then ZoneGoal(g2, g.zoneMap) end
         local path2, t2 = Dijkstra(g2)
         known[c.id] = nil
         if path2 and total - t2 >= SUGGEST_MIN_SECONDS then
@@ -1531,7 +1532,11 @@ function Route:Build(dest, opts)
     local goal = Resolve({ m = dest.mapID, x = dest.x, y = dest.y })
     if not goal then return nil end
     local Nav = ns.GPSNav
-    if dest.zone and Nav and Nav.Ground then
+    local gate = dest.zone and data.gates and data.gates[dest.mapID]
+    if gate then
+        -- A city's gate stands for its middle (Undercity's lies underground).
+        goal = Resolve({ m = gate.m, x = gate.x, y = gate.y, ci = gate.ci, wx = gate.wx, wy = gate.wy }) or goal
+    elseif dest.zone and Nav and Nav.Ground then
         local wx, wy = Nav.Ground(goal.ci, goal.wx, goal.wy, ZONE_GROUND_CELLS)
         if wx then goal = { m = goal.m, x = goal.x, y = goal.y, ci = goal.ci, wx = wx, wy = wy } end
     end
@@ -1596,7 +1601,7 @@ function Route:Build(dest, opts)
         ctx.groundSpeed = ctx.groundSpeed or ground
     end
     local g = BuildGraph(ctx)
-    if dest.zone then ZoneGoal(g) end
+    if dest.zone then ZoneGoal(g, dest.mapID) end
     local path = Solve(g)
     if not path then return nil end
     local cost = PathSeconds(g, path)
@@ -1778,6 +1783,28 @@ local function WalkPieces(step, from, data, env, first)
             end
         end
         Read(pts[2 * v - 1], pts[2 * v], cum[v])
+    end
+    -- A city's map reaches past its walls (Undercity's over the lake road):
+    -- a city neither set out from (the first run) nor walked to (the last)
+    -- is the zone's it lies in.
+    do
+        local goalMap = target.m
+        local c = 1
+        while c <= #runs do
+            local run = runs[c]
+            local own = (c == #runs and (run.map == goalMap or run.map == env.goalZone))
+                or (c == 1 and first and env.startCity and env.startCity.map == run.map)
+            if env.isCity and env.isCity(run.map) and not own then
+                table.remove(runs, c)
+                if c == 1 then
+                    if runs[1] then runs[1].at, runs[1].x, runs[1].y = 0, fx, fy end
+                elseif runs[c] and runs[c].map == runs[c - 1].map then
+                    table.remove(runs, c)
+                end
+            else
+                c = c + 1
+            end
+        end
     end
     -- A zone clipped for a few yards (a border the way runs along) is
     -- no step; its stretch joins the zone before it.

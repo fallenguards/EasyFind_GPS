@@ -61,6 +61,8 @@ local GetAtlasInfo = C_Texture.GetAtlasInfo
 -- Arrival rings: a step's spot; the last step to a creature or other spot
 -- (beside it); a crossing's far spot, where it drops you, give or take.
 local ARRIVE = { yards = 40, spot = 8, cross = 300 }
+-- A lift: its near door's reach, and the far door's for one stepped off.
+local LIFT_YARDS, LIFT_OFF = 15, 3
 local ROUTE_MAX_AGE = 2 * 60 * 60
 local ARRIVED_LINGER = 8
 local START_YARDS = 60      -- this close to a planned route's start, the player is on it
@@ -823,7 +825,7 @@ TrackStep = function(index)
     if not step then return end
     route.active = index
     route.arrived = nil
-    step.reached = nil
+    step.reached, step.liftLevel = nil, nil
     -- A teleport counts as taken only once cast, or once off this continent.
     route.castAt = nil
     route.stepCi = PlayerWorldPos()
@@ -1219,6 +1221,17 @@ local function Tick()
             Arrive(route)
         end
         return
+    end
+    -- A lift's far door is a few yards from its near one: ridden once the
+    -- level's name under the player (the hall's, the city's) has changed.
+    if step.kind == "elevator" then
+        local level = GetSubZoneText and GetSubZoneText() or ""
+        if not step.liftLevel then
+            local go = step.go
+            if go and go.wx and (px - go.wx) ^ 2 + (py - go.wy) ^ 2 <= LIFT_YARDS * LIFT_YARDS then step.liftLevel = level end
+            return
+        end
+        if level == step.liftLevel and (px - sx) ^ 2 + (py - sy) ^ 2 > LIFT_OFF * LIFT_OFF then return end
     end
     local crossing = step.kind ~= "travel"
     -- A crossing to another continent is done the moment you are on it;
