@@ -654,8 +654,9 @@ local function Draw()
             if i < active and not (i == shownIndex and not all) then color, alpha = PASSED_COLOR, PASSED_ALPHA end
             local trim = i == last and destTrim or 0
             if f and i == f.index then
-                -- Cut where the player stands: the part walked faded; on a
-                -- way back from off the walk, the walk's own way behind it too.
+                -- Cut where the player stands: the walk up to abreast of it
+                -- faded, as planned (on a way back from off it, the walk's
+                -- own way, not the way back's), the rest from the player on.
                 local pts, seg = f.path.pts, f.seg
                 Pen(PASSED_COLOR, PASSED_ALPHA)
                 local trail = f.trail
@@ -663,9 +664,10 @@ local function Draw()
                     local tp = trail.path.pts
                     for v = 1, trail.seg do PenTo(Frac(affine, tp[2 * v - 1], tp[2 * v])) end
                     PenTo(Frac(affine, trail.x, trail.y))
+                else
+                    for v = 1, seg do PenTo(Frac(affine, pts[2 * v - 1], pts[2 * v])) end
+                    PenTo(Frac(affine, f.qx, f.qy))
                 end
-                for v = 1, seg do PenTo(Frac(affine, pts[2 * v - 1], pts[2 * v])) end
-                PenTo(Frac(affine, f.qx, f.qy))
                 trace.affine, trace.color, trace.alpha, trace.trim = affine, color, alpha, trim
                 Preview.Trace(f.path, f.ci, seg, f.qx, f.qy, f.along, TracePen, TraceTo)
             elseif fromHere and i == fromHere.index then

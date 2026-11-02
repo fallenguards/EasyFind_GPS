@@ -1,8 +1,8 @@
 -- EasyFind GPS: the route on the minimap.
 --
 -- The route drawn on the minimap as on the world map: the way ahead in
--- its colors, what was already walked faded, turning with the minimap
--- when it turns. Cut at the rim and around the player's own arrow.
+-- its colors, nothing of what is behind, turning with the minimap when
+-- it turns. Cut at the rim and around the player's own arrow.
 local ns = EasyFind and EasyFind._ns
 if not ns then return end
 local Mini = {}
@@ -220,18 +220,17 @@ local function Draw()
     view.square = GetMinimapShape and GetMinimapShape() == "SQUARE"
     view.rim = half - span / 2 - 1
     local Preview = ns.GPSPreview
-    local passed, passedAlpha = Preview.PASSED_COLOR, Preview.PASSED_ALPHA
     local active = route.arrived and #route.steps + 1 or (route.active or 1)
     local f = Follow.Now()
     -- A flying leg, or a walk with no way yet, has no path: drawn from the player.
     local fromHere = f and f.route == route and not f.path and not f.ride and f or nil
     if f and not (f.route == route and f.path) then f = nil end
     lines:Begin()
-    for i = 1, #route.steps do
+    -- Only the way ahead: nothing of what is behind the player.
+    for i = active, #route.steps do
         local step = route.steps[i]
         if step.kind ~= "teleport" then
-            local color = i < active and passed or Preview.LineColor(step.kind)
-            local alpha = i < active and passedAlpha or ALPHA
+            local color, alpha = Preview.LineColor(step.kind), ALPHA
             if f and i == f.index then
                 -- Off the walk with no way back on foot (none from here, a
                 -- room the grid has no door to): straight back onto it, as
@@ -241,28 +240,9 @@ local function Draw()
                     To(f.px, f.py)
                     To(f.qx, f.qy)
                 end
-                local pts, seg = f.path.pts, f.seg
-                Pen(passed, passedAlpha)
-                -- Off the walk and on a way back: the walk's own way up to
-                -- abreast of where it was left, then across to that spot.
-                local trail = f.trail
-                if trail then
-                    local tp = trail.path.pts
-                    for v = 1, trail.seg do To(tp[2 * v - 1], tp[2 * v]) end
-                    To(trail.x, trail.y)
-                end
-                for v = 1, seg do To(pts[2 * v - 1], pts[2 * v]) end
-                To(f.qx, f.qy)
                 traceColor, traceAlpha = color, alpha
-                Preview.Trace(f.path, f.ci, seg, f.qx, f.qy, f.along, TracePen, To)
+                Preview.Trace(f.path, f.ci, f.seg, f.qx, f.qy, f.along, TracePen, To)
             elseif fromHere and i == fromHere.index then
-                -- Behind the player faded, ahead straight from where it stands.
-                local sci, sx, sy = Follow.StartOf(route, i)
-                if sci == ci then
-                    Pen(passed, passedAlpha)
-                    To(sx, sy)
-                    To(px, py)
-                end
                 Pen(color, alpha)
                 To(px, py)
                 To(fromHere.tx, fromHere.ty)
@@ -281,7 +261,7 @@ local function Draw()
                     if path then
                         local pts = path.pts
                         traceColor, traceAlpha = color, alpha
-                        Preview.Trace(path, i >= active and ci or nil, 1, pts[1], pts[2], 0, TracePen, To)
+                        Preview.Trace(path, ci, 1, pts[1], pts[2], 0, TracePen, To)
                     else
                         To(sx, sy)
                         To(tx, ty)

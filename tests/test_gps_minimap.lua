@@ -104,16 +104,25 @@ local RIM = 50 - 3.5 - 1
 
 local tests = {}
 
-function tests.walkedPartFadedAndTheWayAheadInBlue()
+-- The player moved to 240 yd along the walk, 60 yd short of its end, and
+-- the drawing taken again: where the way ahead ends on the minimap.
+local function aheadEnd(drawn, now, Mini)
+    Mini._ns.GPS.PlayerWorldPos = function() return 1, 240, 0 end
+    now.t = now.t + 1
+    Mini._Draw()
+    local a = drawn.pieces[1].pts
+    return a[#a - 1], a[#a]
+end
+
+-- Nothing of what is behind the player is drawn: only the way ahead,
+-- from the player's arrow on (2026-11-02).
+function tests.onlyTheWayAheadInBlue()
     local drawn = fresh()
-    H.assertEq(#drawn.pieces, 2)
-    local behind, ahead = drawn.pieces[1], drawn.pieces[2]
-    H.assertTrue(behind.color == PASSED, "the part behind is faded")
+    H.assertEq(#drawn.pieces, 1, "no faded part behind")
+    local ahead = drawn.pieces[1]
     H.assertTrue(ahead.color == BLUE, "the way ahead in blue")
-    -- South of the player is down the minimap, north up.
-    local b, a = behind.pts, ahead.pts
-    H.assertTrue(near(b[1], 0) and near(b[2], -RIM), "from the rim: " .. b[1] .. "," .. b[2])
-    H.assertTrue(near(b[#b - 1], 0) and near(b[#b], -7), "to the player's arrow, short of it")
+    -- North is up the minimap.
+    local a = ahead.pts
     H.assertTrue(near(a[1], 0) and near(a[2], 7), "on past the arrow")
     H.assertTrue(near(a[#a - 1], 0) and near(a[#a], RIM), "up to the rim")
 end
@@ -121,39 +130,43 @@ end
 -- Era, TBC and Mists have no view radius call, and their minimap showed
 -- no line at all (2026-10-27): the reach by zoom level stands in.
 function tests.noViewRadiusCall_theZoomLevelSaysTheReach()
-    local drawn = fresh(nil, nil, nil, { level = 4, indoors = false })
-    H.assertEq(#drawn.pieces, 2, "drawn at all")
-    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "zoom 4 outdoors, 100 yd: the walk behind reaches the rim")
-    drawn = fresh(nil, nil, nil, { level = 0, indoors = false })
-    local b = drawn.pieces[1].pts
-    H.assertTrue(math.abs(b[2] + 100 * 50 / 233.33) < 0.1, "zoom 0, 233 yd: 100 yd behind is 21 px down: " .. b[2])
-    drawn = fresh(nil, nil, nil, { level = 5, indoors = true })
-    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "indoors at zoom 5, 25 yd: the rim")
+    local drawn, _, now, Mini = fresh(nil, nil, nil, { level = 4, indoors = false })
+    H.assertEq(#drawn.pieces, 1, "drawn at all")
+    local _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(near(y, 30), "zoom 4 outdoors, 100 yd: 60 yd ahead is 30 px up: " .. y)
+    drawn, _, now, Mini = fresh(nil, nil, nil, { level = 0, indoors = false })
+    _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(math.abs(y - 60 * 50 / 233.33) < 0.1, "zoom 0, 233 yd: 60 yd ahead is 13 px up: " .. y)
+    drawn, _, now, Mini = fresh(nil, nil, nil, { level = 5, indoors = true })
+    _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(near(y, RIM), "indoors at zoom 5, 25 yd: the rim")
 end
 
 -- Ironforge's minimap is on its inside set while IsIndoors says outdoors
 -- (2026-10-30, the walk drawn through the lava): the set is the zoom
 -- cvar the minimap's zoom matches, not IsIndoors.
 function tests.theMinimapsOwnSet_notIsIndoors()
-    local drawn = fresh(nil, nil, nil, { level = 2, indoors = false, inside = 2, outside = 0 })
-    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "zoom 2 on the inside set, 90 yd: 100 yd behind reaches the rim")
-    drawn = fresh(nil, nil, nil, { level = 2, indoors = true, inside = 0, outside = 2 })
-    local b = drawn.pieces[1].pts
-    H.assertTrue(math.abs(b[2] + 100 * 50 / 166.67) < 0.1, "zoom 2 on the outside set, 167 yd, whatever IsIndoors says: " .. b[2])
+    local drawn, _, now, Mini = fresh(nil, nil, nil, { level = 2, indoors = false, inside = 2, outside = 0 })
+    local _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(math.abs(y - 60 * 50 / 90) < 0.1, "zoom 2 on the inside set, 90 yd: 60 yd ahead is 33 px up: " .. y)
+    drawn, _, now, Mini = fresh(nil, nil, nil, { level = 2, indoors = true, inside = 0, outside = 2 })
+    _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(math.abs(y - 60 * 50 / 166.67) < 0.1, "zoom 2 on the outside set, 167 yd, whatever IsIndoors says: " .. y)
 end
 
 -- The two cvars alike say nothing: a zoom step lands in the set the
 -- minimap is on, and is put back at once.
 function tests.zoomSetsAlike_aZoomStepTellsThemApart()
     local zoom = { level = 2, indoors = false, inside = 2, outside = 2, mode = "inside" }
-    local drawn = fresh(nil, nil, nil, zoom)
-    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "the step landed in the inside cvar: the inside set")
+    local drawn, _, now, Mini = fresh(nil, nil, nil, zoom)
+    local _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(math.abs(y - 60 * 50 / 90) < 0.1, "the step landed in the inside cvar: the inside set, 90 yd: " .. y)
     H.assertEq(zoom.level, 2, "the zoom put back")
     H.assertEq(zoom.sets, 2, "one step and its return")
     zoom = { level = 0, indoors = false, inside = 0, outside = 0, mode = "outside" }
-    drawn = fresh(nil, nil, nil, zoom)
-    local b = drawn.pieces[1].pts
-    H.assertTrue(math.abs(b[2] + 100 * 50 / 233.33) < 0.1, "the step landed in the outside cvar: 233 yd: " .. b[2])
+    drawn, _, now, Mini = fresh(nil, nil, nil, zoom)
+    _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(math.abs(y - 60 * 50 / 233.33) < 0.1, "the step landed in the outside cvar: 233 yd: " .. y)
     H.assertEq(zoom.level, 0, "zoom 0 stepped up and put back")
 end
 
@@ -161,13 +174,14 @@ end
 function tests.theSetChanged_readAgainAtTheNextDrawing()
     local zoom = { level = 2, indoors = false, inside = 2, outside = 0 }
     local drawn, _, now, Mini = fresh(nil, nil, nil, zoom)
-    H.assertTrue(near(drawn.pieces[1].pts[2], -RIM), "inside first")
+    local _, y = aheadEnd(drawn, now, Mini)
+    H.assertTrue(math.abs(y - 60 * 50 / 90) < 0.1, "inside first: " .. y)
     zoom.inside, zoom.outside = 0, 2
     Mini._driver:GetScript("OnEvent")(Mini._driver, "MINIMAP_UPDATE_ZOOM")
     now.t = now.t + 1
     Mini._driver:GetScript("OnUpdate")(Mini._driver, 1)
-    local b = drawn.pieces[1].pts
-    H.assertTrue(math.abs(b[2] + 100 * 50 / 166.67) < 0.1, "the outside set after the event: " .. b[2])
+    local a = drawn.pieces[1].pts
+    H.assertTrue(math.abs(a[#a] - 60 * 50 / 166.67) < 0.1, "the outside set after the event: " .. a[#a])
 end
 
 -- Era and TBC set no user waypoint, so the game shows no blip at the
@@ -207,16 +221,16 @@ function tests.deadlyGroundAheadIsRed()
     local drawn = fresh({ n = 2, 120, 160 })
     local colors = {}
     for i = 1, #drawn.pieces do colors[i] = drawn.pieces[i].color end
-    H.assertEq(#drawn.pieces, 4)
-    H.assertTrue(colors[1] == PASSED and colors[2] == BLUE and colors[3] == RED and colors[4] == BLUE)
-    local red = drawn.pieces[3].pts
+    H.assertEq(#drawn.pieces, 3)
+    H.assertTrue(colors[1] == BLUE and colors[2] == RED and colors[3] == BLUE)
+    local red = drawn.pieces[2].pts
     H.assertTrue(near(red[2], 10) and near(red[#red], 30), "from 20 to 60 yd: " .. red[2] .. "," .. red[#red])
 end
 
 function tests.deadlyGroundAlreadyWalkedIsNotRed()
     local drawn = fresh({ n = 2, 20, 60 })
-    H.assertEq(#drawn.pieces, 2)
-    H.assertTrue(drawn.pieces[1].color == PASSED and drawn.pieces[2].color == BLUE)
+    H.assertEq(#drawn.pieces, 1)
+    H.assertTrue(drawn.pieces[1].color == BLUE)
 end
 
 -- The GPS settings' Red on dangerous stretches switch, off: the same
@@ -234,7 +248,7 @@ function tests.aTurningMinimapTurnsTheLine()
     state.rotate, state.facing = true, math.pi / 2
     now.t = now.t + 1
     Mini._Draw()
-    local a = drawn.pieces[2].pts
+    local a = drawn.pieces[1].pts
     H.assertTrue(near(a[1], 7) and near(a[2], 0), "on to the right: " .. a[1] .. "," .. a[2])
     H.assertTrue(near(a[#a - 1], RIM) and near(a[#a], 0))
 end
@@ -253,26 +267,20 @@ end
 
 function tests.onTheWalkNoWayBackIsDrawn()
     local drawn = fresh(nil, 10, true)
-    H.assertTrue(drawn.pieces[1].color == PASSED, "within 20 yd the walk itself leads")
+    local p = drawn.pieces[1].pts
+    H.assertTrue(drawn.pieces[1].color == BLUE and near(p[1], 5) and math.abs(p[1] ^ 2 + p[2] ^ 2 - 49) < 1e-6,
+        "within 20 yd the walk itself leads, from abreast of the player past the arrow: " .. p[1] .. "," .. p[2])
 end
 
--- 30 yd west of the walk with a way back drawn: the walk behind stays
--- faded up to abreast of the player (15 px to the right), then across to
--- the player; the way back and the walk's rest ahead in the step's color.
-function tests.offTheWalkOnAWayBackTheWalkBehindStaysFaded()
+-- 30 yd west of the walk with a way back drawn: nothing behind the
+-- player, the way back ahead in the step's color from the player on.
+function tests.offTheWalkOnAWayBackOnlyTheWayAheadIsDrawn()
     local drawn = fresh(nil, 30)
-    local behind, ahead = drawn.pieces[1], drawn.pieces[2]
-    H.assertTrue(behind ~= nil and behind.color == PASSED, "the walk behind faded")
-    local b = behind.pts
-    H.assertTrue(near(b[1], 15) and b[2] < -RIM + 5, "up from the rim, 15 px right of the player: " .. b[1] .. "," .. b[2])
-    local abreast
-    for i = 1, #b - 1, 2 do
-        if near(b[i], 15) and near(b[i + 1], 0) then abreast = true end
-    end
-    H.assertTrue(abreast, "through the point abreast of the player")
-    H.assertTrue(near(b[#b - 1], 7) and near(b[#b], 0), "across to the player's arrow: " .. b[#b - 1] .. "," .. b[#b])
-    H.assertTrue(ahead ~= nil and ahead.color == BLUE, "the way back ahead in the step's color")
-    H.assertTrue(ahead.pts[1] > 0 and ahead.pts[2] > 0, "from the player toward the walk ahead")
+    H.assertEq(#drawn.pieces, 1, "the way ahead alone")
+    local ahead = drawn.pieces[1]
+    H.assertTrue(ahead.color == BLUE, "in the step's color")
+    H.assertTrue(ahead.pts[1] > 0 and ahead.pts[2] > 0 and ahead.pts[1] ^ 2 + ahead.pts[2] ^ 2 < 10 * 10,
+        "from the player toward the walk ahead: " .. ahead.pts[1] .. "," .. ahead.pts[2])
 end
 
 function tests.standingStillDrawsNothingAgain()
@@ -284,9 +292,8 @@ function tests.standingStillDrawsNothingAgain()
 end
 
 -- A flying leg has no way on the ground: it is drawn from where the player
--- is, the part behind faded, never from where the leg began (a flight
--- across Eversong kept the line at the take-off spot however far the
--- player flew).
+-- is, never from where the leg began (a flight across Eversong kept the
+-- line at the take-off spot however far the player flew).
 function tests.aFlyingLeg_isDrawnFromThePlayer()
     local drawn, _, now, Mini = fresh(nil, 50)
     Mini._ns.GPS.CurrentRoute().steps[1].fly = true
@@ -304,13 +311,7 @@ function tests.aFlyingLeg_isDrawnFromThePlayer()
     H.assertTrue(ahead ~= nil, "the leg ahead is drawn")
     H.assertTrue(atPlayer(ahead.pts[1], ahead.pts[2]),
         "it starts at the player: " .. tostring(ahead.pts[1]) .. "," .. tostring(ahead.pts[2]))
-    local dump = {}
-    for _, p in ipairs(drawn.pieces) do
-        dump[#dump + 1] = (p.color == BLUE and "blue" or p.color == PASSED and "passed" or "other") .. "[" .. table.concat(p.pts, ",") .. "]"
-    end
-    H.assertTrue(behind ~= nil, "the part behind is drawn faded; drawn: " .. table.concat(dump, " "))
-    H.assertTrue(atPlayer(behind.pts[#behind.pts - 1], behind.pts[#behind.pts]), "and ends at the player")
-    H.assertFalse(atPlayer(behind.pts[1], behind.pts[2]), "from where the leg began")
+    H.assertNil(behind, "nothing behind the player")
 end
 
 local pass, fail, failures = H.runSuite("GPSMinimap", tests)
