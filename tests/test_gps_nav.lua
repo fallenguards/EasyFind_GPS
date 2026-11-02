@@ -76,6 +76,27 @@ function tests.straight_alongEachDrawnStretch()
     end
 end
 
+-- A walk crosses a tile's edge at one of its few entrances, so a drawn
+-- walk went round by one where the straight line was clear (the way back
+-- onto a walk ran 85 yd north then east, 2026-11-02): pulled straight
+-- across the tiles too, no point of it can be skipped by a straight line.
+function tests.path_pulledStraightAcrossTheTiles()
+    local Nav = fresh()
+    local pts, _, _, jumps = Nav.Path(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
+    local landing = {}
+    for _, j in ipairs(jumps or {}) do landing[j.v] = true end
+    local n = #pts / 2
+    H.assertTrue(n >= 5, "a drawn way")
+    -- The first and last points are the ends themselves; the cell middles
+    -- beside them stand.
+    for v = 2, n - 3 do
+        if not landing[v + 1] then
+            H.assertEq(Nav.Straight(0, pts[2 * v - 1], pts[2 * v], pts[2 * v + 3], pts[2 * v + 4]), false,
+                "point " .. (v + 1) .. " could be skipped")
+        end
+    end
+end
+
 function tests.straight_notOffTheBakedGround()
     local Nav = fresh()
     local _, sx, sy = Nav.TileOf(GOLDSHIRE[1], GOLDSHIRE[2])

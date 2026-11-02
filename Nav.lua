@@ -1468,6 +1468,27 @@ local function Clear(w, t, a, b)
     return g == b
 end
 
+-- Whether one walks straight from floor g of tile t to floor g2 of tile
+-- t2, across tiles, as Clear within one.
+local function Sees(w, t, g, t2, g2)
+    local cell = w.cell
+    local x0, y0 = FloorXY(w, t, g)
+    local x1, y1 = FloorXY(w, t2, g2)
+    local nr, ncl = mfloor(mabs(x1 - x0) / cell + 0.5), mfloor(mabs(y1 - y0) / cell + 0.5)
+    local alongRow, alongCol = x1 > x0 and 1 or 3, y1 > y0 and 2 or 0
+    local dry = sbyte(t.fb, g) % 2 == 0
+    local ir, ic = 0, 0
+    while ir < nr or ic < ncl do
+        local stepRow = (0.5 + ir) * ncl < (0.5 + ic) * nr
+        if ic >= ncl then stepRow = true elseif ir >= nr then stepRow = false end
+        local d
+        if stepRow then d, ir = alongRow, ir + 1 else d, ic = alongCol, ic + 1 end
+        t, g = Step(w, t, g, d)
+        if not g or (dry and sbyte(t.fb, g) % 2 == 1 and (ir < nr or ic < ncl)) then return false end
+    end
+    return t == t2 and g == g2
+end
+
 -- Whether one walks straight from (ax, ay) to (bx, by): each cell along
 -- the line reached from the one before by a link, across tiles, and none
 -- before the last of them water unless the start is. nil off the grid.
@@ -1517,10 +1538,11 @@ local function NearFloor(w, t, g, x, y, r)
 end
 
 -- Floor path inside tile t from a to b, pulled straight: world points
--- appended to out, and each drop above the safe height it takes onto
--- jumps ({ v = the vertex it lands on, h = its height }). A straight pull
--- never crosses a drop (no link joins its ends), so its landing is a vertex.
-local function TilePath(w, t, a, b, out, jumps)
+-- appended to out (their tile and floor to ft, fg, by vertex), and each
+-- drop above the safe height it takes onto jumps ({ v = the vertex it
+-- lands on, h = its height }). A straight pull never crosses a drop (no
+-- link joins its ends), so its landing is a vertex.
+local function TilePath(w, t, a, b, out, jumps, ft, fg)
     local _, prev = TileSearch(w, t, a, b)
     if a ~= b and not prev[b] then return false end
     local cells = {}
@@ -1534,7 +1556,10 @@ local function TilePath(w, t, a, b, out, jumps)
     local safe = w.data.safe or 0
     local function emit(f, k)
         local x, y = FloorXY(w, t, f)
-        if not (out[#out - 1] == x and out[#out] == y) then out[#out + 1], out[#out + 2] = x, y end
+        if not (out[#out - 1] == x and out[#out] == y) then
+            out[#out + 1], out[#out + 2] = x, y
+            ft[#out / 2], fg[#out / 2] = t, f
+        end
         local list = k and t.drop and t.drop[cells[k - 1]]
         for d = 1, list and #list or 0, 2 do
             if list[d] == f and list[d + 1] > safe then jumps[#jumps + 1] = { v = #out / 2, h = list[d + 1] } end
@@ -1567,14 +1592,14 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
     local near = opts and opts.near
     if not (keyB or near) then return nil end
     local sides = w.data.sides
-    local out, jumps = { ax, ay }, {}
+    local out, jumps, ft, fg = { ax, ay }, {}, {}, {}
     local t, g = Tile(w, keyA), ga
     local k = 1
     while k <= #chain do
         local node = chain[k]
         local v = SideV(sides, node)
         if SideKey(v) ~= t.key then return nil end
-        if not TilePath(w, t, g, SideFloor(v), out, jumps) then return nil end
+        if not TilePath(w, t, g, SideFloor(v), out, jumps, ft, fg) then return nil end
         -- Across: the next node is the other side when the walk crosses here.
         local nxt = chain[k + 1]
         if nxt == Other(node) then
@@ -1598,7 +1623,33 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
     else
         t = Tile(w, keyB)
     end
-    if not TilePath(w, t, g, gb, out, jumps) then return nil end
+    if not TilePath(w, t, g, gb, out, jumps, ft, fg) then return nil end
+    -- Pulled straight across the tiles too: a walk crosses a tile's edge
+    -- at one of its few entrances, a way round where the line is clear.
+    local n = #out / 2
+    local landing = {}
+    for j = 1, #jumps do landing[jumps[j].v] = true end
+    local keep, checks = { 1 }, 0
+    local i = 2
+    while i <= n do
+        keep[#keep + 1] = i
+        local j = i + 1
+        while j < n and not landing[j] and ft[i] and ft[j + 1] and Sees(w, ft[i], fg[i], ft[j + 1], fg[j + 1]) do
+            j = j + 1
+            checks = checks + 1
+            if checks % 8 == 0 then Pause() end
+        end
+        i = j
+    end
+    if #keep < n then
+        local pulled, at = {}, {}
+        for v = 1, #keep do
+            local o = keep[v]
+            pulled[2 * v - 1], pulled[2 * v], at[o] = out[2 * o - 1], out[2 * o], v
+        end
+        for j = 1, #jumps do jumps[j].v = at[jumps[j].v] end
+        out = pulled
+    end
     out[#out + 1], out[#out + 2] = bx, by
     return out, cost, walk[7], jumps
 end
