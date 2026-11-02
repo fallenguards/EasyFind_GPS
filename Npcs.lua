@@ -568,6 +568,50 @@ local function SpotRange(i)
     return first, first + sbyte(rec, 10 * n + i) + sbyte(rec, 11 * n + i) * 256 - 1
 end
 
+-- An extension asking what EasyFind lists (API.HasRow, HasCreature):
+-- the id of a creature so named, any case, with a spot on one of the
+-- maps (a set), and whether an id is in the catalog. Thousands of asks
+-- come at one load, so both read indexes made on the first.
+local byLow, nextSame, byID
+local function IndexNames()
+    byLow, nextSame = {}, {}
+    local low, at, tail = N.low, N.at, {}
+    for i = 1, N.n do
+        local name = ssub(low, At(at, i), At(at, i + 1) - 2)
+        local first = byLow[name]
+        if first then
+            nextSame[tail[first]] = i
+            tail[first] = i
+        else
+            byLow[name], tail[i] = i, i
+        end
+    end
+end
+
+function N.NamedOn(name, maps)
+    if not (type(name) == "string" and name ~= "" and Load()) then return nil end
+    if not byLow then IndexNames() end
+    local i = byLow[slower(name)]
+    while i do
+        local first, last = SpotRange(i)
+        for k = first, last do
+            local m = SpotPoint(k)
+            if m and maps[m] then return Rec.id(i) end
+        end
+        i = nextSame[i]
+    end
+    return nil
+end
+
+function N.HasID(npcID)
+    if not Load() then return false end
+    if not byID then
+        byID = {}
+        for i = 1, N.n do byID[Rec.id(i)] = true end
+    end
+    return byID[npcID] == true
+end
+
 -- Whether creature i has a spot on the set's maps, within r2 of the
 -- point (continent pci, px, py) when given.
 local function Within(i, set, pci, px, py, r2)

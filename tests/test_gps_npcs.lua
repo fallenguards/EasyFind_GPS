@@ -727,5 +727,31 @@ function tests.shippedCatalog_readInPlace()
     end
 end
 
+-- For an extension asking what EasyFind lists (API.HasRow, HasCreature):
+-- a creature by name, any case, with a spot on one of the maps gives its
+-- id, an instance spot standing at its entrance; same-named creatures are
+-- all read; an id is in the catalog or not.
+function tests.namedOnAndHasID_forExtensionsAsking()
+    local _, N = fresh()
+    H.assertEq(N.NamedOn("hogger", { [1429] = true }), 448)
+    H.assertEq(N.NamedOn("HOGGER", { [1429] = true }), 448, "any case")
+    H.assertNil(N.NamedOn("Hogger", { [1433] = true }), "no spot there")
+    H.assertEq(N.NamedOn("Kobold Vermin", { [1433] = true }), 6, "its second spot")
+    H.assertEq(N.NamedOn("Edwin VanCleef", { [1436] = true }), 639, "an instance spot: the entrance's map")
+    H.assertNil(N.NamedOn("Nobody", { [1429] = true }))
+    H.assertNil(N.NamedOn("", { [1429] = true }))
+    H.assertTrue(N.HasID(1076))
+    H.assertFalse(N.HasID(5))
+    local twins = {
+        { 10, 0, 7 + 16, 0, 0, { 1429, xy(0.5, 0.5), 1 } },
+        { 11, 0, 7 + 16, 0, 0, { 1426, xy(0.5, 0.5), 1 } },
+        { 12, 0, 7 + 16, 0, 0, { 1433, xy(0.5, 0.5), 1 } },
+    }
+    local _, T = fresh(nil, twins, "Smith\nSmith\nSmith")
+    H.assertEq(T.NamedOn("smith", { [1426] = true }), 11, "the second of a name")
+    H.assertEq(T.NamedOn("smith", { [1433] = true }), 12, "and the third")
+    H.assertNil(T.NamedOn("smith", { [1436] = true }))
+end
+
 local pass, fail, failures = H.runSuite("GPSNpcs", tests)
 return { pass = pass, fail = fail, failures = failures }
