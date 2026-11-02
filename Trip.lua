@@ -485,6 +485,9 @@ function Editor:Pick(data)
     if not row then return end
     local g = ns.GPS
     local index = row.index
+    -- What was typed joins the map search's recent searches, as a pick
+    -- from its own list does.
+    if ns.MapTab and ns.MapTab.PushRecentSearch then ns.MapTab:PushRecentSearch(row.box:GetText()) end
     row.box:ClearFocus()
     self.editing, self.closeAt = nil, nil
     self:DropHits()

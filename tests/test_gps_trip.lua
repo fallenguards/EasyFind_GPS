@@ -278,5 +278,19 @@ function tests.windowFinds_listInTheWindow()
     H.assertNil(frame.hitsFor)
 end
 
+-- A place picked for a trip's field never reached the map tab's recent
+-- searches (2026-11-02): what was typed joins them, as a pick from the
+-- map tab's own list does, before the field is cleared.
+function tests.aFieldsPick_joinsTheRecentSearches()
+    local f = assert(io.open(H.Path("Trip.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("function Editor:Pick(data)", 1, true))
+    local push = src:find("ns.MapTab:PushRecentSearch(row.box:GetText())", s, true)
+    local clear = src:find("row.box:ClearFocus()", s, true)
+    H.assertTrue(push ~= nil, "the typed words pushed")
+    H.assertTrue(clear ~= nil and push < clear, "read before the field is cleared")
+end
+
 local pass, fail, failures = H.runSuite("GPSTrip", tests)
 return { pass = pass, fail = fail, failures = failures }
