@@ -619,27 +619,28 @@ local function PlanStep()
     if coroutine.status(co) ~= "dead" or Planner.co ~= co then return end
     Planner.co = nil
     Planner.frame:SetScript("OnUpdate", nil)
-    local done, build = Planner.done, Planner.build
-    Planner.done, Planner.build = nil, nil
+    local done, build, quiet = Planner.done, Planner.build, Planner.quiet
+    Planner.done, Planner.build, Planner.quiet = nil, nil, nil
     GPS.planning = nil
     if not ok then
         Utils.ErrorHandler(a)
         a, b, c = build()
     end
     done(a, b, c)
-    Refresh()
+    if not quiet then Refresh() end
     Planner.ReleaseLater()
 end
 
 -- build() runs in the plan; done gets what it returns. name: the place the
--- surfaces say a way is being found to.
-function GPS:Plan(name, build, done)
+-- surfaces say a way is being found to. quiet: nothing on the surfaces
+-- changes (a walk drawn for the follower): they are not drawn again.
+function GPS:Plan(name, build, done, quiet)
     Planner.co = coroutine.create(build)
-    Planner.done, Planner.build = done, build
+    Planner.done, Planner.build, Planner.quiet = done, build, quiet
     GPS.planning = name and { name = name } or nil
     Planner.dots = 1
     if name and not Planner.dotTicker then Planner.dotTicker = C_Timer.NewTicker(0.35, Planner.Tick) end
-    Refresh()
+    if not quiet then Refresh() end
     Planner.frame:SetScript("OnUpdate", PlanStep)
     PlanStep()
 end
@@ -1596,7 +1597,7 @@ function GPS.DrawWalk(ci, sx, sy, tx, ty, near)
         return true
     end, function()
         if ns.GPSPreview and ns.GPSPreview.Follow then ns.GPSPreview:Follow() end
-    end)
+    end, true)
     return true
 end
 
