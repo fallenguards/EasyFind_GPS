@@ -368,6 +368,7 @@ local function IsCity(mapID)
     local info = C_Map.GetMapInfo(mapID)
     return info ~= nil and info.mapType == ZONE and info.flags ~= nil and bit.band(info.flags, 2) == 0
 end
+GPS.IsCity = IsCity
 
 local function SplitWalks(steps, dest, origin)
     local Route = ns.GPSRoute

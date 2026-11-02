@@ -582,6 +582,18 @@ local function PinEnd(route, mapID)
     MapSearch:PinRouteEnd(dest, x, y)
 end
 
+-- A walk through a zone is drawn on that zone's map and any map above it,
+-- never on a city's: a city map's rectangle reaches past its walls
+-- (Undercity's over the Ruins' surroundings), and the way outside drawn
+-- on the city's plan reads as a way inside it.
+local function DrawsOn(step, mapID)
+    local zone = step.walkZone
+    if not zone or zone == mapID then return true end
+    local city = ns.GPS and ns.GPS.IsCity
+    return not (city and city(mapID))
+end
+Preview._DrawsOn = DrawsOn   -- tests
+
 local function Draw()
     local route = Route()
     local canvas = Canvas()
@@ -631,11 +643,11 @@ local function Draw()
         local step = route.steps[i]
         -- A teleport draws nothing: nothing is walked, and the legs after
         -- it start from where it lands.
-        local teleport = step.kind == "teleport"
+        local hidden = step.kind == "teleport" or not DrawsOn(step, mapID)
         local start, target = Ends(route, i)
-        local a = (not teleport) and OnCanvas(start, mapID) or nil
-        local b = (not teleport) and OnCanvas(target, mapID) or nil
-        if not teleport then
+        local a = (not hidden) and OnCanvas(start, mapID) or nil
+        local b = (not hidden) and OnCanvas(target, mapID) or nil
+        if not hidden then
             local bright = all or i == shownIndex
             local color, alpha = Preview.LineColor(step.kind), bright and 0.95 or 0.4
             -- A leg already behind reads as walked, unless it is the one looked at.

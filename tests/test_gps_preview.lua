@@ -93,6 +93,24 @@ function tests.aLegOffTheMapIsCutAtItsEdge()
     H.assertNil(OnMap(1.2, 0, 1.2, 1), "nothing of it on the map")
 end
 
+-- A city map's rectangle reaches past its walls (Undercity's over the
+-- Ruins' surroundings, 2026-11-02): a walk through the zone outside is
+-- not drawn on the city's map, only on its own zone's and the maps above.
+function tests.aWalkOutsideACityIsNotDrawnOnItsMap()
+    local env = H.newEnv()
+    local ns = H.newNs(env)
+    env.EasyFind._ns = ns
+    ns.GPS = { IsCity = function(m) return m == 1458 end }
+    H.loadModule("Preview.lua", env, ns)
+    local DrawsOn = ns.GPSPreview._DrawsOn
+    local piece = { kind = "travel", walkZone = 1420, enter = 1458 }
+    H.assertFalse(DrawsOn(piece, 1458), "a walk through Tirisfal, not on Undercity's map")
+    H.assertTrue(DrawsOn(piece, 1420), "on its own zone's")
+    H.assertTrue(DrawsOn(piece, 1415), "and on the continent's")
+    H.assertTrue(DrawsOn({ kind = "travel", walkZone = 1458 }, 1458), "a walk inside the city on its map")
+    H.assertTrue(DrawsOn({ kind = "travel" }, 1458), "a walk not split yet, wherever it falls")
+end
+
 -- The ship's rigging was lost at the symbol sizes (2026-10-28): the
 -- cargo ship glyph is drawn half again as big, the other symbols as is.
 function tests.theShipSymbolIsDrawnBigger()
