@@ -292,5 +292,18 @@ function tests.aFieldsPick_joinsTheRecentSearches()
     H.assertTrue(clear ~= nil and push < clear, "read before the field is cleared")
 end
 
+-- "You have arrived" sat at the window's edge, left of the time line and
+-- the steps (2026-11-02): the announcement starts where the time line's
+-- text does, past the grip and the marks' column.
+function tests.theArrivalLinesUpWithTheTimeLine()
+    local f = assert(io.open(H.Path("Trip.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    H.assertTrue(src:find('frame.eta:SetPoint("TOPLEFT", ed, "BOTTOMLEFT", GRIP_W + MARK / 2 + shift, -4)', 1, true) ~= nil,
+        "the time line's inset")
+    H.assertTrue(src:find("ed.emptyX, ed.emptyStepsY = GRIP_W + MARK / 2 + shift,", 1, true) ~= nil,
+        "the announcement's the same")
+end
+
 local pass, fail, failures = H.runSuite("GPSTrip", tests)
 return { pass = pass, fail = fail, failures = failures }

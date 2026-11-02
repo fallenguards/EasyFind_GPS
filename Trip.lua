@@ -991,7 +991,8 @@ function Trip.BuildEditor(frame)
     frame.clearBtn:SetPoint("RIGHT", frame, "RIGHT", -12, 0)
     frame.clearBtn:SetPoint("TOP", ed, "BOTTOM", 0, -3)
     frame.list:SetPoint("TOPLEFT", ed, "BOTTOMLEFT", -6 + shift, -(4 + etaH + (frame.listGap or 8)))
-    ed.emptyX, ed.emptyStepsY = shift, -(4 + etaH + (frame.listGap or 8))
+    -- The announcement in line with the time line's text, not the grip.
+    ed.emptyX, ed.emptyStepsY = GRIP_W + MARK / 2 + shift, -(4 + etaH + (frame.listGap or 8))
 
     frame.trip = ed
     Trip.PlaceEmpty(frame, false)
