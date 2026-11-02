@@ -682,7 +682,7 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev)
             -- At the loop's top: nbScratch is refilled after, so a search run
             -- while this one waits cannot spoil it.
             pops = pops + 1
-            if pops % 256 == 0 then Pause() end
+            if pops % 64 == 0 then Pause() end
             local g = heap:Pop()
             if not g then break end
             if not closed[g] then
@@ -746,7 +746,7 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev)
             local g = list[i]
             i = i + 1
             pops = pops + 1
-            if pops % 256 == 0 then Pause() end
+            if pops % 64 == 0 then Pause() end
             if not closed[g] then
                 closed[g] = true
                 if want and want[g] then
