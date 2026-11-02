@@ -256,6 +256,25 @@ function tests.onTheWalkNoWayBackIsDrawn()
     H.assertTrue(drawn.pieces[1].color == PASSED, "within 20 yd the walk itself leads")
 end
 
+-- 30 yd west of the walk with a way back drawn: the walk behind stays
+-- faded up to abreast of the player (15 px to the right), then across to
+-- the player; the way back and the walk's rest ahead in the step's color.
+function tests.offTheWalkOnAWayBackTheWalkBehindStaysFaded()
+    local drawn = fresh(nil, 30)
+    local behind, ahead = drawn.pieces[1], drawn.pieces[2]
+    H.assertTrue(behind ~= nil and behind.color == PASSED, "the walk behind faded")
+    local b = behind.pts
+    H.assertTrue(near(b[1], 15) and b[2] < -RIM + 5, "up from the rim, 15 px right of the player: " .. b[1] .. "," .. b[2])
+    local abreast
+    for i = 1, #b - 1, 2 do
+        if near(b[i], 15) and near(b[i + 1], 0) then abreast = true end
+    end
+    H.assertTrue(abreast, "through the point abreast of the player")
+    H.assertTrue(near(b[#b - 1], 7) and near(b[#b], 0), "across to the player's arrow: " .. b[#b - 1] .. "," .. b[#b])
+    H.assertTrue(ahead ~= nil and ahead.color == BLUE, "the way back ahead in the step's color")
+    H.assertTrue(ahead.pts[1] > 0 and ahead.pts[2] > 0, "from the player toward the walk ahead")
+end
+
 function tests.standingStillDrawsNothingAgain()
     local drawn, _, now, Mini = fresh()
     local calls = drawn.calls

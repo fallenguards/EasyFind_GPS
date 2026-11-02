@@ -243,6 +243,14 @@ local function Draw()
                 end
                 local pts, seg = f.path.pts, f.seg
                 Pen(passed, passedAlpha)
+                -- Off the walk and on a way back: the walk's own way up to
+                -- abreast of where it was left, then across to that spot.
+                local trail = f.trail
+                if trail then
+                    local tp = trail.path.pts
+                    for v = 1, trail.seg do To(tp[2 * v - 1], tp[2 * v]) end
+                    To(trail.x, trail.y)
+                end
                 for v = 1, seg do To(pts[2 * v - 1], pts[2 * v]) end
                 To(f.qx, f.qy)
                 traceColor, traceAlpha = color, alpha

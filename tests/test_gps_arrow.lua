@@ -22,17 +22,18 @@ local function fresh(planned, opts)
     local route = { steps = { { kind = "travel", go = { ci = 1, wx = opts.tx or 100, wy = opts.ty or 100 } } }, active = 1,
                     from = planned and { ci = 1, wx = 0, wy = 0 } or nil }
     local planner = { asked = {}, drawn = {} }
+    local function key(sx, sy, tx, ty) return sx .. ":" .. sy .. ">" .. tx .. ":" .. ty end
     function planner.draw()
-        for _, a in ipairs(planner.asked) do planner.drawn[a[1] .. ":" .. a[2]] = true end
+        for _, a in ipairs(planner.asked) do planner.drawn[key(a[1], a[2], a[3], a[4])] = true end
     end
     ns.GPS = {
         CurrentRoute = function() return route end,
         PlayerWorldPos = function() return 1, player.x, player.y end,
-        DrawWalk = function(_, sx, sy) planner.asked[#planner.asked + 1] = { sx, sy } return true end,
+        DrawWalk = function(_, sx, sy, tx, ty) planner.asked[#planner.asked + 1] = { sx, sy, tx, ty } return true end,
     }
     ns.GPSRoute = {
         WalkPath = function(_, sx, sy, tx, ty, lazy)
-            if opts.planner and lazy and not (sx == 0 and sy == 0) and not planner.drawn[sx .. ":" .. sy] then
+            if opts.planner and lazy and not (sx == 0 and sy == 0) and not planner.drawn[key(sx, sy, tx, ty)] then
                 return nil
             end
             finds[#finds + 1] = { sx, sy, tx, ty }
@@ -50,7 +51,7 @@ local function fresh(planned, opts)
     ns.GPSNav = { Straight = function() return clear.v end }
     H.loadModule("Follow.lua", env, ns)
     H.loadModule("Arrow.lua", env, ns)
-    return ns.GPSArrow._Aim, player, finds, now, clear, planner
+    return ns.GPSArrow._Aim, player, finds, now, clear, planner, ns
 end
 
 -- The L-shaped walk from the planned start; a straight way from anywhere else.
@@ -99,8 +100,13 @@ function tests.aWayRoundHardlyLongerIsFollowed()
     H.assertTrue(ax > 20 and ax < 30)
 end
 
+-- A straight walk 1000 yd east; 40 yd off it at 50 yd along, the way back
+-- joins it 240 yd ahead (six times the yards off), at (290, 0).
+local LONG = { tx = 1000, ty = 0, pts = straightOff }
+local WAY_BACK = math.sqrt(240 ^ 2 + 40 ^ 2)
+
 function tests.aWalkFoundAgainIsDrawnByThePlanner()
-    local Aim, player, _, now, _, planner = fresh(true, { planner = true, pts = straightOff })
+    local Aim, player, _, now, _, planner = fresh(true, { planner = true, tx = 1000, ty = 0, pts = straightOff })
     player.x = 50
     Aim()
     H.assertEq(#planner.asked, 0, "the walk from the planned start is drawn already")
@@ -118,74 +124,156 @@ function tests.aWalkFoundAgainIsDrawnByThePlanner()
     now.t = now.t + 1
     local left
     _, _, ax, ay, left = Aim()
-    H.assertTrue(ax > 50 and ax < 90 and ay > 0 and ay < 40, "then along the way back onto the walk: " .. ax .. "," .. ay)
-    H.assertTrue(math.abs(left - (math.sqrt(2) * 40 + 110)) < 0.01, "the way back, then the walk's rest: " .. left)
+    H.assertTrue(ax > 70 and ax < 80 and ay > 30 and ay < 40, "then along the way back, at a shallow angle: " .. ax .. "," .. ay)
+    H.assertTrue(math.abs(left - (WAY_BACK + 710)) < 0.01, "the way back, then the walk's rest: " .. left)
 end
 
--- Straying 40 yd off the walk at 50 yd along: the way back joins it 40 yd
--- ahead, at (90, 0), and the arrow leads along that way at once.
+-- Straying 40 yd off the walk at 50 yd along: the way back joins it far
+-- ahead, at (290, 0), and the arrow leads along that way at once.
 function tests.offTheWayItLeadsBackOntoTheWalkAhead()
-    local Aim, player, finds, now = fresh(true, { pts = straightOff })
+    local Aim, player, finds, now = fresh(true, LONG)
     player.x = 50
     Aim()
     player.y = 40
     now.t = now.t + 5
     local _, _, ax, ay, left = Aim()
-    H.assertEq(finds[#finds][3], 90, "the way back asked to a point ahead on the walk")
+    H.assertEq(finds[#finds][3], 290, "the way back asked to a point far ahead on the walk")
     H.assertEq(finds[#finds][4], 0)
-    H.assertTrue(ax > 50 and ay < 40 and ay > 0, "led along the way back: " .. ax .. "," .. ay)
-    H.assertTrue(math.abs(left - (math.sqrt(2) * 40 + 110)) < 0.01, "the walk's rest kept: " .. left)
+    H.assertTrue(ax > 70 and ay < 40 and ay > 30, "led along the way back: " .. ax .. "," .. ay)
+    H.assertTrue(math.abs(left - (WAY_BACK + 710)) < 0.01, "the walk's rest kept: " .. left)
     now.t = now.t + 1
-    player.x, player.y = 60, 30
+    player.x, player.y = 74, 36
     Aim()
-    H.assertEq(#finds, 2, "on the joined walk: nothing asked again")
+    H.assertEq(#finds, 2, "on the way back: nothing asked again")
 end
 
--- With no way back onto the walk, a faster whole way from here takes over
--- only once it stays faster a while and a way on; till then the arrow
--- keeps to the walk.
+-- Keeping on 40 yd beside the walk: the way back is asked anew from where
+-- the player stands once he has strayed from it, each to a point far ahead
+-- of him on the walk, so the arrow never turns back to where it was last
+-- asked; at that shallow angle only now and then, not every second.
+function tests.besideTheWalkTheWayBackSlidesAlong()
+    local Aim, player, finds, now = fresh(true, LONG)
+    player.x = 50
+    Aim()
+    player.y = 40
+    now.t = now.t + 5
+    Aim()
+    H.assertEq(#finds, 2)
+    local asked = 2
+    for _ = 1, 20 do
+        now.t = now.t + 1
+        player.x = player.x + 7
+        local px, _, ax = Aim()
+        H.assertTrue(ax > px, "the arrow leads ahead: " .. ax .. " from " .. px)
+        if #finds > asked then
+            asked = #finds
+            H.assertEq(finds[asked][1], player.x, "asked anew from where the player stands")
+            H.assertEq(finds[asked][2], 40)
+            H.assertTrue(finds[asked][3] >= player.x + 80, "to a point far ahead on the walk: " .. finds[asked][3])
+        end
+    end
+    H.assertTrue(asked >= 5 and asked <= 10, "asked now and then over 20 s: " .. (asked - 2) .. " times")
+end
+
+-- A way back asked of the planner runs it, and the planner redraws every
+-- surface as it starts: a reader called in the middle of the follower's
+-- own reading gets the frame before's whole one, never a half-built one
+-- with no path (the minimap flashed a straight line to the step's end
+-- once a second beside the walk, 2026-11-01).
+function tests.aReaderMidReadingGetsTheLastWholeOne()
+    local Aim, player, _, now, _, planner, ns = fresh(true, { planner = true, pts = straightOff })
+    local Follow, draw = ns.GPSFollow, ns.GPS.DrawWalk
+    local seen
+    ns.GPS.DrawWalk = function(...)
+        seen = Follow.Now()
+        return draw(...)
+    end
+    player.x = 50
+    Aim()
+    player.y = 40
+    now.t = now.t + 5
+    local f = Follow.Now()
+    H.assertEq(#planner.asked, 1, "the way back asked")
+    H.assertTrue(seen ~= nil and seen ~= f, "a reading mid-ask: the one before")
+    H.assertTrue(seen.path == f.path and seen.path ~= false, "with its path, not the half-built one's none")
+    H.assertEq(seen.py, 0, "taken where the player stood the frame before")
+    H.assertEq(f.py, 40, "the reading after the ask is this frame's")
+end
+
+-- On a way back from off the walk, the reading carries the walk's own way
+-- behind it, up to abreast of where the player left it: drawn as walked.
+function tests.theWayBackKeepsTheWalkBehindIt()
+    local Aim, player, _, now, _, _, ns = fresh(true, { pts = straightOff })
+    player.x = 50
+    Aim()
+    player.y = 40
+    now.t = now.t + 5
+    Aim()
+    local f = ns.GPSFollow.Now()
+    H.assertEq(f.path.pts[1], 50, "the way followed starts where the player stands")
+    H.assertEq(f.path.pts[2], 40)
+    local trail = f.trail
+    H.assertTrue(trail ~= nil, "with the walk's own way behind it")
+    H.assertEq(trail.path.pts[1], 0, "from the walk's start")
+    H.assertEq(trail.seg, 1, "its stretches up to abreast of the player")
+    H.assertEq(trail.x, 50, "to the point abreast of him")
+    H.assertEq(trail.y, 0)
+    player.y = 0
+    now.t = now.t + 5
+    Aim()
+    f = ns.GPSFollow.Now()
+    H.assertTrue(f.trail ~= nil, "kept while the way back is followed")
+end
+
+-- With no way back onto the walk, the whole way from here takes over as
+-- soon as the planner has drawn it; till then the arrow keeps to the walk.
 local function wayRound(sx, sy, tx, ty)
     if sx == 0 and sy == 0 then return { 0, 0, 500, 0, tx, ty } end
     if not (tx == 500 and ty == 500) then return false end
     return { sx, sy, tx, ty }
 end
 
-function tests.aFasterWayTakesOverOnlyOnceItStaysFaster()
-    local Aim, player, _, now = fresh(true, { tx = 500, ty = 500, pts = wayRound })
+function tests.withNoWayBackAWholeWayTakesOverOnceDrawn()
+    local Aim, player, _, now, _, planner = fresh(true, { planner = true, tx = 500, ty = 500, pts = wayRound })
     player.x = 50
     Aim()
     player.y = 40
     now.t = now.t + 5
     local _, _, _, ay = Aim()
-    H.assertTrue(ay < 30, "the drawn walk still: " .. ay)
-    now.t = now.t + 10
-    _, _, _, ay = Aim()
-    H.assertTrue(ay < 30, "not taken standing still: " .. ay)
-    player.x, player.y = 75, 66
+    H.assertTrue(ay < 30, "the drawn walk while the way back is asked: " .. ay)
+    planner.draw()
     now.t = now.t + 1
     _, _, _, ay = Aim()
-    H.assertEq(ay, 500, "taken 36 yards on: straight along it to the spot")
+    H.assertTrue(ay < 30, "no way back: the whole way asked, the walk meanwhile: " .. ay)
+    H.assertEq(#planner.asked, 2)
+    planner.draw()
+    now.t = now.t + 1
+    _, _, _, ay = Aim()
+    H.assertEq(ay, 500, "drawn: taken at once, straight along it to the spot")
 end
 
 -- The way back onto the walk goes far round (300 yd south and back for 40
 -- yd off): the arrow leads along it, and the straight way from here takes
--- over once it stays faster.
+-- over as soon as it is drawn, being far shorter.
 function tests.aWayBackFarRoundGivesWayToAWholeWay()
-    local Aim, player, _, now = fresh(true, { tx = 500, ty = 500, pts = function(sx, sy, tx, ty)
-        if sx == 0 and sy == 0 then return { 0, 0, 500, 0, tx, ty } end
-        if not (tx == 500 and ty == 500) then return { sx, sy, sx, -300, tx, -300, tx, ty } end
-        return { sx, sy, tx, ty }
-    end })
+    local Aim, player, _, now, _, planner = fresh(true, { planner = true, tx = 500, ty = 500,
+        pts = function(sx, sy, tx, ty)
+            if sx == 0 and sy == 0 then return { 0, 0, 500, 0, tx, ty } end
+            if not (tx == 500 and ty == 500) then return { sx, sy, sx, -300, tx, -300, tx, ty } end
+            return { sx, sy, tx, ty }
+        end })
     player.x = 50
     Aim()
     player.y = 40
     now.t = now.t + 5
+    Aim()
+    planner.draw()
+    now.t = now.t + 1
     local _, _, ax, ay = Aim()
     H.assertTrue(ax == 50 and ay < 40, "along the way back meanwhile: " .. ax .. "," .. ay)
-    now.t = now.t + 5
-    Aim()
-    now.t = now.t + 7
-    player.x, player.y = 75, 66
+    H.assertEq(#planner.asked, 2, "far round: the whole way from here asked")
+    planner.draw()
+    now.t = now.t + 1
     _, _, _, ay = Aim()
     H.assertEq(ay, 500, "the whole way taken: straight to the spot")
 end
