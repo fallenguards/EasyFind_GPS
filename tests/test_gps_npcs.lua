@@ -664,6 +664,25 @@ function tests.aNameHoldingEveryWordBeatsThePlaceReading()
     H.assertEq(rows[1].name, "Bea")
 end
 
+-- "rothide mystic" found nothing while "rot hide mystic" did
+-- (2026-11-02): a word typed without the name's space is matched against
+-- the names with their spaces out, and still counts as starting the name.
+function tests.aNameTypedWithoutItsSpaceIsFound()
+    local list = {
+        { 1, 0, 7 + 16, 0, 0, { 1429, xy(0.5, 0.5), 1 } },
+        { 2, 0, 7 + 16, 0, 0, { 1429, xy(0.6, 0.6), 1 } },
+        { 3, 0, 7 + 16, 0, 0, { 1429, xy(0.7, 0.7), 1 } },
+    }
+    local append = fresh(nil, list, "Rot Hide Mystic\nRot Hide Brute\nMystic Hogger")
+    local rows = find(append, "rothide mystic")
+    H.assertEq(#rows, 1)
+    H.assertEq(rows[1].name, "Rot Hide Mystic")
+    H.assertEq(#find(append, "rothide"), 2, "both gnolls")
+    H.assertEq(find(append, "mystic rothide")[1].name, "Rot Hide Mystic", "in either order")
+    H.assertEq(find(append, "rot hide mystic")[1].name, "Rot Hide Mystic", "as spelled still")
+    H.assertEq(#find(append, "hidemys"), 1, "joined inside the name too")
+end
+
 -- A trainer titled after a class is a class trainer, whatever its name;
 -- a cooking trainer is not.
 function tests.classTrainersByTheirTitle()

@@ -301,6 +301,7 @@ local function Bind()
     N.planes = data.planes or {}
     N.titleName, N.titleLow, N.classTitle = data.titleName, data.titleLow, data.classTitle or {}
     N.titleEnglish, N.titleLowEnglish = data.titleEnglish or {}, data.titleLowEnglish or {}
+    N.sqLow, N.sqAt, N.sqEnLow, N.sqEnAt = nil, nil, nil, nil
     N.n = count
 end
 
@@ -658,6 +659,39 @@ local function LineHits(blob, at, n, word, into)
     end
 end
 
+-- The names with their spaces out (rothide for Rot Hide), with their line
+-- starts: made on the first word typed joined, kept with the catalog.
+local function Joined()
+    if N.sqLow == nil then
+        N.sqLow = (N.low:gsub(" ", ""))
+        N.sqAt = LineStarts(N.sqLow)
+        if N.enLow then
+            N.sqEnLow = (N.enLow:gsub(" ", ""))
+            N.sqEnAt = LineStarts(N.sqEnLow)
+        end
+    end
+    return N.sqLow, N.sqAt, N.sqEnLow, N.sqEnAt
+end
+
+-- A word's line hits in both texts. One that hits nothing as typed is
+-- looked for in the names with their spaces out, and set at its line's
+-- start when the name begins so, else just inside it.
+local joinedHits = {}
+local function WordHits(word, low, en)
+    LineHits(N.low, N.at, N.n, word, low)
+    if N.enLow then LineHits(N.enLow, N.enAt, N.n, word, en) end
+    if next(low) or next(en) then return end
+    local sqLow, sqAt, sqEnLow, sqEnAt = Joined()
+    wipe(joinedHits)
+    LineHits(sqLow, sqAt, N.n, word, joinedHits)
+    for i, p in pairs(joinedHits) do low[i] = At(N.at, i) + (p == At(sqAt, i) and 0 or 1) end
+    if sqEnLow then
+        wipe(joinedHits)
+        LineHits(sqEnLow, sqEnAt, N.n, word, joinedHits)
+        for i, p in pairs(joinedHits) do en[i] = At(N.enAt, i) + (p == At(sqEnAt, i) and 0 or 1) end
+    end
+end
+
 -- Whether one creature's name, in either language, holds every word of
 -- the query, the words read as places too.
 local function NamedByAll()
@@ -666,8 +700,7 @@ local function NamedByAll()
         local low, en = hitLow[w], hitEn[w]
         if low then wipe(low) else low = {}; hitLow[w] = low end
         if en then wipe(en) else en = {}; hitEn[w] = en end
-        LineHits(N.low, N.at, N.n, words[w], low)
-        if N.enLow then LineHits(N.enLow, N.enAt, N.n, words[w], en) end
+        WordHits(words[w], low, en)
     end
     for _, first in ipairs({ hitLow[1], hitEn[1] }) do
         for i in pairs(first) do
@@ -688,10 +721,7 @@ local function MarkWordHits()
         local low, en = N.hitLow[w], N.hitEn[w]
         if low then wipe(low) else low = {}; N.hitLow[w] = low end
         if en then wipe(en) else en = {}; N.hitEn[w] = en end
-        if not wordPlace[w] then
-            LineHits(N.low, N.at, N.n, words[w], low)
-            if N.enLow then LineHits(N.enLow, N.enAt, N.n, words[w], en) end
-        end
+        if not wordPlace[w] then WordHits(words[w], low, en) end
     end
 end
 
@@ -1178,6 +1208,12 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
     local longest = words[lw]
     MarkLines(N.low, N.at, N.n, longest, Mark)
     if N.enLow then MarkLines(N.enLow, N.enAt, N.n, longest, Mark) end
+    -- Typed joined (rothide): the names with their spaces out hold it.
+    if #cand == 0 then
+        local sqLow, sqAt, sqEnLow, sqEnAt = Joined()
+        MarkLines(sqLow, sqAt, N.n, longest, Mark)
+        if sqEnLow then MarkLines(sqEnLow, sqEnAt, N.n, longest, Mark) end
+    end
     local titleHit, anyTitle = N.titleHit, false
     for t = 1, #N.titleLow do
         local hit = sfind(N.titleLow[t], longest, 1, true)
