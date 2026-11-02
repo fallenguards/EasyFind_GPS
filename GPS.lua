@@ -1749,7 +1749,12 @@ function GPS:Clear(opts)
     local route = Route()
     if route then EasyFind.API.Fire("gps", "routeCleared") end
     if route and not route.arrived then LiftPin(route) end
-    if ns.MapSearch and ns.MapSearch.ClearRouteEnd then ns.MapSearch:ClearRouteEnd() end
+    local MapSearch = ns.MapSearch
+    if MapSearch and MapSearch.ClearRouteEnd then MapSearch:ClearRouteEnd() end
+    -- The map's pin on the journey's end goes with the route, whether the
+    -- route put it there or the click that started the route did.
+    local dest = route and route.dest
+    if dest and MapSearch and MapSearch.ClearPinAt then MapSearch:ClearPinAt(dest.mapID, dest.x, dest.y) end
     local c = CharDB()
     if c then c.route, c.start = nil, nil end
     GPS.picking = nil

@@ -69,5 +69,18 @@ function tests.theEndWearsTheMapsPinFromAnyPick()
         "the pin stays until a right-click, as a direct map tab pick's")
 end
 
+-- Clear route left the end's pin when the click that started the route
+-- had placed it (the Greater Duskbat's face stayed on the map,
+-- 2026-11-02): the pin on the journey's end goes with the route either way.
+function tests.theEndsPinGoesWithTheRoute()
+    local src = Read("GPS.lua")
+    local s = assert(src:find("function GPS:Clear(opts)", 1, true))
+    local e = assert(src:find("\nend\n", s, true))
+    local body = src:sub(s, e)
+    local pin = body:find("MapSearch:ClearPinAt(dest.mapID, dest.x, dest.y)", 1, true)
+    H.assertTrue(pin ~= nil, "the pin at the route's end cleared")
+    H.assertTrue(pin < body:find("CharDB()", 1, true), "before the route is let go")
+end
+
 local pass, fail, failures = H.runSuite("GPSStopMark", tests)
 return { pass = pass, fail = fail, failures = failures }
