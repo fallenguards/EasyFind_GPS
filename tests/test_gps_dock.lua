@@ -125,9 +125,10 @@ local function MenuRows()
     local GPS = {
         WorldPinRow = row("GPS_WORLD_PIN"), SnapRow = row("GPS_SNAP_TRACKER"), AutoLearnRow = row("GPS_AUTO_LEARN"),
         DetoursRow = row("GPS_SHOW_DETOURS"), OtherWaysRow = row("GPS_SHOW_OTHER_WAYS"), LaunchRow = row("GPS_LAUNCH_WINDOW"),
-        HideDoneRow = row("GPS_HIDE_DONE"),
+        HideDoneRow = row("GPS_HIDE_DONE"), NextOnlyRow = row("GPS_SIZE_NEXT_ONLY"),
+        ListChoiceRow = function(_, which) return { kind = "check", label = which } end,
         StyleMenu = function() return { kind = "submenu", label = "GPS_STYLE", rows = {} } end,
-        PlanningMenu = function() return { kind = "submenu", label = "GPS_PLANNING", rows = {} } end,
+        PlanningMenu = function(frame) return { kind = "submenu", label = "GPS_PLANNING", rows = {}, window = frame and frame.isPopout } end,
     }
     function GPS.PicksMenu(label, choices, current)
         local rows = {}
@@ -140,7 +141,9 @@ local function MenuRows()
         ns = {
             ResultLinks = { BuildRouteText = function() return "route link" end },
             BuildSendLinkRows = function() return { { text = "Say" } } end,
+            MapTab = { FilterRows = function() return function() return { { text = "ZONES" }, { text = "FILTER_NPCS" } } end end },
         },
+        CheckFlyoutRow = function(d) return { text = d.label, check = d } end,
         Route = function() return { dest = { name = "Astaia" } } end,
         RouteTracked = function() return false end,
         ToggleRouteTracking = function() end,
@@ -157,10 +160,11 @@ end
 
 -- The section snapped in, floating in either look, and the window: the
 -- route's actions and settings on every one, the size only on the window.
+-- The beacon and the step-list switches live in flyouts, not the menu.
 function tests.everySurfaceHasTheSameMenu()
     local rowsFor = MenuRows()
     local shared = { "GPS_CLEAR", "GPS_FROM_PICK", "CTX_SEND_LINK", "GPS_REPORT",
-        "GPS_WORLD_PIN", "GPS_SNAP_TRACKER", "GPS_PLANNING", "GPS_LAUNCH_WINDOW", "GPS_HIDE_DONE" }
+        "Show", "GPS_SNAP_TRACKER", "GPS_PLANNING", "GPS_LAUNCH_WINDOW" }
     for _, s in ipairs({
         { name = "snapped in", f = { docked = true } },
         { name = "floating", f = { floating = true, look = "game" }, style = true },
@@ -168,13 +172,42 @@ function tests.everySurfaceHasTheSameMenu()
         { name = "window", f = { isPopout = true }, style = true, size = true },
     }) do
         local has = {}
+        local planning
         for _, d in ipairs(rowsFor(s.f)) do
             if d.label then has[d.label] = true end
+            if d.label == "GPS_PLANNING" then planning = d end
         end
         for _, label in ipairs(shared) do H.assertTrue(has[label], s.name .. ": no " .. label) end
+        for _, label in ipairs({ "GPS_WORLD_PIN", "GPS_HIDE_DONE", "GPS_SIZE_NEXT_ONLY" }) do
+            H.assertTrue(not has[label], s.name .. ": " .. label .. " in the menu itself")
+        end
+        H.assertEq(planning.window == true, s.size == true, s.name .. ": route planning knows the window")
         H.assertEq(has.GPS_STYLE == true, s.style == true, s.name .. ": style rows")
         H.assertEq(has.GPS_SIZE_WIDTH == true, s.size == true, s.name .. ": width rows")
     end
+end
+
+-- The Show flyout: the map tab's kinds, then under a line the list's
+-- choices (where there is a search box) and the beacon in the world.
+function tests.showFlyoutHoldsTheListChoicesAndTheBeacon()
+    local rowsFor = MenuRows()
+    local function showRows(f)
+        for _, d in ipairs(rowsFor(f)) do
+            if d.kind == "submenu" and d.label == "Show" then return d.rows() end
+        end
+    end
+    local rows = showRows({ isPopout = true, search = true })
+    H.assertEq(#rows, 7)
+    H.assertEq(rows[2].text, "FILTER_NPCS", "the kinds first")
+    H.assertTrue(rows[3].isSeparator, "a line under the kinds")
+    H.assertEq(rows[4].text, "recent")
+    H.assertEq(rows[5].text, "parents")
+    H.assertEq(rows[6].text, "expand")
+    H.assertEq(rows[7].text, "GPS_WORLD_PIN", "the beacon last")
+    H.assertTrue(rows[7].check ~= nil, "a check row")
+    rows = showRows({ docked = true })
+    H.assertEq(#rows, 4, "no search box: the kinds, the line and the beacon")
+    H.assertEq(rows[4].text, "GPS_WORLD_PIN")
 end
 
 -- Style, width and height are flyouts holding their picks, the one in use
@@ -195,8 +228,10 @@ function tests.settingsWithPicksAreFlyouts()
     H.assertTrue(height[1].picked and not height[2].picked, "fit to steps, as no height is set")
 end
 
--- Route planning's three switches share one flyout, the window's border
--- sits under the looks in the style flyout, and a switch flips in place.
+-- Route planning's three switches and, under a line, the step-list
+-- switches share one flyout (the next step alone only on the window); the
+-- window's border sits under the looks in the style flyout, and a switch
+-- flips in place.
 function tests.planningAndBorderAreFlyoutSwitches()
     local f = assert(io.open(H.Path("GPS.lua"), "rb"))
     local src = f:read("*a")
@@ -204,7 +239,7 @@ function tests.planningAndBorderAreFlyoutSwitches()
     local s = assert(src:find("local MENU_CHECK", 1, true), "MENU_CHECK not in GPS.lua")
     local s2 = assert(src:find("function GPS.StyleMenu(border)", s, true), "GPS.StyleMenu(border) not after it")
     local _, e = src:find("\nend\r?\n", s2)
-    local on = { learn = true, detours = false, ways = true }
+    local on = { learn = true, detours = false, ways = true, done = false, next = false }
     local function check(key, label)
         return function()
             return { kind = "check", label = label, get = function() return on[key] end, set = function(v) on[key] = v end }
@@ -212,22 +247,30 @@ function tests.planningAndBorderAreFlyoutSwitches()
     end
     local db = {}
     local GPS = { AutoLearnRow = check("learn", "GPS_AUTO_LEARN"), DetoursRow = check("detours", "GPS_SHOW_DETOURS"),
-        OtherWaysRow = check("ways", "GPS_SHOW_OTHER_WAYS") }
+        OtherWaysRow = check("ways", "GPS_SHOW_OTHER_WAYS"), HideDoneRow = check("done", "GPS_HIDE_DONE"),
+        NextOnlyRow = check("next", "GPS_SIZE_NEXT_ONLY") }
     local palette = { chrome = nil }
     local env = setmetatable({ GPS = GPS, L = setmetatable({}, { __index = function(_, k) return k end }),
         PopoutStyle = function() return "easyfind" end, DB = function() return db end, HideMenus = function() end,
         ns = { ACTIVE_UI_PALETTE = palette }, GAME_ART = { questRim = true } }, { __index = _G })
     assert(load(src:sub(s, e), "=GPS.lua flyouts", "t", env))()
-    local planning = GPS.PlanningMenu()
+    local planning = GPS.PlanningMenu({ docked = true })
     H.assertEq(planning.kind, "submenu")
     local rows = planning.rows()
-    H.assertEq(#rows, 3)
+    H.assertEq(#rows, 5, "the three planning switches, a line, hide completed steps")
     H.assertEq(rows[1].text, "GPS_AUTO_LEARN")
     H.assertTrue(rows[1].keepOpen and rows[1].icon ~= nil, "on: ticked, and a click keeps the flyout open")
     H.assertNil(rows[2].icon, "off: no tick")
     rows[2].onClick()
     H.assertTrue(on.detours, "the click flips it")
     H.assertTrue(planning.rows()[2].icon ~= nil, "listed anew, it is ticked")
+    H.assertTrue(rows[4].isSeparator, "a line before the step-list switches")
+    H.assertEq(rows[5].text, "GPS_HIDE_DONE")
+    local window = GPS.PlanningMenu({ isPopout = true }).rows()
+    H.assertEq(#window, 6)
+    H.assertEq(window[6].text, "GPS_SIZE_NEXT_ONLY", "the window alone can show the next step by itself")
+    window[6].onClick()
+    H.assertTrue(on.next, "the click flips it")
     local border = { label = "GPS_SIZE_BORDER", get = function() return true end, set = function() end }
     local style = GPS.StyleMenu(border).rows()
     H.assertEq(style[#style].text, "GPS_SIZE_BORDER", "the border under the looks")

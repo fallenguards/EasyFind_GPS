@@ -3694,6 +3694,20 @@ function GPS.HideDoneRow()
         end }
 end
 
+-- The menu row showing the window's next step alone (off unless turned on).
+function GPS.NextOnlyRow()
+    return { kind = "check", label = L["GPS_SIZE_NEXT_ONLY"],
+        get = function() local db = DB() return db and db.gpsPopoutNextOnly == true end,
+        set = function(v)
+            local db = DB()
+            if db then db.gpsPopoutNextOnly = v or nil end
+            if popoutFrame then
+                popoutFrame.scrollOffset = 0
+                popoutFrame:Render()
+            end
+        end }
+end
+
 function GPS.LaunchRow()
     return { kind = "check", label = L["GPS_LAUNCH_WINDOW"], tooltip = L["GPS_LAUNCH_WINDOW_TT"], get = GPS.LaunchesWindow,
         set = function(v)
@@ -5248,11 +5262,14 @@ local function CheckFlyoutRow(d)
              icon = d.get() and MENU_CHECK or nil, onClick = function() d.set(not d.get()) end }
 end
 
--- Learning flight paths on the way and the advice lines under the route.
-function GPS.PlanningMenu()
+-- Learning flight paths on the way and the advice lines under the route;
+-- under a line, which steps the list shows (the next alone: the window's).
+function GPS.PlanningMenu(f)
     return { kind = "submenu", label = L["GPS_PLANNING"], rows = function()
-        return { CheckFlyoutRow(GPS.AutoLearnRow()), CheckFlyoutRow(GPS.DetoursRow()),
-                 CheckFlyoutRow(GPS.OtherWaysRow()) }
+        local rows = { CheckFlyoutRow(GPS.AutoLearnRow()), CheckFlyoutRow(GPS.DetoursRow()),
+                       CheckFlyoutRow(GPS.OtherWaysRow()), { isSeparator = true }, CheckFlyoutRow(GPS.HideDoneRow()) }
+        if f and f.isPopout then rows[#rows + 1] = CheckFlyoutRow(GPS.NextOnlyRow()) end
+        return rows
     end }
 end
 
@@ -5512,38 +5529,28 @@ function GPS.MenuRows(f)
     if route then defs[#defs + 1] = { kind = "action", label = L["GPS_REPORT"], onClick = function() GPS:ReportRoute() end } end
     -- A section's flyouts come after its rows, on every surface alike.
     if sendRows then defs[#defs + 1] = { kind = "submenu", label = L["CTX_SEND_LINK"], rows = sendRows } end
-    -- The search's Show buckets, the map tab's own, so the box finds what the tab would.
+    -- The search's Show buckets, the map tab's own, so the box finds what
+    -- the tab would; under a line, the list's choices and the beacon.
     if ns.MapTab and ns.MapTab.FilterRows then
-        defs[#defs + 1] = { kind = "submenu", label = _G["SHOW"] or "Show", rows = ns.MapTab.FilterRows(GPS.RefreshSearches) }
-    end
-    if f.search then
-        defs[#defs + 1] = GPS.ListChoiceRow(f, "recent")
-        defs[#defs + 1] = GPS.ListChoiceRow(f, "parents")
-        defs[#defs + 1] = GPS.ListChoiceRow(f, "expand")
+        local buckets = ns.MapTab.FilterRows(GPS.RefreshSearches)
+        defs[#defs + 1] = { kind = "submenu", label = _G["SHOW"] or "Show", rows = function()
+            local rows = buckets()
+            rows[#rows + 1] = { isSeparator = true }
+            if f.search then
+                for _, which in ipairs({ "recent", "parents", "expand" }) do
+                    rows[#rows + 1] = CheckFlyoutRow(GPS.ListChoiceRow(f, which))
+                end
+            end
+            rows[#rows + 1] = CheckFlyoutRow(GPS.WorldPinRow())
+            return rows
+        end }
     end
     defs[#defs + 1] = { kind = "separator" }
-    defs[#defs + 1] = GPS.WorldPinRow()
     defs[#defs + 1] = GPS.SnapRow()
     defs[#defs + 1] = GPS.LaunchRow()
-    defs[#defs + 1] = GPS.HideDoneRow()
+    defs[#defs + 1] = GPS.PlanningMenu(f)
     -- Snapped in, the section has one look.
-    if f.docked then
-        defs[#defs + 1] = GPS.PlanningMenu()
-        return defs
-    end
-    if f.isPopout then
-        defs[#defs + 1] = { kind = "check", label = L["GPS_SIZE_NEXT_ONLY"],
-            get = function() local db = DB() return db and db.gpsPopoutNextOnly == true end,
-            set = function(v)
-                local db = DB()
-                if db then db.gpsPopoutNextOnly = v or nil end
-                if popoutFrame then
-                    popoutFrame.scrollOffset = 0
-                    popoutFrame:Render()
-                end
-            end }
-    end
-    defs[#defs + 1] = GPS.PlanningMenu()
+    if f.docked then return defs end
     defs[#defs + 1] = GPS.StyleMenu(f.isPopout and { label = L["GPS_SIZE_BORDER"] } or nil)
     if not f.isPopout then return defs end
     local width, height = PopoutSize()
