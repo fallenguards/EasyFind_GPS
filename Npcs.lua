@@ -658,6 +658,29 @@ local function LineHits(blob, at, n, word, into)
     end
 end
 
+-- Whether one creature's name, in either language, holds every word of
+-- the query, the words read as places too.
+local function NamedByAll()
+    local words, hitLow, hitEn = N.words, N.hitLow, N.hitEn
+    for w = 1, #words do
+        local low, en = hitLow[w], hitEn[w]
+        if low then wipe(low) else low = {}; hitLow[w] = low end
+        if en then wipe(en) else en = {}; hitEn[w] = en end
+        LineHits(N.low, N.at, N.n, words[w], low)
+        if N.enLow then LineHits(N.enLow, N.enAt, N.n, words[w], en) end
+    end
+    for _, first in ipairs({ hitLow[1], hitEn[1] }) do
+        for i in pairs(first) do
+            local all = true
+            for w = 2, #words do
+                if not (hitLow[w][i] or hitEn[w][i]) then all = false break end
+            end
+            if all then return true end
+        end
+    end
+    return false
+end
+
 -- The query words' line hits in both texts (hitLow[w], hitEn[w]).
 local function MarkWordHits()
     local words, wordPlace = N.words, N.wordPlace
@@ -1116,9 +1139,12 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
     local town, placed = Places()
     local goods = MatchGoods()
     if placed then
-        -- A plain name word beside the place (org thrall): no place meant.
+        -- A plain name word beside the place (org thrall), or a creature
+        -- named by every word, the place's too (greater dusk is the Greater
+        -- Duskbat, not the vendors of greater goods in Duskwood): no place meant.
+        local plain = NamedByAll()
         for w = 1, #words do
-            if not (wordPlace[w] or wordRole[w] or goods) then
+            if plain or not (wordPlace[w] or wordRole[w] or goods) then
                 placed, town = false, nil
                 wipe(N.mapSet)
                 for v = 1, #words do wordPlace[v] = nil end

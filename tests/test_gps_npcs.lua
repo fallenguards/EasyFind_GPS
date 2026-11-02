@@ -638,6 +638,32 @@ function tests.aTownWordNarrowsToItsInn()
     H.assertEq(#find("aube inn"), 1, "a prefix names it")
 end
 
+-- "greater dusk" lost the Greater Duskbat that "greater dus" found
+-- (2026-11-02): four letters read as Duskwood, and "greater" named goods
+-- (Greater Healing Potion), so the query became the potion vendors of
+-- Duskwood. A creature named by every word is the creature; "dusk potion",
+-- which names none, is still the vendors there.
+function tests.aNameHoldingEveryWordBeatsThePlaceReading()
+    local list = {
+        { 1, 0, 1 + 16, 0, 0, { 1429, xy(0.5, 0.5), 1 } },
+        { 2, 0, REPAIR, 0, 1, { 1433, xy(0.1, 0.1), 1 } },
+    }
+    local goods = { types = { 0 }, lists = { { 1 } }, sells = { [2] = 1 }, names = "Greater Healing Potion" }
+    local append, _, env = fresh(nil, list, "Greater Duskbat\nBea", goods)
+    env.UnitFactionGroup = function() return "Alliance" end
+    env.EasyFind._ns.MapSearch.ZonesNamed = function(_, word)
+        if word == "dusk" then return { { mapID = 1433, name = "Duskwood", nameLower = "duskwood" } } end
+        return nil
+    end
+    local rows = find(append, "greater dusk")
+    H.assertEq(#rows, 1)
+    H.assertEq(rows[1].name, "Greater Duskbat", "named by both words: the creature")
+    H.assertEq(find(append, "greater dus")[1].name, "Greater Duskbat")
+    rows = find(append, "dusk potion")
+    H.assertEq(#rows, 1, "no creature named so: the potion vendors in Duskwood")
+    H.assertEq(rows[1].name, "Bea")
+end
+
 -- A trainer titled after a class is a class trainer, whatever its name;
 -- a cooking trainer is not.
 function tests.classTrainersByTheirTitle()
