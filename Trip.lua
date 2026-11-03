@@ -243,7 +243,7 @@ function Trip.Detour(route)
     return function(ci, x, y) return DetourOf(c, ci, x, y) end
 end
 
-local alongList, alongSec, alongFound = {}, {}, {}
+local alongList, alongSec, alongFound, alongNames = {}, {}, {}, {}
 local function LeastOutOfTheWay(a, b) return alongSec[a] < alongSec[b] end
 
 local function KeepAlong(r, detour)
@@ -266,14 +266,21 @@ function Trip.AlongPlaces(q)
     local detour = route and not route.arrived and Trip.Detour(route)
     if not detour then return alongList, alongSec end
     -- The map search's places, less its creatures (those near the player);
-    -- then the creatures, each at its spot nearest the way.
+    -- then the creatures, each at its spot nearest the way, but for those
+    -- a place kept already names (EasyFind's own Innkeeper Renee).
     local places = ns.GPS.SearchPlaces and ns.GPS.SearchPlaces(q)
     for i = 1, places and #places or 0 do
         if not places[i].catalog then KeepAlong(places[i], detour) end
     end
+    wipe(alongNames)
+    for i = 1, #alongList do
+        local r = alongList[i]
+        local low = r.nameLower or (r.name and r.name:lower())
+        if low then alongNames[low] = true end
+    end
     local npcs = ns.GPSNpcs
     wipe(alongFound)
-    if npcs and npcs.Append then npcs.Append(alongFound, nil, q, nil, nil, detour) end
+    if npcs and npcs.Append then npcs.Append(alongFound, alongNames, q, nil, nil, detour) end
     for i = 1, #alongFound do KeepAlong(alongFound[i], detour) end
     tsort(alongList, LeastOutOfTheWay)
     for i = #alongList, ALONG_ROWS + 1, -1 do alongList[i] = nil end

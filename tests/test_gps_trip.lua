@@ -249,6 +249,39 @@ function tests.along_theLeastOutOfTheWayFirst()
     H.assertEq(Trip.AddsText(secs[list[3]]), "+4 min")
 end
 
+-- A creature EasyFind lists itself comes once: the catalog is told the
+-- names the places kept (Innkeeper Renee twice, 2026-11-03).
+function tests.along_aCreatureThePlacesKeptComesOnce()
+    local Trip, route, _, ns = Load()
+    Walking(ns, route)
+    ns.GPS.CanNavigate = function() return true end
+    ns.GPS.SearchPlaces = function()
+        return { { name = "Innkeeper Renee", nameLower = "innkeeper renee", mapID = 1, x = 500, y = 100 },
+                 { name = "Innkeeper Far", mapID = 1, x = 500, y = 5000 } }
+    end
+    local told
+    ns.GPSNpcs = {
+        Append = function(out, nameSet)
+            told = nameSet
+            for _, name in ipairs({ "Innkeeper Renee", "Innkeeper Far", "Innkeeper Norman" }) do
+                local low = name:lower()
+                if not (nameSet and nameSet[low]) then
+                    out[#out + 1] = { name = name, nameLower = low, mapID = 1, x = 500, y = 60 }
+                end
+            end
+        end,
+    }
+    local list = Trip.AlongPlaces("inn")
+    H.assertTrue(told and told["innkeeper renee"], "the catalog is told the places kept")
+    H.assertNil(told["innkeeper far"], "not a place off the way: the catalog's nearer one may come")
+    local seen = {}
+    for _, r in ipairs(list) do
+        H.assertNil(seen[r.name], r.name .. " once")
+        seen[r.name] = true
+    end
+    H.assertEq(#list, 3)
+end
+
 -- Editor:ShowHits and DropHits cut from Trip.lua: in a window with a list
 -- of its own a field's finds go there, never into a panel under the field.
 local function EditorHits()
