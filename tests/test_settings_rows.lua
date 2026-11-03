@@ -37,6 +37,7 @@ local function Rows()
         Route = function() end, Reroute = function() end,
         GPS = { CogMode = function() return "hover" end, ApplyCogs = function() end } }, { __index = env })
     local rows = assert(load(slice(gpsSrc, "local TEXT_SIZES = ", "\n") .. "\n"
+        .. slice(gpsSrc, "-- The ways of travel a route may avoid", "-- The menu row hiding the steps already done")
         .. slice(gpsSrc, "local OptionsPage = {}", "\n-- The extension: its tile opens")
         .. "\nreturn OptionsPage.Rows", "=GPS rows", "t", gpsEnv))()()
     return rows, db

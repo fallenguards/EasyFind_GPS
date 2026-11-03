@@ -3690,6 +3690,32 @@ function GPS:Launch()
     return GPS:Open()
 end
 
+-- The ways of travel a route may avoid, and each one's switch: the
+-- settings page and Route planning's Avoid flyout share them.
+function GPS.AvoidKinds()
+    local kinds = { "taxi", "boat", "zeppelin", "portal", "teleport" }
+    if ns.NPC_DATA and ns.NPC_DATA.danger then kinds[#kinds + 1] = "danger" end
+    if ns.GPSNav and ns.GPSNav.HasRoads and ns.GPSNav.HasRoads(0) then kinds[#kinds + 1] = "offroad" end
+    if ns.GPSNav and ns.GPSNav.DropHeights and ns.GPSNav.DropHeights(0) then kinds[#kinds + 1] = "jumps" end
+    return kinds
+end
+
+local AVOID_OWN_TIP = { danger = true, offroad = true, jumps = true }
+
+function GPS.AvoidRow(kind)
+    local key = "GPS_AVOID_" .. kind:upper()
+    return { kind = "check", label = L[key], tooltip = AVOID_OWN_TIP[kind] and L[key .. "_TT"] or L["GPS_AVOID_TT"],
+        get = function() local d = DB() return d and d.gpsAvoid and d.gpsAvoid[kind] or false end,
+        set = function(on)
+            local d = DB()
+            if not d then return end
+            d.gpsAvoid = d.gpsAvoid or {}
+            d.gpsAvoid[kind] = on or nil
+            local route = Route()
+            if route and not route.arrived then Reroute(route) end
+        end }
+end
+
 -- The menu row hiding the steps already done (off unless turned on).
 function GPS.HideDoneRow()
     return { kind = "check", label = L["GPS_HIDE_DONE"], tooltip = L["GPS_HIDE_DONE_TT"],
@@ -5273,8 +5299,11 @@ end
 -- under a line, which steps the list shows (the next alone: the window's).
 function GPS.PlanningMenu(f)
     return { kind = "submenu", label = L["GPS_PLANNING"], rows = function()
+        local avoid = {}
+        for _, kind in ipairs(GPS.AvoidKinds()) do avoid[#avoid + 1] = CheckFlyoutRow(GPS.AvoidRow(kind)) end
         local rows = { CheckFlyoutRow(GPS.AutoLearnRow()), CheckFlyoutRow(GPS.DetoursRow()),
-                       CheckFlyoutRow(GPS.OtherWaysRow()), { isSeparator = true }, CheckFlyoutRow(GPS.HideDoneRow()) }
+                       CheckFlyoutRow(GPS.OtherWaysRow()), { text = L["GPS_AVOID"], submenu = avoid },
+                       { isSeparator = true }, CheckFlyoutRow(GPS.HideDoneRow()) }
         if f and f.isPopout then rows[#rows + 1] = CheckFlyoutRow(GPS.NextOnlyRow()) end
         return rows
     end }
@@ -6136,13 +6165,7 @@ do
     end
 
     -- Danger needs the creature catalog, roads and jumps the walking grid.
-    function OptionsPage.AvoidKinds()
-        local kinds = { "taxi", "boat", "zeppelin", "portal", "teleport" }
-        if ns.NPC_DATA and ns.NPC_DATA.danger then kinds[#kinds + 1] = "danger" end
-        if ns.GPSNav and ns.GPSNav.HasRoads and ns.GPSNav.HasRoads(0) then kinds[#kinds + 1] = "offroad" end
-        if ns.GPSNav and ns.GPSNav.DropHeights and ns.GPSNav.DropHeights(0) then kinds[#kinds + 1] = "jumps" end
-        return kinds
-    end
+    OptionsPage.AvoidKinds = GPS.AvoidKinds
 
     -- The page's settings as data: its controls and the search bar's rows.
     -- label is the page's own text; name the bar's, its heading in front.
@@ -6269,19 +6292,9 @@ do
                 if d then d.gpsHideDone = on or nil end
                 Refresh()
             end)
-        local ownTip = { danger = true, offroad = true, jumps = true }
-        for _, kind in ipairs(OptionsPage.AvoidKinds()) do
-            local label = L["GPS_AVOID_" .. kind:upper()]
-            Check("avoid_" .. kind, label, ownTip[kind] and L["GPS_AVOID_" .. kind:upper() .. "_TT"] or L["GPS_AVOID_TT"],
-                function() local d = DB() return d and d.gpsAvoid and d.gpsAvoid[kind] or false end,
-                function(on)
-                    local d = DB()
-                    if not d then return end
-                    d.gpsAvoid = d.gpsAvoid or {}
-                    d.gpsAvoid[kind] = on or nil
-                    local route = Route()
-                    if route and not route.arrived then Reroute(route) end
-                end, Under(L["GPS_AVOID"], label))
+        for _, kind in ipairs(GPS.AvoidKinds()) do
+            local d = GPS.AvoidRow(kind)
+            Check("avoid_" .. kind, d.label, d.tooltip, d.get, d.set, Under(L["GPS_AVOID"], d.label))
         end
         return rows
     end

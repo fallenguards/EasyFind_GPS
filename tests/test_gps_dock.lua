@@ -248,7 +248,9 @@ function tests.planningAndBorderAreFlyoutSwitches()
     local db = {}
     local GPS = { AutoLearnRow = check("learn", "GPS_AUTO_LEARN"), DetoursRow = check("detours", "GPS_SHOW_DETOURS"),
         OtherWaysRow = check("ways", "GPS_SHOW_OTHER_WAYS"), HideDoneRow = check("done", "GPS_HIDE_DONE"),
-        NextOnlyRow = check("next", "GPS_SIZE_NEXT_ONLY") }
+        NextOnlyRow = check("next", "GPS_SIZE_NEXT_ONLY"),
+        AvoidKinds = function() return { "taxi", "boat" } end,
+        AvoidRow = function(kind) return check("avoid_" .. kind, "GPS_AVOID_" .. kind:upper())() end }
     local palette = { chrome = nil }
     local env = setmetatable({ GPS = GPS, L = setmetatable({}, { __index = function(_, k) return k end }),
         PopoutStyle = function() return "easyfind" end, DB = function() return db end, HideMenus = function() end,
@@ -257,19 +259,27 @@ function tests.planningAndBorderAreFlyoutSwitches()
     local planning = GPS.PlanningMenu({ docked = true })
     H.assertEq(planning.kind, "submenu")
     local rows = planning.rows()
-    H.assertEq(#rows, 5, "the three planning switches, a line, hide completed steps")
+    H.assertEq(#rows, 6, "the three planning switches, Avoid, a line, hide completed steps")
     H.assertEq(rows[1].text, "GPS_AUTO_LEARN")
     H.assertTrue(rows[1].keepOpen and rows[1].icon ~= nil, "on: ticked, and a click keeps the flyout open")
     H.assertNil(rows[2].icon, "off: no tick")
     rows[2].onClick()
     H.assertTrue(on.detours, "the click flips it")
     H.assertTrue(planning.rows()[2].icon ~= nil, "listed anew, it is ticked")
-    H.assertTrue(rows[4].isSeparator, "a line before the step-list switches")
-    H.assertEq(rows[5].text, "GPS_HIDE_DONE")
+    -- Avoid: a flyout of its own inside planning, the settings page's switches.
+    H.assertEq(rows[4].text, "GPS_AVOID")
+    local avoid = rows[4].submenu
+    H.assertEq(#avoid, 2, "one switch per way of travel")
+    H.assertEq(avoid[2].text, "GPS_AVOID_BOAT")
+    H.assertTrue(avoid[2].keepOpen, "a click keeps it open")
+    avoid[2].onClick()
+    H.assertTrue(on.avoid_boat, "the click flips it")
+    H.assertTrue(rows[5].isSeparator, "a line before the step-list switches")
+    H.assertEq(rows[6].text, "GPS_HIDE_DONE")
     local window = GPS.PlanningMenu({ isPopout = true }).rows()
-    H.assertEq(#window, 6)
-    H.assertEq(window[6].text, "GPS_SIZE_NEXT_ONLY", "the window alone can show the next step by itself")
-    window[6].onClick()
+    H.assertEq(#window, 7)
+    H.assertEq(window[7].text, "GPS_SIZE_NEXT_ONLY", "the window alone can show the next step by itself")
+    window[7].onClick()
     H.assertTrue(on.next, "the click flips it")
     local border = { label = "GPS_SIZE_BORDER", get = function() return true end, set = function() end }
     local style = GPS.StyleMenu(border).rows()
