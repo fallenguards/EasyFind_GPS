@@ -9,6 +9,7 @@ if not ns or select(2, ...).tooOld then return end
 
 local Nav = {}
 ns.GPSNav = Nav
+local Floors = ns.GPSFloors   -- stacked city floors (Floors.lua), nil without them
 
 local sbyte, schar, mfloor, msqrt, mhuge, mabs = string.byte, string.char, math.floor, math.sqrt, math.huge, math.abs
 local mmax, mmin = math.max, math.min
@@ -469,15 +470,18 @@ function Nav.CostOverTime() return offRoad end
 -- over twelve trips on both continents).
 local PULLED = 0.955
 
--- The floor under (x, y): indoors an indoor one, else one outdoors, then
--- ground over water (one stands on the ground beside a swim), else the
--- highest; off the grid the nearest within SNAP_CELLS (or snap).
+-- The floor under (x, y): where a city's floors stack, the one Floors
+-- wants (the player's named one, a spawn's height); else indoors an
+-- indoor one, else one outdoors, then ground over water (one stands on the
+-- ground beside a swim), else the highest; off the grid the nearest
+-- within SNAP_CELLS (or snap).
 local function Locate(w, x, y, indoors, snap)
     local key, sx, sy = TileOf(x, y)
     local t = Tile(w, key)
     if not t then return nil end
     local N, cell = w.N, w.cell
     local r0, c0 = mfloor((x - sx) / cell), mfloor((y - sy) / cell)
+    local want = Floors and Floors.Want(w.ci, x, y)
     for ring = 0, snap or SNAP_CELLS do
         local best, bestScore
         for r = r0 - ring, r0 + ring do
@@ -490,6 +494,7 @@ local function Locate(w, x, y, indoors, snap)
                         local score = ((indoors and inside) or (not indoors and not inside)) and 100 or 0
                         if sbyte(t.fb, g) % 2 == 0 then score = score + 50 end
                         score = score + (g - first) - ring * 1000
+                        if want then score = score + Floors.Score(w.ci, key, cc, g - first, want) end
                         if not bestScore or score > bestScore then best, bestScore = g, score end
                     end
                 end
@@ -968,7 +973,9 @@ end
 local function End(w, x, y, indoors, rev)
     local data = w.data
     local k = mfloor(x) .. ":" .. mfloor(y)
-    local s = not indoors and ((rev and data.spotsIn and data.spotsIn[k]) or (data.spots and data.spots[k]))
+    -- A baked spot holds the floor picked without Floors' want.
+    local s = not indoors and not (Floors and Floors.Want(w.ci, x, y))
+        and ((rev and data.spotsIn and data.spotsIn[k]) or (data.spots and data.spots[k]))
     if s then
         local u = Reader(Unpack(s))
         local key, g = u(), u()
@@ -1011,6 +1018,9 @@ local function NearEnd(w, x, y, r, fromKey, rev)
         end
     end
     local out, outT, floors, floorsT
+    -- Where floors stack, only those at the level wanted (not the ring
+    -- over an auction house).
+    local want = Floors and Floors.Want(w.ci, x, y)
     for _, cx in ipairs({ x - r, x + r }) do
         for _, cy in ipairs({ y - r, y + r }) do
             local key, sx, sy = TileOf(cx, cy)
@@ -1019,10 +1029,11 @@ local function NearEnd(w, x, y, r, fromKey, rev)
             for row = mmax(0, mfloor((x - r - sx) / cell)), mmin(N - 1, mfloor((x + r - sx) / cell)) do
                 for col = mmax(0, mfloor((y - r - sy) / cell)), mmin(N - 1, mfloor((y + r - sy) / cell)) do
                     local cc = row * N + col
-                    for g = t and U16(t.cf, cc + 1) or 1, t and U16(t.cf, cc + 2) - 1 or 0 do
+                    local first = t and U16(t.cf, cc + 1) or 1
+                    for g = first, t and U16(t.cf, cc + 2) - 1 or 0 do
                         local gx, gy = FloorXY(w, t, g)
                         local d = msqrt((gx - x) ^ 2 + (gy - y) ^ 2)
-                        if d <= r then
+                        if d <= r and (not want or Floors.OnLevel(w.ci, key, cc, g - first, want)) then
                             seeds = seeds or {}
                             seeds[g] = d
                         end
@@ -1370,6 +1381,7 @@ local function Kept(w, ax, ay, bx, by, opts)
         .. ((opts and opts.limit) and ("L" .. mfloor(opts.limit)) or "")
         .. ((opts and opts.near) and ("N" .. opts.near) or "")
         .. ((opts and opts.reverse) and "R" or "")
+    if Floors then key = key .. Floors.Tag(w.ci, ax, ay) .. "|" .. Floors.Tag(w.ci, bx, by) end
     local walk = w.walks[key]
     w.used = GetTime()
     if walk == nil then

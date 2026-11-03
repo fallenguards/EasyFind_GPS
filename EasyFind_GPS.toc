@@ -34,7 +34,10 @@ Walk_Kalimdor.lua [AllowLoadGameType camelot]
 Walk_ZephrasIsle.lua [AllowLoadGameType camelot]
 Walk_EasternKingdoms_Era.lua [AllowLoadGameType vanilla]
 Walk_Kalimdor_Era.lua [AllowLoadGameType vanilla]
+Floors_Era.lua [AllowLoadGameType vanilla]
+Floors_Forever.lua [AllowLoadGameType camelot]
 Walk_EasternKingdoms_TBC.lua [AllowLoadGameType tbc]
+Floors_TBC.lua [AllowLoadGameType tbc]
 Walk_Kalimdor_TBC.lua [AllowLoadGameType tbc]
 Walk_Outland_TBC.lua [AllowLoadGameType tbc]
 Walk_EasternKingdoms_Mists.lua [AllowLoadGameType mists]
@@ -86,6 +89,7 @@ Npcs_Retail_ptBR.lua [AllowLoadGameType standard] [AllowLoadTextLocale ptBR]
 Npcs_Retail_ruRU.lua [AllowLoadGameType standard] [AllowLoadTextLocale ruRU]
 Npcs_Retail_zhCN.lua [AllowLoadGameType standard] [AllowLoadTextLocale zhCN]
 Npcs_Retail_zhTW.lua [AllowLoadGameType standard] [AllowLoadTextLocale zhTW]
+Floors.lua
 Nav.lua
 Jumps.lua
 Route.lua

@@ -41,7 +41,7 @@ local function CodeFiles()
     local out = {}
     for _, file in ipairs(H.TocFiles("EasyFind_GPS.toc")) do
         if not (file:find("^Locales/") or file:find("^Data") or file:find("^Walk_") or file:find("^Npcs_")
-            or file == "Buildings.lua" or file == "Guard.lua") then
+            or file:find("^Floors_") or file == "Buildings.lua" or file == "Guard.lua") then
             out[#out + 1] = file
         end
     end

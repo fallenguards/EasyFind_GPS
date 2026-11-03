@@ -723,6 +723,19 @@ local function EdgeDestName(e, reverse)
     return MapName(p and p.m)
 end
 
+-- A lift's step by the heights of the spawns at its two doors (Floors):
+-- down or up, else nil (the step names where it goes).
+local function LiftKey(a, b)
+    local F = ns.GPSFloors
+    local wa = F and a and a.wx and F.Want(a.ci, a.wx, a.wy, true)
+    local za = wa and wa.z
+    local wb = za and b and b.wx and F.Want(b.ci, b.wx, b.wy, true)
+    local zb = wb and wb.z
+    if not zb or za == zb then return nil end
+    return zb < za and "GPS_STEP_ELEVATOR_DOWN" or "GPS_STEP_ELEVATOR_UP"
+end
+Route._LiftKey = LiftKey   -- tests
+
 -- Floor of a crossing's spot ("upper"/"lower"), recorded by hand:
 -- the client zeroes the player's height.
 local function FloorHint(_, p)
@@ -915,6 +928,7 @@ local function Steps(g, path, goalName, goalStep)
             local building = (e.kind == "enter" or e.kind == "leave") and e.edge.area or nil
             local key = e.kind == "seam" and GoKey(g) or (building and e.edge.textKey) or KIND_KEY[e.kind] or "GPS_STEP_PORTAL_FMT"
             local from = g.nodes[i > 1 and path[i - 1].node or g.start]
+            if e.kind == "elevator" then key = LiftKey(from.p, node.p) or key end
             local floor = FloorHint(g, from.p)
             local wait = e.liveWait or e.edge.wait
             local dest = building and (AreaName(building) or e.edge.n) or EdgeDestName(e.edge, e.reverse)

@@ -1249,6 +1249,8 @@ local function Tick()
         end
         local dx, dy = px - sx, py - sy
         if (dx * dx + dy * dy) > radius * radius then return end
+        -- Over the spot on another floor (the ring above an auction house).
+        if ns.GPSFloors and not ns.GPSFloors.SameLevel(ci, sx, sy) then return end
     end
     if route.steps[(route.active or 1) + 1] then
         TrackStep((route.active or 1) + 1)
