@@ -235,3 +235,7 @@ L["GPS_DANGER_RED_TT"]                  = "L'itinéraire devient rouge sur la ca
 L["GPS_MENU_DIRECTIONS"]               = "Itinéraire"
 L["GPS_QUEST_LEVEL_FMT"]               = "Niveau %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Nécessite EasyFind %s ou plus récent : mettez EasyFind à jour."
+L["GPS_MINIMAP_WIDTH"]                  = "Ligne de la minicarte"
+L["GPS_MINIMAP_WIDTH_TT"]               = "Épaisseur du tracé de l'itinéraire sur la minicarte."
+L["GPS_MINIMAP_DOT"]                    = "Point de la minicarte"
+L["GPS_MINIMAP_DOT_TT"]                 = "Le point sur la minicarte où se termine l'étape en cours."

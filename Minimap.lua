@@ -19,8 +19,10 @@ local ALPHA = 0.9
 -- The step's spot: a disc in the step's color on its dark rim, where the
 -- game sets no waypoint (Era, TBC) and so shows no blip of its own there.
 local TEX_DISC = "Interface\\AddOns\\EasyFind\\textures\\FilterButtonCircle"
-local MARK, CASING, CASING_COLOR = 12, 2, { 0.06, 0.05, 0.08 }
+local CASING, CASING_COLOR = 2, { 0.06, 0.05, 0.08 }
+local MARKS = { small = 6, normal = 8, large = 12 }   -- the disc by the GPS setting
 local OWN_MARK = not (C_Map and C_Map.SetUserWaypoint)
+Mini.OWN_MARK = OWN_MARK
 
 local frame, lines, driver, mark
 local since = 0
@@ -32,6 +34,17 @@ local view = {}                -- this drawing: player, axes, scale, turn, rim, 
 local function DB() return EasyFind and EasyFind.db end
 local function Route() local g = ns.GPS return g and g.CurrentRoute and g.CurrentRoute() end
 local function Enabled() local db = DB() return not (db and db.gpsMinimap == false) end
+
+-- The line's span and the disc's size, each by its own GPS setting.
+function Mini.Span()
+    local db, spans = DB(), ns.GPSPreview.LINE_SPANS
+    return (spans[db and db.gpsMinimapWidth] or spans.normal) * SCALE
+end
+
+function Mini.MarkSize()
+    local db = DB()
+    return MARKS[db and db.gpsMinimapDot] or MARKS.normal
+end
 
 -- The part of segment a-b within r of the middle, as t0, t1; or nil.
 local function InCircle(ax, ay, bx, by, r)
@@ -214,7 +227,7 @@ local function Draw()
         and ((px - drawn.px) ^ 2 + (py - drawn.py) ^ 2) * k * k < MOVE_PX * MOVE_PX
         and mabs(turn - drawn.turn) < TURN then return end
     drawn.at, drawn.px, drawn.py, drawn.turn, drawn.radius, drawn.half, drawn.version = true, px, py, turn, radius, half, version
-    local span = ns.GPSPreview.Span() * SCALE
+    local span = Mini.Span()
     view.px, view.py, view.axes, view.k, view.span = px, py, axes, k, span
     view.cos, view.sin = mcos(-turn), msin(-turn)
     view.square = GetMinimapShape and GetMinimapShape() == "SQUARE"
@@ -291,29 +304,37 @@ local function Build()
     Mini._lines = lines   -- tests
     if not OWN_MARK then return end
     mark = CreateFrame("Frame", nil, frame)
-    mark:SetWidth(MARK + 2 * CASING)
-    mark:SetHeight(MARK + 2 * CASING)
     local casing = mark:CreateTexture(nil, "OVERLAY", nil, 1)
     casing:SetTexture(TEX_DISC)
     casing:SetAllPoints(mark)
     casing:SetVertexColor(CASING_COLOR[1], CASING_COLOR[2], CASING_COLOR[3], 0.9)
     mark.disc = mark:CreateTexture(nil, "OVERLAY", nil, 2)
     mark.disc:SetTexture(TEX_DISC)
-    mark.disc:SetWidth(MARK)
-    mark.disc:SetHeight(MARK)
     mark.disc:SetPoint("CENTER", mark, "CENTER", 0, 0)
     mark:Hide()
     Mini._mark = mark   -- tests
 end
 
--- A route change or the option flipped: drawn only while a route is followed.
+local function SizeMark()
+    if not mark then return end
+    local size = Mini.MarkSize()
+    mark:SetWidth(size + 2 * CASING)
+    mark:SetHeight(size + 2 * CASING)
+    mark.disc:SetWidth(size)
+    mark.disc:SetHeight(size)
+end
+
+-- A route change, the option flipped or a size picked: drawn only while a
+-- route is followed.
 function Mini:Refresh()
     version = version + 1
+    drawn.at = nil
     local route = Route()
     local on = Enabled() and Minimap ~= nil and ns.GPSPreview ~= nil and route ~= nil and not route.arrived
         and not route.untracked
     if on then
         if not frame then Build() end
+        SizeMark()
         since = 0
         driver:SetScript("OnUpdate", Tick)
         if not (C_Minimap and C_Minimap.GetViewRadius) then driver:RegisterEvent("MINIMAP_UPDATE_ZOOM") end

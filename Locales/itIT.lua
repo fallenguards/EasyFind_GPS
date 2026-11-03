@@ -235,3 +235,7 @@ L["GPS_DANGER_RED_TT"]                  = "Il percorso diventa rosso sulla mappa
 L["GPS_MENU_DIRECTIONS"]               = "Indicazioni"
 L["GPS_QUEST_LEVEL_FMT"]               = "Livello %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Richiede EasyFind %s o successivo: aggiorna EasyFind."
+L["GPS_MINIMAP_WIDTH"]                  = "Linea della minimappa"
+L["GPS_MINIMAP_WIDTH_TT"]               = "Spessore con cui il percorso è disegnato sulla minimappa."
+L["GPS_MINIMAP_DOT"]                    = "Punto della minimappa"
+L["GPS_MINIMAP_DOT_TT"]                 = "Il punto sulla minimappa dove finisce il passo in corso."

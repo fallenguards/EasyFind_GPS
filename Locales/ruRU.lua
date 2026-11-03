@@ -235,3 +235,7 @@ L["GPS_DANGER_RED_TT"]                  = "Маршрут становится �
 L["GPS_MENU_DIRECTIONS"]               = "Маршрут"
 L["GPS_QUEST_LEVEL_FMT"]               = "Уровень %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Нужен EasyFind %s или новее: обновите EasyFind."
+L["GPS_MINIMAP_WIDTH"]                  = "Линия на миникарте"
+L["GPS_MINIMAP_WIDTH_TT"]               = "Толщина линии маршрута на миникарте."
+L["GPS_MINIMAP_DOT"]                    = "Точка на миникарте"
+L["GPS_MINIMAP_DOT_TT"]                 = "Точка на миникарте, где заканчивается текущий шаг."

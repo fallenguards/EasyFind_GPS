@@ -236,3 +236,7 @@ L["GPS_DANGER_RED_TT"]                  = "The route turns red on the map and th
 L["GPS_MENU_DIRECTIONS"]               = "Directions"
 L["GPS_QUEST_LEVEL_FMT"]               = "Level %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Needs EasyFind %s or later: update EasyFind."
+L["GPS_MINIMAP_WIDTH"]                  = "Minimap line"
+L["GPS_MINIMAP_WIDTH_TT"]               = "How thick the route is drawn on the minimap."
+L["GPS_MINIMAP_DOT"]                    = "Minimap dot"
+L["GPS_MINIMAP_DOT_TT"]                 = "The dot on the minimap where the step you are on ends."

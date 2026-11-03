@@ -235,3 +235,7 @@ L["GPS_DANGER_RED_TT"]                  = "경로가 그런 지역을 지나는 
 L["GPS_MENU_DIRECTIONS"]               = "길 안내"
 L["GPS_QUEST_LEVEL_FMT"]               = "%d 레벨"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "EasyFind %s 이상이 필요합니다: EasyFind를 업데이트하세요."
+L["GPS_MINIMAP_WIDTH"]                  = "미니맵 선"
+L["GPS_MINIMAP_WIDTH_TT"]               = "미니맵에 그려지는 경로의 두께입니다."
+L["GPS_MINIMAP_DOT"]                    = "미니맵 점"
+L["GPS_MINIMAP_DOT_TT"]                 = "지금 진행 중인 단계가 끝나는 곳을 미니맵에 표시하는 점입니다."

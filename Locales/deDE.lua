@@ -235,3 +235,7 @@ L["GPS_DANGER_RED_TT"]                  = "Die Route wird auf der Karte und der 
 L["GPS_MENU_DIRECTIONS"]               = "Wegbeschreibung"
 L["GPS_QUEST_LEVEL_FMT"]               = "Stufe %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Benötigt EasyFind %s oder neuer: Bitte EasyFind aktualisieren."
+L["GPS_MINIMAP_WIDTH"]                  = "Minikartenlinie"
+L["GPS_MINIMAP_WIDTH_TT"]               = "Wie dick die Route auf der Minikarte gezeichnet wird."
+L["GPS_MINIMAP_DOT"]                    = "Minikartenpunkt"
+L["GPS_MINIMAP_DOT_TT"]                 = "Der Punkt auf der Minikarte, wo der aktuelle Schritt endet."

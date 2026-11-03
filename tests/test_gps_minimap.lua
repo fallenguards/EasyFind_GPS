@@ -82,7 +82,7 @@ local function fresh(deadly, west, sealed, zoom, waypoints, settings)
     }
     ns.GPSPreview = {
         NewLines = function() return lines end,
-        Span = function() return 10 end,
+        Span = function() return 10 end, LINE_SPANS = { thin = 7, normal = 10, thick = 14 },
         PASSED_COLOR = PASSED, PASSED_ALPHA = 0.5, LineColor = function() return BLUE end,
         DANGER_COLOR = RED,
     }
@@ -208,6 +208,22 @@ function tests.noUserWaypoints_theStepsSpotWearsADisc()
     ns.GPS.PlayerWorldPos = function() return 1, 298, 0 end
     Mini._Draw()
     H.assertFalse(mark:IsShown(), "under the player's arrow: hidden")
+end
+
+-- The disc and the line by their own GPS settings: the disc 8 px unless
+-- picked (12 before, 2026-11-03), the line 0.7 of the map's spans.
+function tests.theDiscAndTheLineFollowTheirSettings()
+    for _, s in ipairs({ { nil, 8 }, { "small", 6 }, { "large", 12 } }) do
+        local _, _, _, Mini = fresh(nil, nil, nil, { level = 1, indoors = false }, nil, { gpsMinimapDot = s[1] })
+        local w
+        Mini._mark.disc.SetWidth = function(_, v) w = v end
+        Mini:Refresh()
+        H.assertEq(w, s[2], tostring(s[1]))
+    end
+    local _, _, _, Mini = fresh(nil, nil, nil, nil, nil, { gpsMinimapWidth = "thick" })
+    H.assertTrue(near(Mini.Span(), 9.8), "thick: 14 at 0.7")
+    _, _, _, Mini = fresh()
+    H.assertTrue(near(Mini.Span(), 7), "normal: the map's 10 at 0.7")
 end
 
 function tests.withUserWaypoints_theGamesBlipIsEnough()

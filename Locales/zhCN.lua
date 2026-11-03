@@ -235,3 +235,7 @@ L["GPS_DANGER_RED_TT"]                  = "路线经过这类地区时，在地�
 L["GPS_MENU_DIRECTIONS"]               = "导航"
 L["GPS_QUEST_LEVEL_FMT"]               = "等级 %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "需要 EasyFind %s 或更高版本：请更新 EasyFind。"
+L["GPS_MINIMAP_WIDTH"]                  = "小地图线条"
+L["GPS_MINIMAP_WIDTH_TT"]               = "路线在小地图上绘制的粗细。"
+L["GPS_MINIMAP_DOT"]                    = "小地图圆点"
+L["GPS_MINIMAP_DOT_TT"]                 = "小地图上标出当前步骤终点的圆点。"

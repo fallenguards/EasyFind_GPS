@@ -6221,6 +6221,29 @@ do
                 local db = DB()
                 if db then db.gpsLineWidth = (v ~= "normal") and v or nil end
             end)
+        Choice("miniLine", L["GPS_MINIMAP_WIDTH"], L["GPS_MINIMAP_WIDTH_TT"], {
+                { label = L["GPS_LINE_THIN"], value = "thin" }, { label = L["GPS_SIZE_NORMAL"], value = "normal" },
+                { label = L["GPS_LINE_THICK"], value = "thick" },
+            }, "normal",
+            function() local db = DB() return db and db.gpsMinimapWidth or "normal" end,
+            function(v)
+                local db = DB()
+                if db then db.gpsMinimapWidth = (v ~= "normal") and v or nil end
+                Refresh()
+            end)
+        -- The game's own waypoint marks the step elsewhere.
+        if ns.GPSMinimap and ns.GPSMinimap.OWN_MARK then
+            Choice("miniDot", L["GPS_MINIMAP_DOT"], L["GPS_MINIMAP_DOT_TT"], {
+                    { label = L["OPT_FONT_SMALL"], value = "small" }, { label = L["GPS_SIZE_NORMAL"], value = "normal" },
+                    { label = L["OPT_FONT_LARGE"], value = "large" },
+                }, "normal",
+                function() local db = DB() return db and db.gpsMinimapDot or "normal" end,
+                function(v)
+                    local db = DB()
+                    if db then db.gpsMinimapDot = (v ~= "normal") and v or nil end
+                    Refresh()
+                end)
+        end
         Choice("click", L["GPS_MAP_CLICK"], L["GPS_MAP_CLICK_TT"], {
                 { label = L["CTX_GPS"], value = "gps" }, { label = L["GPS_MAP_CLICK_PIN"], value = "pin" },
             }, "gps",
@@ -6383,7 +6406,9 @@ do
             prev = control
         end
         Place("beacon", -8, gap)
-        for _, key in ipairs({ "line", "click", "arrowText", "textSize" }) do Place(key, 0, -4) end
+        for _, key in ipairs({ "line", "miniLine", "miniDot", "click", "arrowText", "textSize" }) do
+            if rows[key] then Place(key, 0, -4) end
+        end
         Place("plateBorder", 0, -6)
         for _, key in ipairs({ "gpsArrow", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
                                "gpsDangerRed", "gpsRowButton", "hideDone" }) do
