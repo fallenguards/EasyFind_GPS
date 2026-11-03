@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.2.0] - 2026-11-03
+
+### Added
+- **Other extensions' words**: words another extension gives a creature (a HandyNotes plugin's "decor") find it in the search, and beside a zone or town they keep to it: "decor durotar", "org decor" (with EasyFind 4.3.0)
+
+---
+
 ## [1.1.0] - 2026-11-02
 
 ### Added
