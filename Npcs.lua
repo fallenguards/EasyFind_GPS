@@ -85,6 +85,8 @@ local N = {
     -- The query's best item, and per creature whether only its stock matched.
     bestItem = nil, byItem = {},
     ROLE_GROUPS = { "quest", "vendor", "trainer", "flight", "services", "other" },
+    -- Reads the words extensions give creatures (EasyFind API MINOR 7).
+    decoratorWords = true,
 }
 ns.GPSNpcs = N
 
@@ -603,13 +605,39 @@ function N.NamedOn(name, maps)
     return nil
 end
 
-function N.HasID(npcID)
-    if not Load() then return false end
+-- The catalog index of a creature id, or nil.
+local function IndexOfID(npcID)
     if not byID then
         byID = {}
-        for i = 1, N.n do byID[Rec.id(i)] = true end
+        for i = 1, N.n do byID[Rec.id(i)] = i end
     end
-    return byID[npcID] == true
+    return byID[npcID]
+end
+
+function N.HasID(npcID)
+    if not Load() then return false end
+    return IndexOfID(npcID) ~= nil
+end
+
+-- The words extensions give creatures (EasyFind API MINOR 7 decorator
+-- words: "decor"): the ids holding one with word in it, and whether
+-- creature i holds one.
+local wordedIDs = {}
+local function WordedIDs(word)
+    local E = ns.Extensions
+    if not (E and E.NpcsWithWord) then return nil end
+    wipe(wordedIDs)
+    E.NpcsWithWord(word, wordedIDs)
+    return next(wordedIDs) and wordedIDs or nil
+end
+
+local function Worded(i, word)
+    local E = ns.Extensions
+    local words = E and E.NpcWords and E.NpcWords(Rec.id(i))
+    for k = 1, words and #words or 0 do
+        if sfind(words[k], word, 1, true) then return true end
+    end
+    return false
 end
 
 -- Whether creature i has a spot on the set's maps, within r2 of the
@@ -794,7 +822,7 @@ local function Score(i)
             local p, blob, lines = hitLow[w][i], low, at
             if not p and enLow then p, blob, lines = hitEn[w][i], enLow, enAt end
             if not p and not (tlow and sfind(tlow, word, 1, true)) and not (tAlt and sfind(tAlt, word, 1, true))
-                and band(roles, wordBits[w]) == 0 then
+                and band(roles, wordBits[w]) == 0 and not Worded(i, word) then
                 return 0
             end
             if first then
@@ -1207,7 +1235,10 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
         end
         wordBits[w] = bits
         if bits ~= 0 then service = true else allService = false end
+        -- A word an extension gives creatures ("decor") names a kind of
+        -- creature, as a title word does, never a place.
         wordRole[w] = bits ~= 0 or (not ZONE_ABBREVIATIONS[words[w]] and TitleWord(words[w]))
+            or (#words[w] >= MIN_QUERY and WordedIDs(words[w]) ~= nil)
     end
     N.allService = service and allService
     local town, placed = Places()
@@ -1267,6 +1298,13 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
     end
     local bits = wordBits[lw]
     if anyTitle or bits ~= 0 then MarkTitlesAndRoles(titleHit, bits) end
+    local worded = WordedIDs(longest)
+    if worded then
+        for npcID in pairs(worded) do
+            local i = IndexOfID(npcID)
+            if i then Mark(i) end
+        end
+    end
     if goods then
         local vendors = N.vendors
         for o = 1, #vendors / 3 do Mark(At(vendors, o)) end

@@ -603,7 +603,7 @@ local function places()
         local out = {}
         append(out, {}, query, onlyMap, nearMap)
         return out
-    end
+    end, ns
 end
 
 function tests.servicesAloneStayOnThePlayersMap()
@@ -627,6 +627,34 @@ function tests.aZoneWordNarrowsToIt()
     local grunt = find("org grunt")
     H.assertEq(grunt[1].name, "Orgrimmar Grunt", "beside a plain name word it is a name")
     H.assertEq(grunt[1].mapID, 1429)
+end
+
+-- An extension's words for creatures (EasyFind API MINOR 7 decorator
+-- words): "decor" finds the creatures given it, and beside a place word
+-- the ones there ("org decor"); a word naming a kind, never a place.
+function tests.anExtensionsWordsFindItsCreatures_inAPlaceToo()
+    local find, ns = places()
+    H.assertEq(#find("decor"), 0, "no extension: no word")
+    local given = { [1] = { "decor" }, [2] = { "decor vendor" } }
+    ns.Extensions = {
+        NpcWords = function(id) return given[id] end,
+        NpcsWithWord = function(word, into)
+            for id, words in pairs(given) do
+                for _, w in ipairs(words) do
+                    if w:find(word, 1, true) then into[id] = true end
+                end
+            end
+            return into
+        end,
+    }
+    local rows = find("decor")
+    H.assertEq(#rows, 2)
+    H.assertTrue(named(rows, "Arnold") ~= nil and named(rows, "Bea") ~= nil, "both creatures given it")
+    rows = find("org decor")
+    H.assertEq(#rows, 1, "the one in Orgrimmar")
+    H.assertEq(rows[1].name, "Bea")
+    H.assertEq(find("decor org")[1].name, "Bea", "in either order")
+    H.assertEq(#find("cor org"), 1, "a word inside a given one")
 end
 
 function tests.aTownWordNarrowsToItsInn()
