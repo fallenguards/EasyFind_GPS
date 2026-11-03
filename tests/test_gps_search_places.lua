@@ -65,6 +65,7 @@ function tests.placesForQuery_nearestOfTheKindFirstThenThePass()
 end
 
 function tests.placesForQuery_localScopeKeepsTheKindToThisZone()
+    if not H.CoreAtLeast("4.1.0") then return end
     env.EasyFind.db.mapZoneOnly = { all = true }
     WithBar({ Row("Herbalism Trainer", 1, "prof_herbalism"), Row("Herbalist", 84, "vendor") },
         function(_, maxN, _, localOnly)

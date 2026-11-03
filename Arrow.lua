@@ -10,7 +10,7 @@
 -- stands between. At a ride's boarding spot it points there; on board, and
 -- where the game gives no facing (instances), it rests. Shift-drag moves it.
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local Arrow = {}
 ns.GPSArrow = Arrow
 

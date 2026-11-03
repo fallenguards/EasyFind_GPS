@@ -56,6 +56,24 @@ local function resolvePath(modulePath)
 end
 Harness.Path = resolvePath
 
+-- The EasyFind under test is at least want: a test of EasyFind's own later
+-- behavior returns early on an older one (CI also runs the tests against
+-- the oldest release Guard.lua names).
+local coreVersion
+function Harness.CoreAtLeast(want)
+    if not coreVersion then
+        local f = io.open(EASYFIND_ROOT .. "/EasyFind.toc", "rb")
+        coreVersion = { (f and f:read("a") or ""):match("## Version:%s*(%d+)%.(%d+)%.(%d+)") }
+        if f then f:close() end
+    end
+    local w = { want:match("^(%d+)%.(%d+)%.(%d+)$") }
+    for i = 1, 3 do
+        local a, b = tonumber(coreVersion[i]) or 0, tonumber(w[i])
+        if a ~= b then return a > b end
+    end
+    return true
+end
+
 -- Every shipped .toc: the core addon and each companion.
 Harness.TOCS = {
     "EasyFind_GPS.toc",

@@ -17,7 +17,7 @@
 -- runs those at full rate while the camera moves. The column fades in at
 -- its top and out at its foot through one gradient mask.
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local WorldPin = {}
 ns.GPSWorldPin = WorldPin
 

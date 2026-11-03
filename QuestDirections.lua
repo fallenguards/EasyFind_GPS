@@ -1,5 +1,5 @@
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local GPS = ns.GPS
 if not GPS then return end
 local L, Utils = ns.L, ns.Utils

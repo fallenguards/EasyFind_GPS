@@ -5,7 +5,7 @@
 -- are unpacked and searched cell by cell.
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 
 local Nav = {}
 ns.GPSNav = Nav

@@ -3,7 +3,7 @@
 -- on the creature's spot nearest the player.
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 
 local MapSearch = ns.MapSearch
 local Search = ns.MapSearchSearch

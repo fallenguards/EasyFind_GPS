@@ -4,7 +4,7 @@
 -- its colors, nothing of what is behind, turning with the minimap when
 -- it turns. Cut at the rim and around the player's own arrow.
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local Mini = {}
 ns.GPSMinimap = Mini
 

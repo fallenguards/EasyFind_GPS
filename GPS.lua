@@ -4,7 +4,7 @@
 -- A companion: it lives in EasyFind's namespace, never its own.
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local L = ns.L
 local Utils = ns.Utils
 

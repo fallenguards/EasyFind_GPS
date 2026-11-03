@@ -7,7 +7,7 @@
 -- stays clearly faster. The arrow, the map line and the minimap line all
 -- read it, taken once a frame at most.
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local Follow = {}
 ns.GPSFollow = Follow
 

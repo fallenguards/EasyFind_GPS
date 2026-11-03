@@ -4,7 +4,7 @@
 -- (ns.GPSData.routes: its loop, and when it leaves each stop).
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 
 local Boats = {}
 ns.GPSBoats = Boats

@@ -36,3 +36,26 @@ jobs:
       - name: Run tests
         working-directory: EasyFind_GPS
         run: lua tests/Run.lua
+
+  oldest:
+    name: Tests on the oldest EasyFind
+    runs-on: ubuntu-latest
+    steps:
+      # The release Guard.lua names: GPS must still run on it.
+      - uses: actions/checkout@v4
+        with:
+          path: EasyFind_GPS
+      - name: Read the oldest EasyFind
+        id: min
+        run: echo "version=$(sed -n 's/^local MIN_EASYFIND = "\([0-9.]*\)".*/\1/p' EasyFind_GPS/Guard.lua)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: fallenguards/EasyFind
+          ref: v${{ steps.min.outputs.version }}
+          path: EasyFind
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: '5.4'
+      - name: Run tests
+        working-directory: EasyFind_GPS
+        run: lua tests/Run.lua

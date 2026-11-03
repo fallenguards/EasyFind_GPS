@@ -11,6 +11,7 @@
 local H = require("Harness")
 
 local ALLOWED = {
+    ["Guard.lua|text"] = { 2, "alert" },
     ["GPS.lua|GPS drag: "] = { 1, "error" },
     ["GPS.lua|GPS menu: "] = { 2, "error" },
     ["Apps/Guide/Highlight.lua|MSG_GUIDE_TARGET_LOCKED"] = { 1, "refusal" },

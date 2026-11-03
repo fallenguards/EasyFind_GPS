@@ -5,7 +5,7 @@
 -- ends, the rest faint, the part walked faded. The map is never turned on
 -- its own; a click on a step's number turns it to that step.
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 local Preview = {}
 ns.GPSPreview = Preview
 

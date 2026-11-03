@@ -3,7 +3,7 @@
 -- data (feather fall aura on the spell); a reagent where the client asks one.
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
-if not ns then return end
+if not ns or select(2, ...).tooOld then return end
 
 local Jumps = {}
 ns.GPSJumps = Jumps
