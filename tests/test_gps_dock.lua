@@ -170,6 +170,7 @@ function tests.everySurfaceHasTheSameMenu()
         { name = "floating", f = { floating = true, look = "game" }, style = true },
         { name = "floating Era", f = { floating = true, look = "era" }, style = true },
         { name = "window", f = { isPopout = true }, style = true, size = true },
+        { name = "the map's page", f = { mapFont = true } },
     }) do
         local has = {}
         local planning
@@ -185,6 +186,13 @@ function tests.everySurfaceHasTheSameMenu()
         H.assertEq(has.GPS_STYLE == true, s.style == true, s.name .. ": style rows")
         H.assertEq(has.GPS_SIZE_WIDTH == true, s.size == true, s.name .. ": width rows")
     end
+end
+
+-- The map's page: its menu opens the window, never closes one.
+function tests.theMapsPageMenuOpensTheWindow()
+    local rows = MenuRows()({ mapFont = true })
+    H.assertEq(rows[1].label, "GPS_POPOUT")
+    for _, d in ipairs(rows) do H.assertTrue(d.label ~= "GPS_CLOSE", "no Close on the map's page") end
 end
 
 -- The Show flyout: the map tab's kinds, then under a line the list's

@@ -3450,11 +3450,29 @@ local function Rule(frame)
     return rule
 end
 
+-- A surface's menu at the cursor: the defs given, else its whole menu.
+local function CursorMenu(f, name)
+    local anchor = CreateFrame("Frame", nil, f)
+    anchor:SetSize(1, 1)
+    return function(defs)
+        local cx, cy = GetCursorPosition()
+        local scale = UIParent:GetEffectiveScale()
+        anchor:ClearAllPoints()
+        anchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / scale, cy / scale)
+        if ns.ShowTogglePopup then ns.ShowTogglePopup(name, anchor, defs or GPS.MenuRows(f), {}) end
+    end
+end
+
 local function BuildPage(frame)
     frame.gameLook = true         -- its fields are the map's own, not the theme's
     BuildSurface(frame, { popoutButton = true, listGap = 14, onRouteChanged = FitPage })
     frame.previewOnHover = true   -- this surface sits beside the map
     frame.mapFont = true          -- its steps follow the map search's font size
+    -- Right-click: the window's menu, as on the window and the section.
+    frame.ShowMenu = CursorMenu(frame, "EasyFindGPSPageMenu")
+    frame:SetScript("OnMouseUp", function(_, button)
+        if button == "RightButton" then frame.ShowMenu() end
+    end)
     if ns.GPSTrip then ns.GPSTrip.BuildEditor(frame) end
     frame:EnableMouseWheel(true)
     frame:SetScript("OnMouseWheel", function(self, delta)
@@ -5542,6 +5560,8 @@ function GPS.MenuRows(f)
             GPS:Clear()
             GPS:CloseWindow()
         end }
+    elseif f.mapFont then
+        defs[#defs + 1] = { kind = "action", label = L["GPS_POPOUT"], onClick = function() GPS:OpenWindow() end }
     else
         defs[#defs + 1] = { kind = "action", label = L["GPS_CLOSE"], onClick = function() GPS:TogglePopout(false) end }
     end
@@ -5585,8 +5605,8 @@ function GPS.MenuRows(f)
     defs[#defs + 1] = GPS.SnapRow()
     defs[#defs + 1] = GPS.LaunchRow()
     defs[#defs + 1] = GPS.PlanningMenu(f)
-    -- Snapped in, the section has one look.
-    if f.docked then return defs end
+    -- Snapped in, the section has one look; the map's page wears the map's.
+    if f.docked or f.mapFont then return defs end
     defs[#defs + 1] = GPS.StyleMenu(f.isPopout and { label = L["GPS_SIZE_BORDER"] } or nil)
     if not f.isPopout then return defs end
     local width, height = PopoutSize()
@@ -5825,20 +5845,11 @@ local function BuildPopout()
 
     -- Settings on a right-click anywhere on the window, the menu at the cursor;
     -- no cog in the header.
-    local menuAnchor = CreateFrame("Frame", nil, f)
-    menuAnchor:SetSize(1, 1)
-    local function ShowWindowMenu(defs)
-        local cx, cy = GetCursorPosition()
-        local scale = UIParent:GetEffectiveScale()
-        menuAnchor:ClearAllPoints()
-        menuAnchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / scale, cy / scale)
-        if ns.ShowTogglePopup then ns.ShowTogglePopup("EasyFindGPSWindowMenu", menuAnchor, defs or GPS.MenuRows(f), {}) end
-    end
+    local ShowWindowMenu = CursorMenu(f, "EasyFindGPSWindowMenu")
     f:SetScript("OnMouseUp", function(self, button)
         if button == "RightButton" then ShowWindowMenu() end
     end)
     f.ShowMenu = ShowWindowMenu
-    f.menuAnchor = menuAnchor
     -- The settings cog over the trip's fields: the window's menu, as a right-click.
     f.headCog = GPS.SettingsCog(f, ShowWindowMenu)
     if f.headCog then
