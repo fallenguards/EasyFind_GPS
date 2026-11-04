@@ -711,6 +711,33 @@ function tests.aNameTypedWithoutItsSpaceIsFound()
     H.assertEq(#find(append, "hidemys"), 1, "joined inside the name too")
 end
 
+-- A search cancelled while the joined names' line starts were being made
+-- (a keystroke landing mid-way) left the names without their starts, and
+-- every later joined word errored in LineAt (2026-11-04).
+function tests.aJoinedSearchCancelledMidway_leavesNothingHalfMade()
+    local list, names = {}, {}
+    for k = 1, 2100 do
+        list[k] = { k, 0, 7 + 16, 0, 0, { 1429, xy(0.5, 0.5), 1 } }
+        names[k] = k == 2100 and "Rot Hide Mystic" or ("Gnoll " .. k)
+    end
+    local realNewNs, cancel = H.newNs, false
+    H.newNs = function(env)
+        local ns = realNewNs(env)
+        ns.Utils.SliceCheckpoint = function()
+            if cancel and debug.getinfo(2, "n").name == "LineStarts" then error("cancelled") end
+        end
+        return ns
+    end
+    local append = fresh(nil, list, table.concat(names, "\n"))
+    H.newNs = realNewNs
+    cancel = true
+    H.assertFalse((pcall(find, append, "rothide")), "the first search stops inside the joined starts")
+    cancel = false
+    local ok, rows = pcall(find, append, "rothide")
+    H.assertTrue(ok, "the next one runs: " .. tostring(rows))
+    H.assertEq(rows[1].name, "Rot Hide Mystic")
+end
+
 -- A trainer titled after a class is a class trainer, whatever its name;
 -- a cooking trainer is not.
 function tests.classTrainersByTheirTitle()

@@ -732,15 +732,19 @@ local function LineHits(blob, at, n, word, into)
 end
 
 -- The names with their spaces out (rothide for Rot Hide), with their line
--- starts: made on the first word typed joined, kept with the catalog.
+-- starts: made on the first word typed joined, kept with the catalog. Kept
+-- only once whole: LineStarts yields, and a search cancelled there left the
+-- names without their starts for every later one.
 local function Joined()
-    if N.sqLow == nil then
-        N.sqLow = (N.low:gsub(" ", ""))
-        N.sqAt = LineStarts(N.sqLow)
+    if N.sqAt == nil then
+        local sqLow = (N.low:gsub(" ", ""))
+        local sqAt = LineStarts(sqLow)
+        local sqEnLow, sqEnAt
         if N.enLow then
-            N.sqEnLow = (N.enLow:gsub(" ", ""))
-            N.sqEnAt = LineStarts(N.sqEnLow)
+            sqEnLow = (N.enLow:gsub(" ", ""))
+            sqEnAt = LineStarts(sqEnLow)
         end
+        N.sqLow, N.sqAt, N.sqEnLow, N.sqEnAt = sqLow, sqAt, sqEnLow, sqEnAt
     end
     return N.sqLow, N.sqAt, N.sqEnLow, N.sqEnAt
 end
