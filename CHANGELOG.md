@@ -4,6 +4,23 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.3.0] - 2026-11-04
+
+### Added
+- **Avoid in the route menu**: the route planning menu has an Avoid flyout with the same switches as the settings page
+- **Minimap sizes**: the minimap's route line has a width setting of its own (thin, normal, thick), apart from the world map's; on Classic Era and TBC Anniversary a Minimap dot setting sizes the step's marker, now smaller by default
+- **Map page menu**: right-click the route page in the map's search tab for the window's menu
+- **Search along route** sits at the right end of the Add destination row while a way lies ahead
+
+### Changed
+- **Undercity routing improved**: routes keep to the city's own floors (the Ruins, the upper ring and the auction house floor) and ride its elevators up or down, and the minimap's way ahead stops at a lift until it is ridden
+
+### Fixed
+- **Along route**: a creature EasyFind already lists shows once, not twice
+- **An EasyFind older than 4.0.0** gets one chat line asking for an update instead of errors
+
+---
+
 ## [1.2.0] - 2026-11-03
 
 ### Added
