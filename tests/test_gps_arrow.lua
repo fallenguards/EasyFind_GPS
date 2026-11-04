@@ -305,6 +305,28 @@ function tests.besideTheLiftJustTaken_theWalkKeepsToItsOwnWay()
     H.assertTrue(#planner.asked > 0, "walked off: a way from here again")
 end
 
+-- A lift's step, replayed from a ride down Undercity's east lift (/efd
+-- gpslift, 2026-11-04): on its platform the arrow turned back to the door
+-- boarded, and stepped off the far side the follower asked a way back to
+-- that door from the city level, out through the sewers (1788 yd).
+function tests.aLiftsStep_inItsShaftAimsAtItsFarDoor_neverWalksBack()
+    local Aim, player, _, now, _, planner, ns = fresh(false, { planner = true })
+    local route = ns.GPS.CurrentRoute()
+    route.steps = { { kind = "elevator", go = { ci = 1, wx = 0, wy = 19 }, arrive = { ci = 1, wx = 0, wy = 0 } } }
+    player.x, player.y = 0, 9.5
+    local _, _, ax, ay = Aim()
+    H.assertTrue(ax == 0 and ay == 0, "on the platform: the far door: " .. tostring(ax) .. "," .. tostring(ay))
+    player.x, player.y = 12, -15
+    for _ = 1, 4 do
+        _, _, ax, ay = Aim()
+        planner.draw()
+        now.t = now.t + 5
+    end
+    H.assertTrue(ax == 0 and ay == 0, "stepped off at an angle: still the far door")
+    H.assertEq(#planner.asked, 0, "no way on foot asked from the player")
+    H.assertEq(ns.GPSFollow.ThroughLift(route.steps[1], 1, 0, 9.5), 0.5, "the platform: half way through")
+end
+
 function tests.aWayNoFasterIsNeverTaken()
     local Aim, player, finds, now = fresh(true, { pts = function(sx, sy, tx, ty)
         if sx == 0 and sy == 0 then return { 0, 0, 100, 0, tx, ty } end

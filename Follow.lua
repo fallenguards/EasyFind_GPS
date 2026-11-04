@@ -31,6 +31,7 @@ local RIDES = { taxi = true, boat = true, ferry = true, zeppelin = true, skyship
 Follow.RIDES = RIDES
 local AT_BUILDING = 40         -- yards from a building's stairs where its step's words lead
 local AT_LIFT = 25             -- yards from a lift's shaft where its rider may still be up or down it
+local LIFT_IN = 0.25           -- of the way through a lift's shaft: from here its far door is aimed at
 
 -- At the stairs (or the way out) of a building the walking grid cannot
 -- enter: the step's words lead from here on, not the arrow or the
@@ -120,6 +121,18 @@ local function Find(ci, sx, sy, now)
     walk.found, walk.fx, walk.fy, walk.seg, walk.wide, walk.path, walk.asked = now, sx, sy, 1, true, nil, nil
     walk.plan, walk.ref, walk.cand, walk.join, walk.detour, walk.fromStart = nil, nil, nil, nil, nil, nil
     walk.plan = Drawn(ci, walk, walk.tx, walk.ty, walk.near) or nil
+end
+
+-- How far through a lift's shaft (x, y) lies along the line of its doors:
+-- 0 at the one boarded, 1 at the one it lets off at; nil off this continent.
+function Follow.ThroughLift(step, ci, x, y)
+    local gci, gx, gy = World(step.go)
+    local aci, ax, ay = World(step.arrive)
+    if not (gx and ax and gci == ci and aci == ci) then return nil end
+    local dx, dy = ax - gx, ay - gy
+    local l2 = dx * dx + dy * dy
+    if l2 == 0 then return nil end
+    return ((x - gx) * dx + (y - gy) * dy) / l2
 end
 
 -- Beside the lift the step before took: up or down its shaft alike, a way
@@ -292,10 +305,19 @@ local function Take(r, now)
     if RIDES[step.kind] and step.arrive and Boats and Boats.Aboard and Boats.Aboard(ci, px, py, tci, tx, ty) then
         tci, tx, ty = World(step.arrive)
     end
+    -- In a lift's shaft or out past it the ride is what is left: its far
+    -- door, and no way on foot back to the door boarded (from the other
+    -- level that way ran out through the sewers).
+    local inLift = false
+    if step.kind == "elevator" and ci then
+        local t = Follow.ThroughLift(step, ci, px, py)
+        inLift = t ~= nil and t > LIFT_IN
+        if inLift then tci, tx, ty = World(step.arrive) end
+    end
     if not (ci and tci == ci and tx) then return end
     r.route, r.index, r.ci, r.px, r.py, r.tx, r.ty = route, index, ci, px, py, tx, ty
     r.straight = msqrt((tx - px) ^ 2 + (ty - py) ^ 2)
-    r.ride, r.path = RIDES[step.kind] or false, false
+    r.ride, r.path = RIDES[step.kind] or inLift, false
     r.ok = true
     if r.ride or step.fly then return end
     local sci, sx, sy = StartOf(route, index)

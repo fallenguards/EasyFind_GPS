@@ -845,7 +845,7 @@ TrackStep = function(index)
     if not step then return end
     route.active = index
     route.arrived = nil
-    step.reached, step.liftLevel = nil, nil
+    step.reached, step.liftLevel, step.boarded = nil, nil, nil
     -- A teleport counts as taken only once cast, or once off this continent.
     route.castAt = nil
     route.stepCi = PlayerWorldPos()
@@ -1251,7 +1251,12 @@ local function Tick()
             if go and go.wx and (px - go.wx) ^ 2 + (py - go.wy) ^ 2 <= LIFT_YARDS * LIFT_YARDS then step.liftLevel = level end
             return
         end
-        if level == step.liftLevel and (px - sx) ^ 2 + (py - sy) ^ 2 > LIFT_OFF * LIFT_OFF then return end
+        -- Off its platform through the far door: ridden, though the name
+        -- may stay (Undercity's east lift reads the Ruins at both ends).
+        if OnLift(step) then step.boarded = true end
+        local through = step.boarded and ns.GPSFollow and ns.GPSFollow.ThroughLift(step, ci, px, py)
+        if level == step.liftLevel and (px - sx) ^ 2 + (py - sy) ^ 2 > LIFT_OFF * LIFT_OFF
+            and not (through and through >= 1) then return end
     end
     local crossing = step.kind ~= "travel"
     -- A crossing to another continent is done the moment you are on it;
