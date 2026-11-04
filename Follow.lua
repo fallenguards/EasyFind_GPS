@@ -30,6 +30,7 @@ local BACK, ON = 2, 12         -- stretches searched behind and ahead of the las
 local RIDES = { taxi = true, boat = true, ferry = true, zeppelin = true, skyship = true, tram = true }
 Follow.RIDES = RIDES
 local AT_BUILDING = 40         -- yards from a building's stairs where its step's words lead
+local AT_LIFT = 25             -- yards from a lift's shaft where its rider may still be up or down it
 
 -- At the stairs (or the way out) of a building the walking grid cannot
 -- enter: the step's words lead from here on, not the arrow or the
@@ -117,8 +118,20 @@ end
 
 local function Find(ci, sx, sy, now)
     walk.found, walk.fx, walk.fy, walk.seg, walk.wide, walk.path, walk.asked = now, sx, sy, 1, true, nil, nil
-    walk.plan, walk.ref, walk.cand, walk.join, walk.detour = nil, nil, nil, nil, nil
+    walk.plan, walk.ref, walk.cand, walk.join, walk.detour, walk.fromStart = nil, nil, nil, nil, nil, nil
     walk.plan = Drawn(ci, walk, walk.tx, walk.ty, walk.near) or nil
+end
+
+-- Beside the lift the step before took: up or down its shaft alike, a way
+-- from where the player stands would start on the level he is leaving
+-- (Undercity's Ruins, the sewers round): the walk keeps to its own way.
+local function AtLift(route, index, ci, px, py)
+    local lift = route.steps[index - 1]
+    if not (lift and lift.kind == "elevator") then return false end
+    local gci, gx, gy = World(lift.go)
+    local aci, ax, ay = World(lift.arrive)
+    if not (gx and ax and gci == ci and aci == ci) then return false end
+    return (px - (gx + ax) / 2) ^ 2 + (py - (gy + ay) / 2) ^ 2 <= AT_LIFT * AT_LIFT
 end
 
 -- A walk's nearest point to (x, y), looked for near the stretch w matched
@@ -244,7 +257,7 @@ local function Challenge(ci, px, py, now, path, along, off)
     local j = walk.join
     if (j and j.path == false) or Left(way, along2, off2) < Left(path, along, off) - MARGIN_YD then
         walk.found, walk.fx, walk.fy, walk.seg, walk.wide, walk.path, walk.asked = now, c.fx, c.fy, 1, true, way, nil
-        walk.plan, walk.ref, walk.cand, walk.join, walk.detour = way, nil, nil, nil, nil
+        walk.plan, walk.ref, walk.cand, walk.join, walk.detour, walk.fromStart = way, nil, nil, nil, nil, nil
         return true
     end
     if now - c.at >= REFIND and (c.fx - px) ^ 2 + (c.fy - py) ^ 2 > OFF_WAY * OFF_WAY then
@@ -285,10 +298,19 @@ local function Take(r, now)
     r.ride, r.path = RIDES[step.kind] or false, false
     r.ok = true
     if r.ride or step.fly then return end
-    if walk.route ~= route or walk.index ~= index or walk.tx ~= tx or walk.ty ~= ty then
+    local sci, sx, sy = StartOf(route, index)
+    local atLift = sci == ci and sx ~= nil and AtLift(route, index, ci, px, py)
+    if walk.route ~= route or walk.index ~= index or walk.tx ~= tx or walk.ty ~= ty or (atLift and not walk.fromStart) then
         walk.route, walk.index, walk.tx, walk.ty, walk.near = route, index, tx, ty, step.near
-        local sci, sx, sy = StartOf(route, index)
-        if sci == ci and sx then Find(ci, sx, sy, -mhuge) else Find(ci, px, py, now) end
+        if sci == ci and sx then
+            Find(ci, sx, sy, -mhuge)
+            walk.fromStart = true
+        else
+            Find(ci, px, py, now)
+        end
+    end
+    if atLift and walk.join and walk.plan then
+        walk.path, walk.join, walk.cand, walk.detour, walk.wide = walk.plan, nil, nil, nil, true
     end
     local path = walk.path
     if path == nil then
@@ -299,12 +321,12 @@ local function Take(r, now)
     if path then seg, along, off, qx, qy = Nearest(path, px, py, walk) end
     if path == false then
         -- No way from where it was found: found again from here, once moved on.
-        if now - walk.found > REFIND and (walk.fx - px) ^ 2 + (walk.fy - py) ^ 2 > OFF_WAY * OFF_WAY then
+        if not atLift and now - walk.found > REFIND and (walk.fx - px) ^ 2 + (walk.fy - py) ^ 2 > OFF_WAY * OFF_WAY then
             Find(ci, px, py, now)
             path = walk.path
             if path then seg, along, off, qx, qy = Nearest(path, px, py, walk) end
         end
-    elseif path then
+    elseif path and not atLift then
         if (off > OFF_WAY or (walk.join and off > REJOIN_OFF)) and Rejoin(ci, px, py, now) then
             path = walk.path
             seg, along, off, qx, qy = Nearest(path, px, py, walk)

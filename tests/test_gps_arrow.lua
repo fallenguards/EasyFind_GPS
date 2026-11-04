@@ -278,6 +278,33 @@ function tests.aWayBackFarRoundGivesWayToAWholeWay()
     H.assertEq(ay, 500, "the whole way taken: straight to the spot")
 end
 
+-- Just off a lift, its top door 21 yd from its foot: a way from the player
+-- there started on the Ruins and ran through the sewers (2026-11-04). By
+-- the lift the walk keeps to its own way; walked off, ways from here again.
+function tests.besideTheLiftJustTaken_theWalkKeepsToItsOwnWay()
+    local Aim, player, _, now, _, planner, ns = fresh(false, { planner = true, tx = 500, ty = 500, pts = wayRound })
+    local route = ns.GPS.CurrentRoute()
+    local walkStep = route.steps[1]
+    route.steps = { { kind = "elevator", go = { ci = 1, wx = 0, wy = 21 }, arrive = { ci = 1, wx = 0, wy = 0 } }, walkStep }
+    route.active = 2
+    player.x, player.y = 0, 21
+    for _ = 1, 4 do
+        Aim()
+        planner.draw()
+        now.t = now.t + 5
+    end
+    local _, _, _, ay = Aim()
+    H.assertTrue(ay < 30, "along the walk from the lift's foot: " .. ay)
+    H.assertEq(#planner.asked, 0, "no way asked from the player beside the lift")
+    player.x, player.y = 0, 60
+    for _ = 1, 3 do
+        Aim()
+        planner.draw()
+        now.t = now.t + 5
+    end
+    H.assertTrue(#planner.asked > 0, "walked off: a way from here again")
+end
+
 function tests.aWayNoFasterIsNeverTaken()
     local Aim, player, finds, now = fresh(true, { pts = function(sx, sy, tx, ty)
         if sx == 0 and sy == 0 then return { 0, 0, 100, 0, tx, ty } end
