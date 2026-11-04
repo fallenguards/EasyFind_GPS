@@ -325,6 +325,85 @@ function tests.aFieldsPick_joinsTheRecentSearches()
     H.assertTrue(clear ~= nil and push < clear, "read before the field is cleared")
 end
 
+-- Editor:LayAlong cut from Trip.lua with the sizes it reads there.
+local function EditorLayAlong()
+    local f = assert(io.open(H.Path("Trip.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local sizes = {}
+    for _, name in ipairs({ "local ROW_H, ADD_H", "local ALONG_H", "local RING =" }) do
+        sizes[#sizes + 1] = assert(src:match("\n(" .. name:gsub("%p", "%%%0") .. "[^\n]*)"), name)
+    end
+    local s = assert(src:find("function Editor:LayAlong", 1, true), "Editor:LayAlong not in Trip.lua")
+    local e = assert(src:find("\nfunction Editor:", s + 1, true), "end of LayAlong not found")
+    local env = setmetatable({ Editor = {}, mmax = math.max }, { __index = _G })
+    assert(load(table.concat(sizes, "\n") .. "\n" .. src:sub(s, e), "=Trip.lua along", "t", env))()
+    return env.Editor
+end
+
+-- The add row (rowW wide) with its words and the along click's.
+local function AlongRow(rowW, addW, alongW)
+    local along = { shown = true, points = {} }
+    function along:SetShown(v) self.shown = v and true or false end
+    function along:IsShown() return self.shown end
+    function along:ClearAllPoints() self.points = {} end
+    function along:SetPoint(point, _, rel) self.points[#self.points + 1] = point .. ">" .. rel end
+    function along:SetWidth(w) self.w = w end
+    function along:SetHeight(h) self.h = h end
+    local text = {
+        GetStringWidth = function() return alongW end,
+        GetStringHeight = function() return 12 end,
+        SetJustifyH = function(self, j) self.justify = j end,
+    }
+    local ed = setmetatable({
+        alongBtn = along, alongText = text,
+        add = { GetWidth = function() return rowW end },
+        addText = { GetStringWidth = function() return addW end },
+    }, { __index = EditorLayAlong() })
+    return ed, along, text
+end
+
+-- Search along the route sat only in the window's menu (2026-11-03):
+-- the add row's other click, at its right end.
+function tests.along_atTheAddRowsEnd_whereBothFit()
+    local ed, along, text = AlongRow(260, 80, 90)
+    H.assertEq(ed:LayAlong({}), 0, "no line of its own")
+    H.assertTrue(along.shown, "shown with a way ahead")
+    H.assertEq(along.points[1], "TOPRIGHT>TOPRIGHT", "at the row's right end")
+    H.assertEq(text.justify, "RIGHT")
+    H.assertTrue(along.w >= 90, "its click as wide as its words")
+end
+
+-- Narrow, or in a longer language: under the add row's words, never over them.
+function tests.along_aLineUnderTheWords_whereNot()
+    local ed, along, text = AlongRow(200, 90, 110)
+    local h = ed:LayAlong({})
+    H.assertTrue(h >= 12, "the line it adds: " .. h)
+    H.assertEq(along.points[1], "TOPLEFT>BOTTOMLEFT", "under the add row")
+    H.assertEq(along.points[2], "TOPRIGHT>BOTTOMRIGHT", "its words wrap in the row's width")
+    H.assertEq(text.justify, "LEFT")
+end
+
+function tests.along_goneWithNoWayAhead()
+    local ed, along = AlongRow(260, 80, 90)
+    H.assertEq(ed:LayAlong(nil), 0)
+    H.assertFalse(along.shown, "no route")
+    along.shown = true
+    H.assertEq(ed:LayAlong({ arrived = true }), 0)
+    H.assertFalse(along.shown, "arrived")
+end
+
+-- The click opens the along field as the menu's row does, and the add
+-- row's place counts the line it takes.
+function tests.along_wiredLikeTheMenusRow()
+    local f = assert(io.open(H.Path("Trip.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    H.assertTrue(src:find('along:SetScript("OnClick", function() ns.GPS:SearchAlong(frame) end)', 1, true) ~= nil,
+        "the click")
+    H.assertTrue(src:find("y = y + ADD_H + self:LayAlong(route)", 1, true) ~= nil, "its line counted")
+end
+
 -- "You have arrived" sat at the window's edge, left of the time line and
 -- the steps (2026-11-02): the announcement starts where the time line's
 -- text does, past the grip and the marks' column.

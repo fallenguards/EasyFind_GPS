@@ -16,6 +16,7 @@ local tremove, tinsert, tsort = table.remove, table.insert, table.sort
 local sformat = string.format
 
 local ROW_H, ADD_H, MARK, GRIP_W, DROP_ROWS, DROP_ROW_H = 30, 26, 16, 9, 6, 20
+local ALONG_H, ALONG_GAP = 20, 16   -- the along click's own line; its room off the add row's words
 local DROP_PAD = 4
 local TEX_RING = "Interface\\AddOns\\EasyFind_GPS\\textures\\clock-ring"   -- a 1.5 px line at 16 px
 local PIN = 22
@@ -487,6 +488,32 @@ function Editor:SearchAlong()
     self:Refresh(Route())
 end
 
+-- The add row's along click: at its right end, or on a line of its own
+-- under its words where the two do not fit; the height that line adds.
+-- Shown while there is a way ahead.
+function Editor:LayAlong(route)
+    local along, text, add = self.alongBtn, self.alongText, self.add
+    along:SetShown(route ~= nil and not route.arrived)
+    if not along:IsShown() then return 0 end
+    local left = GRIP_W + MARK / 2 + RING / 2 + 8   -- where the add row's words start
+    local w = text:GetStringWidth() or 0
+    local room = (add:GetWidth() or 0) - left
+    along:ClearAllPoints()
+    if room <= 0 or (self.addText:GetStringWidth() or 0) + ALONG_GAP + w <= room then
+        along:SetPoint("TOPRIGHT", add, "TOPRIGHT", 0, 0)
+        along:SetWidth(w + 4)
+        along:SetHeight(ADD_H)
+        text:SetJustifyH("RIGHT")
+        return 0
+    end
+    along:SetPoint("TOPLEFT", add, "BOTTOMLEFT", left, 0)
+    along:SetPoint("TOPRIGHT", add, "BOTTOMRIGHT", 0, 0)
+    text:SetJustifyH("LEFT")
+    local h = mmax(ALONG_H, (text:GetStringHeight() or 0) + 6)
+    along:SetHeight(h)
+    return h
+end
+
 function Editor:Pick(data)
     local row = self.editing
     if not row then return end
@@ -908,13 +935,16 @@ function Editor:Refresh(route)
     -- Laid again under a still cursor: each grip as the cursor stands now.
     for i = 1, n do self.rows[i].SyncGrip() end
     if self.drag then self:LayDrag() end
-    if px and g.SizeFont then g.SizeFont(self.addText, px) end
+    if px and g.SizeFont then
+        g.SizeFont(self.addText, px)
+        g.SizeFont(self.alongText, px)
+    end
     self.add:ClearAllPoints()
     self.add:SetPoint("TOPLEFT", self, "TOPLEFT", 0, -y)
     self.add:SetPoint("RIGHT", self, "RIGHT", 0, 0)
     for k = 1, 3 do self.addDots[k]:SetShown(not adding) end
     self.add:SetShown(not adding)
-    if not adding then y = y + ADD_H end
+    if not adding then y = y + ADD_H + self:LayAlong(route) end
     -- Hidden in the window, the fields take no room: the time line rises.
     self:SetHeight((self.frame.fieldsHidden and route) and 1 or mmax(1, y))
 end
@@ -969,12 +999,26 @@ function Trip.BuildEditor(frame)
         for k = 1, 3 do self.addDots[k]:SetColorTexture(ink.dim[1], ink.dim[2], ink.dim[3], 1) end
         local c = add:IsMouseOver() and ink.hover or ink.dim
         addText:SetTextColor(c[1], c[2], c[3], 1)
+        c = self.alongBtn:IsMouseOver() and ink.hover or ink.dim
+        self.alongText:SetTextColor(c[1], c[2], c[3], 1)
     end
     add:SetScript("OnClick", function()
         ed.adding = "focus"
         ed:Refresh(Route())
     end)
     ed.add, ed.addText = add, addText
+
+    -- Search along the route, the add row's other click (Editor:LayAlong).
+    local along = CreateFrame("Button", nil, add)
+    local alongText = along:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    alongText:SetAllPoints(along)
+    alongText:SetText(L["GPS_ALONG"])
+    alongText:SetTextColor(DIM[1], DIM[2], DIM[3], 1)
+    alongText._efOwnColor = true
+    along:SetScript("OnEnter", function() alongText:SetTextColor(Utils.RGB(ns.GPS.Ink(frame).hover)) end)
+    along:SetScript("OnLeave", function() alongText:SetTextColor(Utils.RGB(ns.GPS.Ink(frame).dim)) end)
+    along:SetScript("OnClick", function() ns.GPS:SearchAlong(frame) end)
+    ed.alongBtn, ed.alongText = along, alongText
 
     -- Our menus' panel, above the route's step buttons (a teleport's icon
     -- sits in its own frame over its row).
