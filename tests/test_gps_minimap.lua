@@ -330,5 +330,34 @@ function tests.aFlyingLeg_isDrawnFromThePlayer()
     H.assertNil(behind, "nothing behind the player")
 end
 
+-- Out of Undercity from its lower floors, the walk past the lift up
+-- crossed the minimap from the Ruins over the city (2026-11-03): the way
+-- ahead stops at a lift till it is ridden.
+function tests.aLift_theWayPastItWaitsTillItIsRidden()
+    local drawn, _, now, Mini = fresh()
+    local route = Mini._ns.GPS.CurrentRoute()
+    route.steps = {
+        { kind = "travel", go = { ci = 1, wx = 40, wy = 0 } },
+        { kind = "elevator", go = { ci = 1, wx = 40, wy = 0 }, arrive = { ci = 1, wx = 45, wy = 0 } },
+        { kind = "travel", go = { ci = 1, wx = 45, wy = 80 } },
+    }
+    -- The far level's walk heads 80 yd west: 40 px left of the arrow.
+    local function westmost()
+        local x = 0
+        for _, p in ipairs(drawn.pieces) do
+            for i = 1, #p.pts, 2 do x = math.min(x, p.pts[i]) end
+        end
+        return x
+    end
+    Mini:Refresh()
+    H.assertTrue(#drawn.pieces >= 1, "the walk to the lift")
+    H.assertTrue(westmost() > -5, "nothing past the lift: " .. westmost())
+    route.active = 3
+    Mini._ns.GPS.PlayerWorldPos = function() return 1, 45, 0 end
+    now.t = now.t + 1
+    Mini:Refresh()
+    H.assertTrue(westmost() < -30, "ridden, the walk on: " .. westmost())
+end
+
 local pass, fail, failures = H.runSuite("GPSMinimap", tests)
 return { pass = pass, fail = fail, failures = failures }

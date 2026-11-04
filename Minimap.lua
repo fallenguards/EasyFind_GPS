@@ -282,6 +282,8 @@ local function Draw()
                 end
             end
         end
+        -- Past a lift the way is on another level over or under this one.
+        if step.kind == "elevator" then break end
     end
     Flush()
     lines:Finish()
