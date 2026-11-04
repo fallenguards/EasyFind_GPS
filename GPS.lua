@@ -63,6 +63,7 @@ local GetAtlasInfo = C_Texture.GetAtlasInfo
 local ARRIVE = { yards = 40, spot = 8, cross = 300 }
 -- A lift: its near door's reach, and the far door's for one stepped off.
 local LIFT_YARDS, LIFT_OFF = 15, 3
+local LIFT_ABOARD = 6   -- on its platform: this near the middle of its doors
 local ROUTE_MAX_AGE = 2 * 60 * 60
 local ARRIVED_LINGER = 8
 local START_YARDS = 60      -- this close to a planned route's start, the player is on it
@@ -787,13 +788,30 @@ local function DepartureText(step)
     return sformat(L["GPS_LEAVES_IN_FMT"], sformat("%d:%02d", math.floor(wait / 60), math.floor(wait % 60)))
 end
 
+-- A spot's world place, by its own or its map's coordinates.
+local function SpotWorld(p)
+    if p.wx then return p.ci, p.wx, p.wy end
+    return WorldPos(p.m, p.x, p.y)
+end
+
+-- On a lift's platform: its doors flank the shaft, the platform between them.
+local function OnLift(step)
+    if not (step.go and step.arrive) then return false end
+    local ci, px, py = PlayerWorldPos()
+    local aci, ax, ay = SpotWorld(step.go)
+    local bci, bx, by = SpotWorld(step.arrive)
+    if not (ci and ax and bx and aci == ci and bci == ci) then return false end
+    return (px - (ax + bx) / 2) ^ 2 + (py - (ay + by) / 2) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD
+end
+
 local function StepText(step, active)
     -- A walk that jumps down a ledge says how (Jumps.lua).
     local jump = ns.GPSJumps and ns.GPSJumps.StepText(step)
     if jump then return (step.text or "") .. ". " .. jump end
+    if active and step and step.kind == "elevator" and step.aboardText and OnLift(step) then return step.aboardText end
     -- On board, docked or under way: stay on until it lands.
     local Boats = ns.GPSBoats
-    if active and step and step.aboardText and step.go and Boats and Boats.Aboard then
+    if active and step and step.kind ~= "elevator" and step.aboardText and step.go and Boats and Boats.Aboard then
         local ci, px, py = PlayerWorldPos()
         local bci, bx, by = step.go.ci, step.go.wx, step.go.wy
         if not bx then bci, bx, by = WorldPos(step.go.m, step.go.x, step.go.y) end

@@ -735,6 +735,8 @@ local function LiftKey(a, b)
     return zb < za and "GPS_STEP_ELEVATOR_DOWN" or "GPS_STEP_ELEVATOR_UP"
 end
 Route._LiftKey = LiftKey   -- tests
+-- And on its platform: ride it the same way.
+local LIFT_RIDE = { GPS_STEP_ELEVATOR_DOWN = "GPS_STEP_ELEVATOR_RIDE_DOWN", GPS_STEP_ELEVATOR_UP = "GPS_STEP_ELEVATOR_RIDE_UP" }
 
 -- Floor of a crossing's spot ("upper"/"lower"), recorded by hand:
 -- the client zeroes the player's height.
@@ -928,7 +930,8 @@ local function Steps(g, path, goalName, goalStep)
             local building = (e.kind == "enter" or e.kind == "leave") and e.edge.area or nil
             local key = e.kind == "seam" and GoKey(g) or (building and e.edge.textKey) or KIND_KEY[e.kind] or "GPS_STEP_PORTAL_FMT"
             local from = g.nodes[i > 1 and path[i - 1].node or g.start]
-            if e.kind == "elevator" then key = LiftKey(from.p, node.p) or key end
+            local lift = e.kind == "elevator" and LiftKey(from.p, node.p)
+            if lift then key = lift end
             local floor = FloorHint(g, from.p)
             local wait = e.liveWait or e.edge.wait
             local dest = building and (AreaName(building) or e.edge.n) or EdgeDestName(e.edge, e.reverse)
@@ -945,7 +948,8 @@ local function Steps(g, path, goalName, goalStep)
                              live = e.liveWait and true or nil,
                              route = not e.reverse and e.edge.route or nil, stop = not e.reverse and e.edge.stop or nil,
                              reach = e.edge.n, reachText = reachText,
-                             aboardText = ABOARD_KEY[e.kind] and (L[ABOARD_KEY[e.kind]]):format(dest) or nil,
+                             aboardText = (lift and L[LIFT_RIDE[lift]])
+                                 or (ABOARD_KEY[e.kind] and (L[ABOARD_KEY[e.kind]]):format(dest)) or nil,
                              floor = floor, area = building, inside = from.inside })
             i = i + 1
         end

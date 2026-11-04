@@ -67,5 +67,43 @@ function tests.theTicker_ridesALiftByTheLevelsName()
         "a step tracked anew forgets the level it was boarded on")
 end
 
+-- StepText cut from GPS.lua, the player at pos on continent 0.
+local function StepTextAt(pos)
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local sizes = {}
+    for _, name in ipairs({ "local LIFT_ABOARD", "local REACH_YARDS" }) do
+        sizes[#sizes + 1] = assert(src:match("\n(" .. name .. "[^\n]*)"), name)
+    end
+    local s = assert(src:find("-- A spot's world place", 1, true), "SpotWorld not in GPS.lua")
+    local e = assert(src:find("GPS.StepText = StepText", s, true), "end of StepText not found")
+    local env = setmetatable({
+        ns = {}, L = {}, sformat = string.format,
+        PlayerWorldPos = function() return 0, pos.x, pos.y end,
+        WorldPos = function() return nil end,
+        DepartureText = function() return nil end,
+    }, { __index = _G })
+    local chunk = table.concat(sizes, "\n") .. "\n" .. src:sub(s, e - 1) .. "\nreturn StepText"
+    return assert(load(chunk, "=GPS.lua StepText", "t", env))()
+end
+
+-- On the platform the step said to take the lift still (2026-11-03): the
+-- platform is the middle of its two doors (the north lift's shaft at
+-- 1596, 292 between its foot and top doors), where the step says ride it.
+function tests.onTheLiftsPlatform_theStepSaysRideIt()
+    local pos = {}
+    local StepText = StepTextAt(pos)
+    local step = { kind = "elevator", text = "Take the elevator up", aboardText = "Ride the elevator up",
+                   go = { ci = 0, wx = 1596.2, wy = 302.4 }, arrive = { ci = 0, wx = 1596.0, wy = 282.7 } }
+    pos.x, pos.y = 1596.2, 302.4
+    H.assertEq(StepText(step, true), "Take the elevator up", "at its door, waiting")
+    pos.x, pos.y = 1596, 292
+    H.assertEq(StepText(step, true), "Ride the elevator up", "on the platform")
+    H.assertEq(StepText(step, false), "Take the elevator up", "a step ahead says what it will be")
+    step.aboardText = nil
+    H.assertEq(StepText(step, true), "Take the elevator up", "no line for the platform: the step's own")
+end
+
 local pass, fail, failures = H.runSuite("GPS Undercity", tests)
 return { pass = pass, fail = fail, failures = failures }

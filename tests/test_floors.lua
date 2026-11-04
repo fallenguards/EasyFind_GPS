@@ -168,6 +168,31 @@ function tests.theElevators_downIntoTheCity_upOut()
     end
 end
 
+-- A route's lift step carries the line for its platform, up or down: on
+-- board it said to take the elevator still (2026-11-03).
+function tests.aLiftsStep_saysToRideItOnBoard()
+    local ns, env = Era({ sub = "" })
+    for _, file in ipairs({ "Locales/enUS.lua", "Data_Era.lua", "Route.lua" }) do H.loadModule(file, env, ns) end
+    env.CreateVector2D = function(x, y) return { x = x, y = y, GetXY = function(v) return v.x, v.y end } end
+    env.C_Map = { GetWorldPosFromMapPos = function(_, v) return 0, env.CreateVector2D(v.x, v.y) end,
+                  GetMapInfo = function(m) return { name = "Map " .. m } end }
+    local function Lift(from, to)
+        local steps = ns.GPSRoute:Build({ name = "There", mapID = 1, x = to[1], y = to[2] },
+            { data = ns.GPSData, start = { ci = 0, wx = from[1], wy = from[2], m = 1458, x = 0.5, y = 0.5 },
+              faction = "Horde", canFly = false, groundSpeed = 7, known = false,
+              owns = function() return false end, cooldown = function() return 0 end })
+        for _, s in ipairs(steps or {}) do if s.kind == "elevator" then return s end end
+    end
+    -- From the ring out north of the Ruins, and from the Ruins down to Cain.
+    local up = Lift(BAT_HANDLER, { 1900, 240 })
+    H.assertNotNil(up, "out of the city by a lift")
+    H.assertEq(up.text, "Take the elevator up")
+    H.assertEq(up.aboardText, "Ride the elevator up")
+    local down = Lift(NORTH_TOP, CAIN)
+    H.assertNotNil(down, "into the city by a lift")
+    H.assertEq(down.aboardText, "Ride the elevator down")
+end
+
 function tests.onTheRingAboveIt_notArrived()
     local player = { x = CAIN[1], y = CAIN[2], sub = "Trade Quarter" }
     local ns = Era(player)
