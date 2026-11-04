@@ -3,7 +3,7 @@
 ## Notes: Step-by-step directions to anywhere EasyFind can find. Requires EasyFind.
 ## Author: justawower
 ## X-Curse-Project-ID: 1774025
-## Version:1.3.0
+## Version:1.3.1
 ## IconTexture: Interface\AddOns\EasyFind\textures\SpyglassMinimap
 ## Group: EasyFind
 ## Category: UI

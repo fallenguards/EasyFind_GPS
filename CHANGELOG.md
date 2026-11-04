@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.3.1] - 2026-11-04
+
+### Fixed
+- **Creature search**: a creature's name typed without its space ("rothide") no longer errors after quick typing cut a search short
+
+---
+
 ## [1.3.0] - 2026-11-04
 
 ### Added
