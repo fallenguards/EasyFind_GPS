@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.3.2] - 2026-11-05
+
+### Fixed
+- **Directions on the quest tracker's menu**: no longer errors when a game window that addons can't touch is under the cursor
+
+---
+
 ## [1.3.1] - 2026-11-04
 
 ### Fixed
