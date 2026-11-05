@@ -72,9 +72,11 @@ function tests.spot_isTheQuestsMarkOnItsMap_elseTheNextWaypoint()
     H.assertNil(ns.GPS.QuestSpot(999))
 end
 
+local function NotForbidden() return false end
+
 function tests.trackerMenu_addsDirectionsForTheQuestUnderTheCursor()
-    local block = { id = 101 }
-    local header = { GetParent = function() return block end }
+    local block = { id = 101, IsForbidden = NotForbidden }
+    local header = { GetParent = function() return block end, IsForbidden = NotForbidden }
     local _, menus, _, navigated = Load({ foci = { header } })
     local root = Root()
     menus.MENU_QUEST_OBJECTIVE_TRACKER(nil, root)
@@ -83,6 +85,19 @@ function tests.trackerMenu_addsDirectionsForTheQuestUnderTheCursor()
     root.items[2].fn()
     H.assertEq(navigated[1].mapID, 1429)
     H.assertEq(navigated[1].name, "Wanted: Hogger")
+end
+
+-- A forbidden frame refuses every method (Forever's Communities dialog).
+function tests.trackerMenu_stopsAtAForbiddenFrame()
+    local forbidden = setmetatable({}, { __index = function(_, k)
+        if k == "IsForbidden" then return function() return true end end
+        return function() error("calling '" .. k .. "' on bad self (forbidden)") end
+    end })
+    local header = { GetParent = function() return forbidden end, IsForbidden = NotForbidden }
+    local _, menus = Load({ foci = { forbidden, header } })
+    local root = Root()
+    menus.MENU_QUEST_OBJECTIVE_TRACKER(nil, root)
+    H.assertEq(#root.items, 0, "no quest found, no error")
 end
 
 function tests.logTitleMenu_readsTheTitlesQuest()

@@ -91,7 +91,7 @@ local function QuestUnderCursor()
     local foci = GetMouseFoci and GetMouseFoci() or { GetMouseFocus and GetMouseFocus() }
     for i = 1, #foci do
         local f, depth = foci[i], 0
-        while f and depth < 6 do
+        while f and depth < 6 and not f:IsForbidden() do
             local id = f.questID or f.id
             if type(id) == "number" and QL.IsOnQuest and QL.IsOnQuest(id) then return id end
             f, depth = f.GetParent and f:GetParent(), depth + 1
