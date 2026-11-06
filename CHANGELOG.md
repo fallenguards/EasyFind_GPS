@@ -4,6 +4,17 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.4.0] - 2026-11-06
+
+### Added
+- **Questie's quest tracker**: the GPS window docks under Questie's tracker, drawn in Questie's style, when Questie's tracker stands in for the game's
+
+### Fixed
+- **Docking**: the GPS window no longer snaps into the game's quest tracker while that tracker is hidden, such as with no quests yet or with Questie's tracker in its place
+- **Docking**: when the tracker it is docked in goes away, the GPS window stands on its own and docks again the next time it opens
+
+---
+
 ## [1.3.2] - 2026-11-05
 
 ### Fixed
