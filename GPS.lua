@@ -3634,9 +3634,15 @@ local function ShownTracker()
     return t and t:IsShown() and t or nil
 end
 
+function Look.QuestieTracker()
+    local q = _G.Questie_BaseFrame
+    return q and q:IsShown() and q or nil
+end
+
 -- What the section snaps into: "game" the game's tracker, "classic" that
--- tracker restyled by ClassicUI Forever, "era" its Era quest watch, or nil
--- with none to snap into (its tracker hidden, or a watch without room).
+-- tracker restyled by ClassicUI Forever, "era" its Era quest watch,
+-- "questie" Questie's tracker in the game's place, or nil with none to
+-- snap into (the trackers hidden, or a watch without room).
 local function Host()
     local Replacement = ns.SearchOpeners and ns.SearchOpeners.Replacement
     local api = Replacement and Replacement("questWatch")
@@ -3644,17 +3650,18 @@ local function Host()
     -- The tracker hidden by Toggle Objective Tracker: nothing to snap into.
     local db = DB()
     if db and db.objectiveTrackerHidden then return nil end
-    if Replacement then
-        if Replacement("hideObjectiveTracker") then return nil end
-        if Replacement("questTracker") then return ShownTracker() and "classic" or nil end
+    local hidden = Replacement and Replacement("hideObjectiveTracker")
+    if not hidden and ShownTracker() then
+        return (Replacement and Replacement("questTracker")) and "classic" or "game"
     end
-    return ShownTracker() and "game" or nil
+    return Look.QuestieTracker() and "questie" or nil
 end
 
--- The game's tracker, while the section snaps into it.
+-- The tracker the section snaps into: the game's, or Questie's.
 local function Tracker()
     local host = Host()
     if host == "game" or host == "classic" then return ClientTracker() end
+    if host == "questie" then return Look.QuestieTracker() end
     return nil
 end
 
@@ -3926,6 +3933,8 @@ local function NearTracker(f)
     if not (t and f:GetLeft() and t:GetLeft() and t:GetTop()) then return false end
     local top = t:GetTop()
     local bottom = top - DOCK_HEADER_H * 2
+    -- Questie's frame ends where its lines do.
+    if not t.modules and t:GetBottom() then bottom = math.min(bottom, t:GetBottom()) end
     local mods = VisibleModules(t)
     for i = 1, #mods do
         local b = mods[i]:GetBottom()
@@ -3941,10 +3950,10 @@ local function NearTracker(f)
         and f:GetTop() > bottom - DOCK_REACH and f:GetBottom() < top + DOCK_REACH
 end
 
--- The tracker's shown sections, top to bottom.
+-- The tracker's shown sections, top to bottom; Questie's has none.
 VisibleModules = function(t)
     local out = {}
-    for i = 1, #t.modules do
+    for i = 1, type(t.modules) == "table" and #t.modules or 0 do
         local m = t.modules[i]
         local h = m.GetContentsHeight and m:GetContentsHeight() or m:GetHeight()
         if m:IsShown() and h and h > 0 then out[#out + 1] = m end
@@ -4053,6 +4062,41 @@ local function DockMouse(on)
     if on then dockFrame.efMouseOffAny = nil end
 end
 
+-- Hung on the screen at left, top, width wide; anchored again only when
+-- the place changed (this runs four times a second), or when something
+-- else anchored it since (a drag's ghost rides the window).
+function Look.HangDock(left, top, width)
+    local placed = dockFrame.placed
+    local _, hungOn = dockFrame:GetPoint(1)
+    if placed and hungOn == UIParent and placed.left == left and placed.top == top and placed.width == width then
+        return
+    end
+    placed = placed or {}
+    placed.left, placed.top, placed.width = left, top, width
+    dockFrame.placed = placed
+    dockFrame:ClearAllPoints()
+    dockFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    dockFrame:SetWidth(width)
+end
+
+-- Under Questie's tracker at its left, a section wide at least and kept on
+-- screen, hung from where its frame ends.
+Look.QUESTIE_MIN_W, Look.QUESTIE_GAP = 240, 6
+function Look.QuestieWidth(t)
+    return mmax(Look.QUESTIE_MIN_W, t:GetWidth() or 0)
+end
+
+function Look.PlaceUnderQuestie(t)
+    if dockFrame:GetAlpha() ~= 1 then dockFrame:SetAlpha(1) end
+    DockMouse(true)
+    local tl, _, _, tb = Look.ScreenRect(t)
+    if not tl then return end
+    local s = dockFrame:GetEffectiveScale()
+    local width = Look.QuestieWidth(t)
+    local left = math.min(tl / s, UIParent:GetWidth() - width)
+    Look.HangDock(left, tb / s - Look.QUESTIE_GAP, width)
+end
+
 local function PlaceDock()
     if not dockFrame then return end
     -- ClassicUI's tracker pick changed under it: drawn again in the new look.
@@ -4072,6 +4116,7 @@ local function PlaceDock()
     local t = Tracker()
     if not t then return end
     if dockFrame.dragGap or not dockFrame.docked or dockFrame.dragging or dockFrame.ghost then return end
+    if not t.modules then return Look.PlaceUnderQuestie(t) end
     -- Above the tracker's own blocks: they take the mouse, and where the
     -- two overlap they would swallow the header's clicks and drags.
     local lvl = (t:GetFrameLevel() or 0) + 40
@@ -4109,28 +4154,9 @@ local function PlaceDock()
     end
     if not (tl and top) then return end
     local s = dockFrame:GetEffectiveScale()
-    local left = tl / s + margin
-    top = top / s
-    -- Anchored again only when the place changed (this runs four times a
-    -- second), or when something else anchored it since (a drag's ghost
-    -- rides the window): still hung where this left it.
-    local placed = dockFrame.placed
-    local _, hungOn = dockFrame:GetPoint(1)
-    if placed and hungOn == UIParent and placed.left == left and placed.top == top
-       and placed.margin == margin and placed.refW == refW then
-        return
-    end
-    placed = placed or {}
-    placed.left, placed.top, placed.margin, placed.refW = left, top, margin, refW
-    dockFrame.placed = placed
-    dockFrame:ClearAllPoints()
-    dockFrame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-    -- Inset by the left margin on both sides, as the tracker's sections.
-    if refW and refW > 0 then
-        dockFrame:SetWidth(refW)   -- exactly a section's width
-    else
-        dockFrame:SetWidth(mmax(1, (tr - tl) / s - 2 * margin))
-    end
+    -- Exactly a section's width, else inset by the left margin on both sides.
+    local width = (refW and refW > 0) and refW or mmax(1, (tr - tl) / s - 2 * margin)
+    Look.HangDock(tl / s + margin, top / s, width)
 end
 
 -- A drag in progress over the tracker: open (or move) the room at the
@@ -4161,7 +4187,7 @@ local function ShowSectionGhost(window)
     RenderDock(dockFrame)
     dockFrame.docked = nil
     dockFrame:ClearAllPoints()
-    if t then dockFrame:SetWidth(t:GetWidth() or 260) end
+    if t then dockFrame:SetWidth(t.modules and (t:GetWidth() or 260) or Look.QuestieWidth(t)) end
     dockFrame:SetPoint("TOPLEFT", window, "TOPLEFT", 0, 0)
     dockFrame:SetFrameStrata("HIGH")
     dockFrame:SetAlpha(1)
@@ -4316,7 +4342,10 @@ end
 -- the game's; floating, the window style picked.
 SectionLook = function(f)
     local host = Host()
-    if f.docked then return host == "era" and "era" or (host == "classic" and "classic" or "game") end
+    if f.docked then
+        if host == "era" or host == "classic" or host == "questie" then return host end
+        return "game"
+    end
     if PopoutStyle() == "era" then return "era" end
     return host == "classic" and "classic" or "game"
 end
@@ -4344,11 +4373,31 @@ function Look.LineH(scale)
     return scale and mfloor(Look.LINE * scale + 0.5) or Look.LINE
 end
 
+-- Questie's tracker as it draws (`/efd questielook`, in its frame's units):
+-- the game's font, the zone line 12 at 10 in, a quest title 10 at 61 (its icons before it),
+-- objectives 10 at 71, a title's row 17 tall, lines 3 apart.
+-- Its quest icon: about 9 across, centered 28 left of its fold button's middle.
+Look.Q = { HEAD = 17, ZONE_X = 10, TITLE_X = 61, LINE_X = 71, GAP = 3,
+           TRACK_SCALE = 0.45, ICON_DX = 28,
+           ZONE = { 0.85, 0.85, 0.85 }, TITLE = { 1, 1, 0 }, k = 1 }
+
+-- Questie's units in the section's: its frame may be scaled apart.
+function Look.QuestieScale(f)
+    local q = Look.QuestieTracker()
+    local s = f:GetEffectiveScale()
+    return q and s > 0 and q:GetEffectiveScale() / s or 1
+end
+
 function Look.Restyle(fs, look, base, object, scale)
     local key = scale and look .. scale or look
+    if look == "questie" then key = key .. Look.Q.k end
     if fs.look == key then return end
     fs.look = key
-    if look == "classic" then
+    if look == "questie" then
+        fs:SetFont(Look.FONT, mfloor((base >= 12 and 12 or 10) * (scale or 1) * Look.Q.k + 0.5), "")
+        fs:SetShadowColor(0, 0, 0, 1)
+        fs:SetShadowOffset(1, -1)
+    elseif look == "classic" then
         fs:SetFont(Look.FONT, mfloor(Look.ClassicSize(base) * (scale or 1) + 0.5), "")
         fs:SetShadowColor(0, 0, 0, 1)
         fs:SetShadowOffset(1, -1)
@@ -4383,13 +4432,38 @@ function Look.GameFold(fold, open)
     fold:GetNormalTexture():SetTexCoord(unpack(open and Look.HIDE_OPEN or Look.HIDE_SHUT))
     fold:GetPushedTexture():SetTexCoord(unpack(open and Look.HIDE_OPEN_DOWN or Look.HIDE_SHUT_DOWN))
 end
+function Look.FoldHighlight(fold, look)
+    if look == "questie" then
+        fold:SetHighlightTexture("Interface\\Buttons\\UI-PlusButton-Hilight")
+    elseif GAME_ART.tracker then
+        fold:SetHighlightAtlas("UI-QuestTrackerButton-Yellow-Highlight")
+    else
+        fold:SetHighlightTexture("Interface\\Buttons\\UI-Panel-MinimizeButton-Highlight")
+    end
+    local hl = fold:GetHighlightTexture()
+    if hl then hl:SetBlendMode("ADD") end
+end
+
 function Look.FoldArt(fold, look, open)
+    if fold.lit ~= look then
+        fold.lit = look
+        Look.FoldHighlight(fold, look)
+    end
     if look == "classic" then
         fold:SetNormalTexture(Look.FOLD_SHEET)
         fold:SetPushedTexture(Look.FOLD_SHEET)
         fold:GetNormalTexture():SetTexCoord(unpack(open and Look.FOLD_OPEN or Look.FOLD_SHUT))
         fold:GetPushedTexture():SetTexCoord(unpack(open and Look.FOLD_OPEN_DOWN or Look.FOLD_SHUT_DOWN))
         fold:SetSize(15, 14)
+    elseif look == "questie" then
+        -- The classic quest log's +/- where Questie's quests have their button.
+        local name = open and "Minus" or "Plus"
+        fold:SetNormalTexture("Interface\\Buttons\\UI-" .. name .. "Button-Up")
+        fold:SetPushedTexture("Interface\\Buttons\\UI-" .. name .. "Button-Down")
+        fold:GetNormalTexture():SetTexCoord(0, 1, 0, 1)
+        fold:GetPushedTexture():SetTexCoord(0, 1, 0, 1)
+        local size = mfloor(14 * Look.Q.k + 0.5)
+        fold:SetSize(size, size)
     else
         Look.GameFold(fold, open)
         fold:SetSize(16, 15)
@@ -4574,13 +4648,31 @@ function Look.Apply(f, look, scale)
         return
     end
     for i = 1, #f.eraLines do f.eraLines[i]:Hide() end
+    -- In Questie's look: the header as its zone line, the title as a quest's.
+    local q = look == "questie" and Look.Q or nil
+    local headH = q and mfloor(q.HEAD * q.k + 0.5) or DOCK_HEADER_H
+    f.head:SetHeight(headH)
+    f.grip:SetHeight(headH)
+    -- The header is all grip there; the fold sits left of the title (RenderDock).
+    f.grip:ClearAllPoints()
+    f.grip:SetPoint("TOPLEFT", f.head, "TOPLEFT", 0, 0)
+    if q then
+        f.grip:SetPoint("RIGHT", f.head, "RIGHT", 0, 0)
+    else
+        f.fold:ClearAllPoints()
+        f.fold:SetPoint("RIGHT", f.head, "RIGHT", 1, 0)
+        f.grip:SetPoint("RIGHT", f.fold, "LEFT", -4, 0)
+    end
+    f.header:ClearAllPoints()
+    f.header:SetPoint("LEFT", f.head, "LEFT", q and q.ZONE_X * q.k or 7, 0)
     f.searchAnchor:SetPoint("LEFT", f.header, "RIGHT", -2, 0)
-    f.hitList:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, -(DOCK_HEADER_H + 4))
+    f.hitList:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, -(headH + 4))
     f.hitList:SetPoint("RIGHT", f.head, "RIGHT", 0, 0)
     Look.Restyle(f.header, look, 12, "ObjectiveTrackerHeaderFont", scale)
-    f.header:SetTextColor(1, 0.82, 0)
+    f.header:SetTextColor(unpack(q and q.ZONE or ns.GOLD_COLOR))
     Look.Restyle(f.title, look, 11, "ObjectiveTrackerLineFont", scale)
-    f.title:SetTextColor(1, 0.82, 0)
+    f.titleColor = q and q.TITLE or ns.GOLD_COLOR
+    f.title:SetTextColor(unpack(f.titleColor))
 end
 
 -- A line laid as the Era watch lays one: on one line, or wrapped at its width.
@@ -4760,10 +4852,21 @@ RenderDock = function(f)
     if not (f.docked or f.floating) then return end
     local look = SectionLook(f)
     local scale = PopoutTextScale(f)
+    if look == "questie" then Look.Q.k = Look.QuestieScale(f) end
     Look.Apply(f, look, scale)
     if look == "era" then return Look.RenderEra(f) end
+    -- Questie's look sits as its quests do: the title and lines further in,
+    -- closer together, the lines without a dash.
+    local q = look == "questie" and Look.Q or nil
+    local k = q and q.k or 1
+    local headH = q and mfloor(q.HEAD * k + 0.5) or DOCK_HEADER_H
+    local titleX = q and q.TITLE_X * k or DOCK_INDENT
+    local lineX = q and q.LINE_X * k or DOCK_INDENT
+    local gap = q and q.GAP * k or DOCK_LINE_GAP
+    local minH = q and 10 or 12
+    local dash = q and "" or (QUEST_DASH or "- ")
     local route = Route()
-    local y = -(DOCK_HEADER_H + 8)
+    local y = -(headH + (q and 0 or 8))
     local nTips = 0
     SearchHint(f)
     if GPS.picking == f then route = nil end
@@ -4773,7 +4876,8 @@ RenderDock = function(f)
     if route and f.search then
         -- The box after the name in the banner; the places it finds take
         -- the steps' place.
-        GPS.SearchRight(f, f.fold, "LEFT", -4)
+        -- Questie's look keeps the fold by the title: the box runs to the edge.
+        if q then GPS.SearchRight(f, f.head, "RIGHT", 0) else GPS.SearchRight(f, f.fold, "LEFT", -4) end
         f.search:Show()
         f.hitList:SetShown(hits)
     end
@@ -4784,7 +4888,7 @@ RenderDock = function(f)
         for i = 1, #f.lines do f.lines[i]:Hide() end
         local h = f:HitViewH()
         f:SetHitView(h)
-        y = -DOCK_HEADER_H - (4 + h + 4)
+        y = -headH - (4 + h + 4)
     elseif route then
         f.title:SetText(DestText(route))
         f.title:Show()
@@ -4792,7 +4896,7 @@ RenderDock = function(f)
         local start = not route.arrived and Start()
         -- Widths are set, not anchored: a fresh line's anchors are not
         -- resolved yet when its height is read, and it would read as one line.
-        local lineW = (f.head:GetWidth() or 260) - DOCK_INDENT
+        local lineW = (f.head:GetWidth() or 260) - lineX
         local dbf = DB()
         f.expanded = not (dbf and dbf.gpsPopoutCollapsed)
         -- A start picked: its line above the destination's, in the title's
@@ -4806,31 +4910,45 @@ RenderDock = function(f)
             line.shade = ns.GOLD_COLOR
             Look.ShadeLine(line)
             line:ClearAllPoints()
-            line:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, y)
+            line:SetPoint("TOPLEFT", f, "TOPLEFT", lineX, y)
             line:SetPoint("RIGHT", f.head, "RIGHT", 0, 0)
-            local h = mmax(12, line.text:GetStringHeight() or 12)
+            local h = mmax(minH, line.text:GetStringHeight() or 12)
             line:SetHeight(h)
             line:Show()
-            y = y - h - DOCK_LINE_GAP
+            y = y - h - gap
         end
         f.title:ClearAllPoints()
-        f.title:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, y)
-        f.title:SetWidth(lineW)
+        f.title:SetPoint("TOPLEFT", f, "TOPLEFT", titleX, y)
+        f.title:SetWidth((f.head:GetWidth() or 260) - titleX)
         -- The tracking toggle in the quest POI button's spot, lit while the
         -- arrow follows the route.
-        local on = RouteTracked()
-        StyleTrackButton(f.track, on)
+        f.track:ClearAllPoints()
+        if q then
+            -- Questie's look: the fold in its quests' button spot left of the
+            -- title, the tracking toggle small in their icons' column.
+            f.fold:ClearAllPoints()
+            f.fold:SetPoint("TOPRIGHT", f.title, "TOPLEFT", -8 * k, 2 * k)
+            f.track:SetScale(q.TRACK_SCALE * k)
+            f.track:SetPoint("CENTER", f.fold, "CENTER", -q.ICON_DX * k / f.track:GetScale(), 0)
+        else
+            f.track:SetScale(1)
+            f.track:SetPoint("TOPRIGHT", f.title, "TOPLEFT", -7, 4)
+        end
+        StyleTrackButton(f.track, RouteTracked())
         f.track:Show()
-        y = y - (f.title:GetStringHeight() or 14) - DOCK_LINE_GAP
+        y = y - (f.title:GetStringHeight() or 14) - gap
         local n = 0
         -- One fold state for the section and the window (read above), so it
         -- survives a trip through the tracker either way.
         if f.expanded == false then
-            -- Folded: the header alone, as the tracker's own sections fold.
-            f.title:Hide()
-            f.titleBtn:Hide()
-            f.track:Hide()
-            y = -DOCK_HEADER_H
+            -- Folded: the header alone, as the tracker's own sections fold;
+            -- in Questie's look the title stays, as a folded quest's does.
+            if not q then
+                f.title:Hide()
+                f.titleBtn:Hide()
+                f.track:Hide()
+                y = -headH
+            end
         else
             local warn = GPS.DangerText(route)
             if warn then
@@ -4840,12 +4958,12 @@ RenderDock = function(f)
                 line.text:SetWidth(mmax(40, lineW - 16))
                 line.text:SetText(warn)
                 line:ClearAllPoints()
-                line:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, y)
+                line:SetPoint("TOPLEFT", f, "TOPLEFT", lineX, y)
                 line:SetPoint("RIGHT", f.head, "RIGHT", 0, 0)
-                local h = mmax(12, line.text:GetStringHeight() or 12)
+                local h = mmax(minH, line.text:GetStringHeight() or 12)
                 line:SetHeight(h)
                 line:Show()
-                y = y - h - DOCK_LINE_GAP
+                y = y - h - gap
             end
             -- Arrived: one line with the announcement in the steps' place.
             local items = route.steps
@@ -4859,18 +4977,19 @@ RenderDock = function(f)
                     local row = DockTipLine(f, nTips)
                     Look.Restyle(row.text, look, 10, "ObjectiveTrackerLineFont", scale)
                     Look.Restyle(row.dash, look, 10, "ObjectiveTrackerLineFont", scale)
+                    row.dash:SetText(dash)
                     row.tip = tip
                     row.text:SetText(tip.text)
                     row.text:SetWidth(mmax(40, lineW - (row.dash:GetStringWidth() or 8)))
                     row.shade = ns.TEXT_ASIDE
                     Look.ShadeLine(row)
                     row:ClearAllPoints()
-                    row:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, y)
+                    row:SetPoint("TOPLEFT", f, "TOPLEFT", lineX, y)
                     row:SetPoint("RIGHT", f.head, "RIGHT", 0, 0)
-                    local h = mmax(12, row.text:GetStringHeight() or 12)
+                    local h = mmax(minH, row.text:GetStringHeight() or 12)
                     row:SetHeight(h)
                     row:Show()
-                    y = y - h - DOCK_LINE_GAP
+                    y = y - h - gap
                 end
             end
             local hideDone = DB() and DB().gpsHideDone and not route.arrived
@@ -4879,6 +4998,7 @@ RenderDock = function(f)
                 local row = DockLine(f, n)
                 Look.Restyle(row.text, look, 10, "ObjectiveTrackerLineFont", scale)
                 Look.Restyle(row.dash, look, 10, "ObjectiveTrackerLineFont", scale)
+                row.dash:SetText(dash)
                 row.index = (not route.arrived) and i or nil
                 row.text:SetText(StepText(items[i], (route.active or 1) == i and not route.arrived))
                 local cast = SetupCast(row.cast, items[i], (route.active or 1) == i and not route.arrived,
@@ -4889,18 +5009,18 @@ RenderDock = function(f)
                 row.shade = Look.Grey((active or route.arrived) and 1 or (done and 0.5 or 0.8))
                 Look.ShadeLine(row)
                 row:ClearAllPoints()
-                row:SetPoint("TOPLEFT", f, "TOPLEFT", DOCK_INDENT, y)
+                row:SetPoint("TOPLEFT", f, "TOPLEFT", lineX, y)
                 row:SetPoint("RIGHT", f.head, "RIGHT", 0, 0)   -- the section's visual width
-                local h = mmax(12, row.text:GetStringHeight() or 12)
+                local h = mmax(minH, row.text:GetStringHeight() or 12)
                 row:SetHeight(h)
                 row:Show()
-                y = y - h - DOCK_LINE_GAP
+                y = y - h - gap
                 DockTips(TipsAfter(tips, i, #items))
             end
             DockTips(TipsAfter(tips, nil, #items))
         end
         for i = n + 1, #f.lines do f.lines[i]:Hide() end
-        y = y + DOCK_LINE_GAP   -- no gap after the last line
+        y = y + gap   -- no gap after the last line
     else
         f.title:Hide()
         f.titleBtn:Hide()
@@ -4913,14 +5033,15 @@ RenderDock = function(f)
             f.hitList:Show()
             local h = f:HitViewH()
             f:SetHitView(h)
-            y = -DOCK_HEADER_H - (h > 0 and (4 + h + 4) or 0)
+            y = -headH - (h > 0 and (4 + h + 4) or 0)
         end
     end
     for t = nTips + 1, #(f.tipLines or {}) do f.tipLines[t]:Hide() end
     -- Nothing to fold without a route.
-    f.fold:SetShown(route ~= nil)
+    -- In Questie's look the fold rides on the title.
+    f.fold:SetShown(route ~= nil and (not q or f.title:IsShown()))
     Look.FoldArt(f.fold, look, f.expanded ~= false)
-    f:SetHeight(mmax(DOCK_HEADER_H, -y))
+    f:SetHeight(mmax(headH, -y))
     PlaceDock()   -- the room in the tracker follows the height
 end
 
@@ -5159,7 +5280,7 @@ local function BuildDock()
     titleBtn:SetAllPoints(title)
     titleBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     titleBtn:SetScript("OnEnter", function() title:SetTextColor(1, 1, 1) end)
-    titleBtn:SetScript("OnLeave", function() title:SetTextColor(1, 0.82, 0) end)
+    titleBtn:SetScript("OnLeave", function() title:SetTextColor(unpack(f.titleColor or ns.GOLD_COLOR)) end)
     titleBtn:SetScript("OnClick", function(_, button)
         if button == "RightButton" then ShowDockMenu() else GPS:Open() end
     end)

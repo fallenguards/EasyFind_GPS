@@ -30,7 +30,7 @@ local function Load()
     local f = assert(io.open(H.Path("GPS.lua"), "rb"))
     local src = f:read("*a")
     f:close()
-    local s = assert(src:find("local function PlaceDock()", 1, true), "PlaceDock not in GPS.lua")
+    local s = assert(src:find("function Look.HangDock(", 1, true), "Look.HangDock not in GPS.lua")
     local e = assert(src:find("-- A drag in progress over the tracker", s, true), "end of PlaceDock not found")
     local tracker = Frame(400, 100, 300, 272)
     function tracker:IsCollapsed() return false end
@@ -484,7 +484,7 @@ end
 
 -- Host and Tracker cut from GPS.lua over a stub game tracker, shown or
 -- hidden (empty, or Questie's tracker in its place), and ClassicUI's picks.
-local function Hosts(shown, picks)
+local function Hosts(shown, picks, questieShown)
     local f = assert(io.open(H.Path("GPS.lua"), "rb"))
     local src = f:read("*a")
     f:close()
@@ -492,10 +492,13 @@ local function Hosts(shown, picks)
     local e = assert(src:find("-- The Era watch and its API", s, true), "end of Tracker not found")
     local tracker = { modules = {} }
     function tracker:IsShown() return shown end
+    local questie = {}
+    function questie:IsShown() return questieShown == true end
     local env = setmetatable({
-        _G = { ObjectiveTrackerFrame = tracker },
+        _G = { ObjectiveTrackerFrame = tracker, Questie_BaseFrame = questieShown ~= nil and questie or nil },
         ns = { SearchOpeners = picks and { Replacement = function(name) return picks[name] end } or nil },
         DB = function() return {} end,
+        Look = {},
     }, { __index = _G })
     return assert(load(src:sub(s, e - 1) .. "\nreturn Host, Tracker", "=GPS.lua Host", "t", env))()
 end
@@ -517,13 +520,97 @@ function tests.classicUIsTrackerOnlyWhileItIsUp()
     H.assertNil((Hosts(false, { questTracker = true })()))
 end
 
+-- Questie's tracker in the game's place takes the section; beside a
+-- shown game tracker the game's stays the host.
+function tests.questiesTrackerInTheGamesPlaceTakesTheSection()
+    local Host, Tracker = Hosts(false, nil, true)
+    H.assertEq(Host(), "questie")
+    H.assertTrue(Tracker() ~= nil and Tracker().modules == nil, "Questie's frame, not the game's")
+    H.assertEq((Hosts(true, nil, true)()), "game", "both up: the game's")
+    H.assertNil((Hosts(false, nil, false)()), "Questie's hidden too: none")
+end
+
+-- Under Questie's tracker: at its left, from its bottom less a gap, at
+-- least a section wide, and kept on screen.
+local function UnderQuestie(left, bottom, width)
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("function Look.HangDock(", 1, true), "Look.HangDock not in GPS.lua")
+    local e = assert(src:find("local function PlaceDock()", s, true), "PlaceDock not after it")
+    local q = Frame(80, left, bottom, width)
+    function q:GetWidth() return width end
+    local dock = Frame(40)
+    function dock:GetAlpha() return 1 end
+    local uiParent = Frame(768, 0, 0, 1365)
+    function uiParent:GetWidth() return 1365 end
+    local env = setmetatable({
+        dockFrame = dock, UIParent = uiParent, DockMouse = function() end, mmax = math.max,
+        Look = { ScreenRect = function(r)
+            local l, b, w, h = r:GetRect()
+            return l, b + h, l + w, b
+        end },
+    }, { __index = _G })
+    assert(load(src:sub(s, e - 1), "=GPS.lua Look.PlaceUnderQuestie", "t", env))()
+    env.Look.PlaceUnderQuestie(q)
+    return dock, uiParent
+end
+
+function tests.hangsUnderQuestiesTracker()
+    local dock, uiParent = UnderQuestie(1000, 470, 184)
+    local p, rel, _, x, y = dock:GetPoint(1)
+    H.assertEq(p, "TOPLEFT")
+    H.assertEq(rel, uiParent)
+    H.assertEq(x, 1000, "Questie's left")
+    H.assertEq(y, 464, "its bottom less the gap")
+    H.assertEq(dock.width, 240, "a section wide at least")
+end
+
+function tests.underQuestieStaysOnScreen()
+    local dock = UnderQuestie(1200, 470, 150)
+    local _, _, _, x = dock:GetPoint(1)
+    H.assertEq(x, 1365 - 240, "moved left to fit")
+end
+
+-- Questie's look: the game's font at Questie's sizes (12 its zone line,
+-- 10 its titles and objectives) with its shadow, grown with its scale.
+function tests.questiesLookTakesItsFontSizesAndShadow()
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("-- Questie's tracker as it draws", 1, true), "Look.Q not in GPS.lua")
+    local e = assert(src:find("-- ClassicUI's fold button", s, true), "end of Look.Restyle not found")
+    local env = setmetatable({ Look = { FONT = "Fonts\\FRIZQT__.TTF" }, mfloor = math.floor }, { __index = _G })
+    assert(load(src:sub(s, e - 1), "=GPS.lua Look.Restyle", "t", env))()
+    local function FS()
+        local fs = {}
+        function fs:SetFont(file, size, flags) self.file, self.size, self.flags = file, size, flags end
+        function fs:SetShadowColor(r, g, b, a) self.shadow = { r, g, b, a } end
+        function fs:SetShadowOffset(x, y) self.offset = { x, y } end
+        return fs
+    end
+    local header, title, line = FS(), FS(), FS()
+    env.Look.Restyle(header, "questie", 12, "ObjectiveTrackerHeaderFont")
+    env.Look.Restyle(title, "questie", 11, "ObjectiveTrackerLineFont")
+    env.Look.Restyle(line, "questie", 10, "ObjectiveTrackerLineFont")
+    H.assertEq(header.file, "Fonts\\FRIZQT__.TTF")
+    H.assertEq(header.size, 12, "the zone line's size")
+    H.assertEq(title.size, 10, "a quest title's size")
+    H.assertEq(line.size, 10, "an objective's size")
+    H.assertEq(line.offset[1], 1)
+    H.assertEq(line.offset[2], -1)
+    env.Look.Q.k = 1.5
+    env.Look.Restyle(line, "questie", 10, "ObjectiveTrackerLineFont")
+    H.assertEq(line.size, 15, "Questie's frame scaled up: the lines with it")
+end
+
 -- Snapped in when the tracker goes: the window, and the next open snaps
 -- back in.
 function tests.aTrackerGoneLeavesForTheWindowRememberingTheSnap()
     local f = assert(io.open(H.Path("GPS.lua"), "rb"))
     local src = f:read("*a")
     f:close()
-    local s = assert(src:find("local function PlaceDock()", 1, true), "PlaceDock not in GPS.lua")
+    local s = assert(src:find("function Look.HangDock(", 1, true), "Look.HangDock not in GPS.lua")
     local e = assert(src:find("-- A drag in progress over the tracker", s, true), "end of PlaceDock not found")
     local db = { gpsDocked = true }
     local dock = { docked = true, look = "game" }
@@ -536,7 +623,7 @@ function tests.aTrackerGoneLeavesForTheWindowRememberingTheSnap()
     function GPS:TogglePopout(show) window = show end
     local env = setmetatable({
         dockFrame = dock, GPS = GPS, DB = function() return db end, Host = function() return nil end,
-        SectionLook = function() return "game" end,
+        SectionLook = function() return "game" end, Look = {},
     }, { __index = _G })
     assert(load(src:sub(s, e - 1) .. "\nreturn PlaceDock", "=GPS.lua PlaceDock", "t", env))()()
     H.assertTrue(window, "the window shows the route")
