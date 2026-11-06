@@ -3627,6 +3627,13 @@ local function ClientTracker()
     return nil
 end
 
+-- The game's tracker while it is up: it hides itself with nothing to
+-- show, and another tracker (Questie's) hides it too.
+local function ShownTracker()
+    local t = ClientTracker()
+    return t and t:IsShown() and t or nil
+end
+
 -- What the section snaps into: "game" the game's tracker, "classic" that
 -- tracker restyled by ClassicUI Forever, "era" its Era quest watch, or nil
 -- with none to snap into (its tracker hidden, or a watch without room).
@@ -3639,9 +3646,9 @@ local function Host()
     if db and db.objectiveTrackerHidden then return nil end
     if Replacement then
         if Replacement("hideObjectiveTracker") then return nil end
-        if Replacement("questTracker") then return ClientTracker() and "classic" or nil end
+        if Replacement("questTracker") then return ShownTracker() and "classic" or nil end
     end
-    return ClientTracker() and "game" or nil
+    return ShownTracker() and "game" or nil
 end
 
 -- The game's tracker, while the section snaps into it.
@@ -4052,9 +4059,12 @@ local function PlaceDock()
     if (dockFrame.docked or dockFrame.floating) and dockFrame.look ~= SectionLook(dockFrame) then
         return RenderDock(dockFrame)
     end
-    -- Nothing left to snap into (ClassicUI's tracker hidden): the window.
+    -- Nothing left to snap into (the tracker hidden or emptied): the window,
+    -- snapped back in on the next open.
     if dockFrame.docked and not (dockFrame.dragging or dockFrame.ghost) and Host() == nil then
         GPS:Undock()
+        local db = DB()
+        if db then db.gpsDocked = true end
         return GPS:TogglePopout(true)
     end
     local watch, api = Watch()

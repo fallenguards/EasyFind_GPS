@@ -482,5 +482,67 @@ function tests.snappingOffOpensTheWindow()
     H.assertTrue(window.shown and not dock.shown)
 end
 
+-- Host and Tracker cut from GPS.lua over a stub game tracker, shown or
+-- hidden (empty, or Questie's tracker in its place), and ClassicUI's picks.
+local function Hosts(shown, picks)
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("local function ClientTracker()", 1, true), "ClientTracker not in GPS.lua")
+    local e = assert(src:find("-- The Era watch and its API", s, true), "end of Tracker not found")
+    local tracker = { modules = {} }
+    function tracker:IsShown() return shown end
+    local env = setmetatable({
+        _G = { ObjectiveTrackerFrame = tracker },
+        ns = { SearchOpeners = picks and { Replacement = function(name) return picks[name] end } or nil },
+        DB = function() return {} end,
+    }, { __index = _G })
+    return assert(load(src:sub(s, e - 1) .. "\nreturn Host, Tracker", "=GPS.lua Host", "t", env))()
+end
+
+function tests.snapsIntoTheGamesTrackerWhileItIsUp()
+    local Host, Tracker = Hosts(true)
+    H.assertEq(Host(), "game")
+    H.assertTrue(Tracker() ~= nil)
+end
+
+function tests.noSnapIntoAHiddenTracker()
+    local Host, Tracker = Hosts(false)
+    H.assertNil(Host(), "hidden: empty, or Questie's tracker up instead")
+    H.assertNil(Tracker(), "no drop zone over it")
+end
+
+function tests.classicUIsTrackerOnlyWhileItIsUp()
+    H.assertEq((Hosts(true, { questTracker = true })()), "classic")
+    H.assertNil((Hosts(false, { questTracker = true })()))
+end
+
+-- Snapped in when the tracker goes: the window, and the next open snaps
+-- back in.
+function tests.aTrackerGoneLeavesForTheWindowRememberingTheSnap()
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("local function PlaceDock()", 1, true), "PlaceDock not in GPS.lua")
+    local e = assert(src:find("-- A drag in progress over the tracker", s, true), "end of PlaceDock not found")
+    local db = { gpsDocked = true }
+    local dock = { docked = true, look = "game" }
+    local window = false
+    local GPS = {}
+    function GPS:Undock()
+        db.gpsDocked = nil
+        dock.docked = nil
+    end
+    function GPS:TogglePopout(show) window = show end
+    local env = setmetatable({
+        dockFrame = dock, GPS = GPS, DB = function() return db end, Host = function() return nil end,
+        SectionLook = function() return "game" end,
+    }, { __index = _G })
+    assert(load(src:sub(s, e - 1) .. "\nreturn PlaceDock", "=GPS.lua PlaceDock", "t", env))()()
+    H.assertTrue(window, "the window shows the route")
+    H.assertNil(dock.docked)
+    H.assertTrue(db.gpsDocked, "remembered as snapped in")
+end
+
 local pass, fail, failures = H.runSuite("GPSDock", tests)
 return { pass = pass, fail = fail, failures = failures }
