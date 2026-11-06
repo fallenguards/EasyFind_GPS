@@ -1073,6 +1073,26 @@ local function OffRoute(route, ci, px, py)
     return true
 end
 
+-- A walk on to another walk is done once its spot is passed: within
+-- PASS_YARDS of it and nearer the next step's spot than it is, a corner
+-- cut past it. The walk on is found from there and joins ahead, never
+-- back to the spot: the shortest walk from here to the next spot is never
+-- longer than the one by this spot, and still goes by it where it must.
+-- A field, not a local: the file is at Lua's 200 locals.
+function GPS.StepPassed(route, ci, px, py)
+    local PASS_YARDS, PASS_MARGIN = 250, 20
+    local i = route.active or 1
+    local step, nxt = route.steps[i], route.steps[i + 1]
+    if not (step and nxt and step.kind == "travel" and nxt.kind == "travel") then return false end
+    if step.fly or nxt.fly or step.corpse or step.inside then return false end
+    local sci, sx, sy = PointWorld(step.arrive or step.go)
+    local nci, nx, ny = PointWorld(nxt.go or nxt.arrive)
+    if not (sci and nci and sci == ci and nci == ci) then return false end
+    if (px - sx) ^ 2 + (py - sy) ^ 2 > PASS_YARDS * PASS_YARDS then return false end
+    local toNext = ((px - nx) ^ 2 + (py - ny) ^ 2) ^ 0.5
+    return toNext < ((sx - nx) ^ 2 + (sy - ny) ^ 2) ^ 0.5 - PASS_MARGIN
+end
+
 -- The route again from where the player stands, to the same place. A stop
 -- to learn a flight master stays until that master is learned.
 local function Reroute(route)
@@ -1213,6 +1233,10 @@ local function Tick()
         end
     else
         offRoute.ticks = 0
+    end
+    if not planned and GPS.StepPassed(route, ci, px, py) then
+        TrackStep((route.active or 1) + 1)
+        return
     end
     -- A step is done where it lands you (the far side of a portal or a
     -- flight), which is not always where it starts.
