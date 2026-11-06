@@ -3691,6 +3691,34 @@ function GPS.WorldPinRow()
         end }
 end
 
+-- The menu row for the arrow at the character (on unless turned off). It
+-- points only while the route is tracked, so a route let go for a quest
+-- shows it off, and checking it tracks the route again: the way back to a
+-- lost arrow from every surface's menu.
+function GPS.ArrowRow()
+    return { kind = "check", label = L["GPS_ARROW"], tooltip = L["GPS_ARROW_MENU_TT"],
+        get = function()
+            local db, route = DB(), Route()
+            return not (db and db.gpsArrow == false) and not (route and route.untracked)
+        end,
+        set = function(v)
+            local db, route = DB(), Route()
+            if db then db.gpsArrow = Utils.OffOrNil(v) end
+            if v and route and route.untracked then ToggleRouteTracking() end
+            Refresh()
+        end }
+end
+
+-- Back under the character, shown only while it has a place of its own.
+function GPS.ArrowResetRow()
+    local db = DB()
+    if not (db and db.gpsArrowPos) then return nil end
+    return { kind = "action", label = L["GPS_ARROW_RESET_MENU"], onClick = function()
+        local Arrow = ns.GPSArrow
+        if Arrow and Arrow.ResetPlace then Arrow.ResetPlace() else db.gpsArrowPos = nil end
+    end }
+end
+
 -- The menu row for learning cheap flight points on the way (on unless
 -- turned off); the trip on screen is planned again either way.
 -- The menu rows for two of the advice lines: a detour to learn a flight
@@ -5758,6 +5786,8 @@ function GPS.MenuRows(f)
         end }
     end
     defs[#defs + 1] = { kind = "separator" }
+    defs[#defs + 1] = GPS.ArrowRow()
+    defs[#defs + 1] = GPS.ArrowResetRow()
     defs[#defs + 1] = GPS.SnapRow()
     defs[#defs + 1] = GPS.LaunchRow()
     defs[#defs + 1] = GPS.PlanningMenu(f)

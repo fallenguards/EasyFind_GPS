@@ -125,7 +125,8 @@ local function MenuRows()
     local GPS = {
         WorldPinRow = row("GPS_WORLD_PIN"), SnapRow = row("GPS_SNAP_TRACKER"), AutoLearnRow = row("GPS_AUTO_LEARN"),
         DetoursRow = row("GPS_SHOW_DETOURS"), OtherWaysRow = row("GPS_SHOW_OTHER_WAYS"), LaunchRow = row("GPS_LAUNCH_WINDOW"),
-        HideDoneRow = row("GPS_HIDE_DONE"), NextOnlyRow = row("GPS_SIZE_NEXT_ONLY"),
+        HideDoneRow = row("GPS_HIDE_DONE"), NextOnlyRow = row("GPS_SIZE_NEXT_ONLY"), ArrowRow = row("GPS_ARROW"),
+        ArrowResetRow = function() return nil end,
         ListChoiceRow = function(_, which) return { kind = "check", label = which } end,
         StyleMenu = function() return { kind = "submenu", label = "GPS_STYLE", rows = {} } end,
         PlanningMenu = function(frame) return { kind = "submenu", label = "GPS_PLANNING", rows = {}, window = frame and frame.isPopout } end,
@@ -164,7 +165,7 @@ end
 function tests.everySurfaceHasTheSameMenu()
     local rowsFor = MenuRows()
     local shared = { "GPS_CLEAR", "GPS_FROM_PICK", "CTX_SEND_LINK", "GPS_REPORT",
-        "Show", "GPS_SNAP_TRACKER", "GPS_PLANNING", "GPS_LAUNCH_WINDOW" }
+        "Show", "GPS_ARROW", "GPS_SNAP_TRACKER", "GPS_PLANNING", "GPS_LAUNCH_WINDOW" }
     for _, s in ipairs({
         { name = "snapped in", f = { docked = true } },
         { name = "floating", f = { floating = true, look = "game" }, style = true },
@@ -186,6 +187,61 @@ function tests.everySurfaceHasTheSameMenu()
         H.assertEq(has.GPS_STYLE == true, s.style == true, s.name .. ": style rows")
         H.assertEq(has.GPS_SIZE_WIDTH == true, s.size == true, s.name .. ": width rows")
     end
+end
+
+-- The arrow's rows cut from GPS.lua: the check reads off while a quest
+-- holds the tracking and checking it tracks the route again (the way back
+-- to a lost arrow); the reset row only while the arrow has a place.
+local function ArrowRows(db, route)
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("function GPS.ArrowRow()", 1, true), "GPS.ArrowRow not in GPS.lua")
+    local _, e = src:find("\nfunction GPS.ArrowResetRow%(%).-\nend\r?\n", s)
+    assert(e, "GPS.ArrowResetRow not after GPS.ArrowRow")
+    local seen = { tracked = 0, refreshed = 0, reset = 0 }
+    local GPS = {}
+    local env = setmetatable({
+        GPS = GPS, L = setmetatable({}, { __index = function(_, k) return k end }),
+        DB = function() return db end, Route = function() return route end,
+        Utils = { OffOrNil = function(on) if on then return nil end return false end },
+        ToggleRouteTracking = function() seen.tracked = seen.tracked + 1 route.untracked = nil end,
+        Refresh = function() seen.refreshed = seen.refreshed + 1 end,
+        ns = { GPSArrow = { ResetPlace = function() seen.reset = seen.reset + 1 db.gpsArrowPos = nil end } },
+    }, { __index = _G })
+    assert(load(src:sub(s, e), "=GPS.lua ArrowRow", "t", env))()
+    return GPS, seen
+end
+
+function tests.theArrowRowTracksALetGoRouteAgain()
+    local db, route = {}, { untracked = true }
+    local GPS, seen = ArrowRows(db, route)
+    local row = GPS.ArrowRow()
+    H.assertEq(row.kind, "check")
+    H.assertEq(row.label, "GPS_ARROW")
+    H.assertTrue(not row.get(), "off while a quest holds the tracking")
+    row.set(true)
+    H.assertEq(seen.tracked, 1, "checking it tracks the route again")
+    H.assertTrue(row.get(), "on once the route is tracked")
+    H.assertEq(db.gpsArrow, nil, "the setting is on")
+    row.set(false)
+    H.assertEq(db.gpsArrow, false, "unchecked, the setting is off")
+    H.assertEq(seen.tracked, 1, "turning it off leaves the tracking")
+    row.set(true)
+    H.assertEq(seen.tracked, 1, "a tracked route is not tracked again")
+    H.assertTrue(seen.refreshed >= 3, "every flip redraws the arrow")
+end
+
+function tests.theArrowResetRowShowsOnlyForAMovedArrow()
+    local db = {}
+    local GPS, seen = ArrowRows(db, nil)
+    H.assertEq(GPS.ArrowResetRow(), nil, "no row while the arrow is in its home place")
+    db.gpsArrowPos = { x = 10, y = 20 }
+    local row = GPS.ArrowResetRow()
+    H.assertEq(row.label, "GPS_ARROW_RESET_MENU")
+    row.onClick()
+    H.assertEq(seen.reset, 1)
+    H.assertEq(db.gpsArrowPos, nil, "back to its home place")
 end
 
 -- The map's page: its menu opens the window, never closes one.
