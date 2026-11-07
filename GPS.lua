@@ -5559,9 +5559,13 @@ end
 -- Learning flight paths on the way and the advice lines under the route;
 -- under a line, which steps the list shows (the next alone: the window's).
 function GPS.PlanningMenu(f)
+    -- Listed on each open: a click redraws the flyout with its checks.
+    local function avoid()
+        local out = {}
+        for _, kind in ipairs(GPS.AvoidKinds()) do out[#out + 1] = CheckFlyoutRow(GPS.AvoidRow(kind)) end
+        return out
+    end
     return { kind = "submenu", label = L["GPS_PLANNING"], rows = function()
-        local avoid = {}
-        for _, kind in ipairs(GPS.AvoidKinds()) do avoid[#avoid + 1] = CheckFlyoutRow(GPS.AvoidRow(kind)) end
         local rows = { CheckFlyoutRow(GPS.AutoLearnRow()), CheckFlyoutRow(GPS.DetoursRow()),
                        CheckFlyoutRow(GPS.OtherWaysRow()), { text = L["GPS_AVOID"], submenu = avoid },
                        { isSeparator = true }, CheckFlyoutRow(GPS.HideDoneRow()) }

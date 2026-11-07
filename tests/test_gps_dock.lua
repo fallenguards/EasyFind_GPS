@@ -332,12 +332,16 @@ function tests.planningAndBorderAreFlyoutSwitches()
     H.assertTrue(planning.rows()[2].icon ~= nil, "listed anew, it is ticked")
     -- Avoid: a flyout of its own inside planning, the settings page's switches.
     H.assertEq(rows[4].text, "GPS_AVOID")
-    local avoid = rows[4].submenu
+    -- A function: the flyout lists it anew after a click (a table never redrew its checks).
+    H.assertEq(type(rows[4].submenu), "function", "listed on each open, so a click redraws its checks")
+    local avoid = rows[4].submenu()
     H.assertEq(#avoid, 2, "one switch per way of travel")
     H.assertEq(avoid[2].text, "GPS_AVOID_BOAT")
     H.assertTrue(avoid[2].keepOpen, "a click keeps it open")
+    H.assertNil(avoid[2].icon, "off: no tick")
     avoid[2].onClick()
     H.assertTrue(on.avoid_boat, "the click flips it")
+    H.assertTrue(rows[4].submenu()[2].icon ~= nil, "listed anew, it is ticked")
     H.assertTrue(rows[5].isSeparator, "a line before the step-list switches")
     H.assertEq(rows[6].text, "GPS_HIDE_DONE")
     local window = GPS.PlanningMenu({ isPopout = true }).rows()
