@@ -657,6 +657,35 @@ local function Within(i, set, pci, px, py, r2)
     return false
 end
 
+-- The name (as the client shows it) of the creature with the English
+-- title nearest (x, y) within r yards, skipping one that stands nearer a
+-- spot of others ({ { wx, wy }, ... }: a tower's other docks); or nil.
+function N.TitledNear(title, ci, x, y, r, others)
+    if not Load() then return nil end
+    local want = slower(title)
+    local best, bestD
+    for t = 1, #N.titleLow do
+        if (N.titleLowEnglish[t] or N.titleLow[t]) == want then
+            for o = At(N.titleAt, t) + 1, At(N.titleAt, t + 1) do
+                local i = At(N.titleCreatures, o)
+                local first, last = SpotRange(i)
+                for k = first, last do
+                    local sci, wx, wy = SpotWorld(k)
+                    local d = sci == ci and wx and (wx - x) ^ 2 + (wy - y) ^ 2
+                    if d and d <= r * r and (not bestD or d < bestD) then
+                        local mine = true
+                        for _, p in ipairs(others or {}) do
+                            if (wx - p[1]) ^ 2 + (wy - p[2]) ^ 2 < d then mine = false end
+                        end
+                        if mine then best, bestD = i, d end
+                    end
+                end
+            end
+        end
+    end
+    return best and Name(best) or nil
+end
+
 -- The spot to show: of those on the set's maps (within r2 of the point
 -- when given), the nearest to the point, else the one with the most spawns.
 local function BestSpot(i, set, pci, px, py, r2)

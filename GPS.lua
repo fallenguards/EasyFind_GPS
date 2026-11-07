@@ -61,6 +61,7 @@ local GetAtlasInfo = C_Texture.GetAtlasInfo
 -- Arrival rings: a step's spot; the last step to a creature or other spot
 -- (beside it); a crossing's far spot, where it drops you, give or take.
 local ARRIVE = { yards = 40, spot = 8, cross = 300 }
+local LEFT_DOCK_YARDS = 400   -- a zeppelin's step, this far from its dock unridden: off the route
 -- A lift: its near door's reach, and the far door's for one stepped off.
 local LIFT_YARDS, LIFT_OFF = 15, 3
 local LIFT_ABOARD = 6   -- on its platform: this near the middle of its doors
@@ -1056,7 +1057,16 @@ local function OffRoute(route, ci, px, py)
         -- where it lands. A ride in progress is always on one of the two.
         local gci = step.go and PointWorld(step.go) or fci
         local aci = step.arrive and PointWorld(step.arrive) or gci
-        return ci ~= nil and gci ~= nil and ci ~= gci and ci ~= aci and ci ~= fci
+        if ci ~= nil and gci ~= nil and ci ~= gci and ci ~= aci and ci ~= fci then return true end
+        -- The tower's other zeppelin taken: landed far from both ends, not carried.
+        local Boats = ns.GPSBoats
+        if step.kind == "zeppelin" and ci ~= nil and ci == gci and not (Boats and Boats.Carried and Boats.Carried()) then
+            local _, gx, gy = PointWorld(step.go)
+            local _, ax, ay = PointWorld(step.arrive)
+            local nearEnd = aci == ci and ax and (px - ax) ^ 2 + (py - ay) ^ 2 <= ARRIVE.cross * ARRIVE.cross
+            return gx ~= nil and not nearEnd and (px - gx) ^ 2 + (py - gy) ^ 2 > LEFT_DOCK_YARDS * LEFT_DOCK_YARDS
+        end
+        return false
     end
     local tci, tx, ty = PointWorld(step.go or step.arrive)
     if not (fci and tci and fci == tci) then return false end
@@ -1285,8 +1295,11 @@ local function Tick()
     local crossing = step.kind ~= "travel"
     -- A crossing to another continent is done the moment you are on it;
     -- one that stays on this continent is done near its far spot.
-    if not (crossing and step.go and step.go.ci ~= sci) then
-        local radius = crossing and ARRIVE.cross or ARRIVE.yards
+    -- The walk to a dock reached by a tight ring: carried off, it is done.
+    local Boats = ns.GPSBoats
+    local carried = step.arriveYards and Boats and Boats.Carried and Boats.Carried()
+    if not carried and not (crossing and step.go and step.go.ci ~= sci) then
+        local radius = crossing and ARRIVE.cross or step.arriveYards or ARRIVE.yards
         -- The marks stay on a creature until the player stands beside it
         -- (several stand in a town); an entrance keeps the wider ring.
         local dest = route.dest
