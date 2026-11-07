@@ -201,5 +201,16 @@ function tests.onTheRingAboveIt_notArrived()
     H.assertTrue(ns.GPSFloors.SameLevel(0, CAIN[1], CAIN[2]), "beside the auctioneer")
 end
 
+-- The Royal Quarter lies under a Tirisfal lake, and the bake once took
+-- every floor under the water for the lake's (2026-11-07): from the ring
+-- the walk went out and round by the sewers, 1,880 yd.
+function tests.theRoyalQuarter_walkedToThroughTheCity()
+    for _, client in ipairs({ CLIENTS[3] }) do
+        local ns = Load(client, { sub = "" })
+        local cost = ns.GPSNav.Walk(0, 1385.1, 341.7, 1341.7, 310.2)
+        H.assertTrue(cost ~= nil and cost < 700, client.walk .. ": ring to Royal Quarter " .. tostring(cost))
+    end
+end
+
 local pass, fail, failures = H.runSuite("GPS floors", tests)
 return { pass = pass, fail = fail, failures = failures }
