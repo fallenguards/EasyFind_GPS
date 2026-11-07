@@ -4,6 +4,20 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.5.0] - 2026-11-07
+
+### Added
+- **Arrow in the GPS window's menu**: right-click the GPS window for an Arrow at your character row, and Reset arrow position once the arrow has been moved. When a quest takes the tracking and the arrow goes away, checking the row tracks the route again
+
+### Fixed
+- **Walking routes**: a step's spot you walk past on your way to the next one no longer sends you back to it
+- **GPS window**: bags and other windows opened after it now cover it; it still sits above the action bars
+- **Thunder Bluff, Freewind Post and the Great Lift**: walks take their lifts. With no flight path known, a trip to Thunder Bluff walks to a lift instead of drawing a straight line, and ends at the lift's foot, where you are in the city
+- **Undercity on WoW Forever**: a trip to the Royal Quarter goes down an elevator and through the city instead of out and round through the sewers
+- **Routes from another start**: no line is drawn from where you stand to the first step until you reach the route's start
+
+---
+
 ## [1.4.0] - 2026-11-06
 
 ### Added
