@@ -1550,14 +1550,6 @@ function Route:Build(dest, opts)
     local goal = Resolve({ m = dest.mapID, x = dest.x, y = dest.y })
     if not goal then return nil end
     local Nav = ns.GPSNav
-    local gate = dest.zone and data.gates and data.gates[dest.mapID]
-    if gate then
-        -- A city's gate stands for its middle (Undercity's lies underground).
-        goal = Resolve({ m = gate.m, x = gate.x, y = gate.y, ci = gate.ci, wx = gate.wx, wy = gate.wy }) or goal
-    elseif dest.zone and Nav and Nav.Ground then
-        local wx, wy = Nav.Ground(goal.ci, goal.wx, goal.wy, ZONE_GROUND_CELLS)
-        if wx then goal = { m = goal.m, x = goal.x, y = goal.y, ci = goal.ci, wx = wx, wy = wy } end
-    end
     local start = opts.start
     if not start then
         local m = C_Map.GetBestMapForUnit("player")
@@ -1569,6 +1561,23 @@ function Route:Build(dest, opts)
         end
     end
     if not start then return nil end
+    local gate = dest.zone and data.gates and data.gates[dest.mapID]
+    -- A city with several ways in (Thunder Bluff's lifts): the nearest.
+    if gate and gate[1] then
+        local best, bestD = gate[1], mhuge
+        for _, p in ipairs(gate) do
+            local d = p.ci == start.ci and (p.wx - start.wx) ^ 2 + (p.wy - start.wy) ^ 2 or mhuge
+            if d < bestD then best, bestD = p, d end
+        end
+        gate = best
+    end
+    if gate then
+        -- A city's gate stands for its middle (Undercity's lies underground).
+        goal = Resolve({ m = gate.m, x = gate.x, y = gate.y, ci = gate.ci, wx = gate.wx, wy = gate.wy }) or goal
+    elseif dest.zone and Nav and Nav.Ground then
+        local wx, wy = Nav.Ground(goal.ci, goal.wx, goal.wy, ZONE_GROUND_CELLS)
+        if wx then goal = { m = goal.m, x = goal.x, y = goal.y, ci = goal.ci, wx = wx, wy = wy } end
+    end
     local known, listed, names
     if opts.known ~= nil then
         known, listed = opts.known or nil, opts.listed
