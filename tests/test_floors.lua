@@ -205,7 +205,7 @@ end
 -- every floor under the water for the lake's (2026-11-07): from the ring
 -- the walk went out and round by the sewers, 1,880 yd.
 function tests.theRoyalQuarter_walkedToThroughTheCity()
-    for _, client in ipairs({ CLIENTS[3] }) do
+    for _, client in ipairs(CLIENTS) do
         local ns = Load(client, { sub = "" })
         local cost = ns.GPSNav.Walk(0, 1385.1, 341.7, 1341.7, 310.2)
         H.assertTrue(cost ~= nil and cost < 700, client.walk .. ": ring to Royal Quarter " .. tostring(cost))
