@@ -5139,11 +5139,46 @@ function GPS.DragProbe()
     return out
 end
 
+-- A GPS window on the game windows' layer: raised when it opens or is
+-- clicked, so it covers the bars and a bag opened after it covers it.
+function GPS.RaiseLikeAWindow(window)
+    local function Lift()
+        if window.docked then return end
+        window:Raise()
+        -- Cast buttons hang from UIParent: back over their rows.
+        if InCombatLockdown and InCombatLockdown() then return end
+        for i = 1, #castButtons do
+            local btn = castButtons[i]
+            if btn:IsShown() and btn.row:IsVisible() then btn:SetFrameLevel(btn.row:GetFrameLevel() + 3) end
+        end
+    end
+    local function Clicked()
+        local foci = GetMouseFoci and GetMouseFoci() or { GetMouseFocus and GetMouseFocus() }
+        for i = 1, #foci do
+            local f, depth = foci[i], 0
+            while f and depth < 8 and not f:IsForbidden() do
+                if f == window then return Lift() end
+                f, depth = f:GetParent(), depth + 1
+            end
+        end
+    end
+    local catch = CreateFrame("Frame", nil, window)
+    catch:SetScript("OnShow", function(self)
+        Lift()
+        Utils.RegisterEventIfValid(self, "GLOBAL_MOUSE_DOWN")
+    end)
+    catch:SetScript("OnHide", function(self) self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end)
+    catch:SetScript("OnEvent", Clicked)
+    if window:IsVisible() then Utils.RegisterEventIfValid(catch, "GLOBAL_MOUSE_DOWN") end
+    window.Lift = Lift
+end
+
 local function BuildDock()
     local f = CreateFrame("Frame", "EasyFindGPSDock", UIParent)
     f:SetSize(260, DOCK_HEADER_H)
     f:SetFrameStrata("LOW")
     f:SetFrameLevel(5)
+    GPS.RaiseLikeAWindow(f)
     f:SetMovable(true)
     f:SetClampedToScreen(true)
     f.lines = {}
@@ -5462,8 +5497,7 @@ function GPS.FloatDockAt(left, top)
     if not dockFrame then return end
     dockFrame.docked = nil
     dockFrame.floating = true
-    -- Over the action bars, as the window.
-    dockFrame:SetFrameStrata("HIGH")
+    dockFrame:SetFrameStrata("MEDIUM")
     -- A section's width, floating or not.
     local t = ClientTracker()
     local ref = t and t.modules and t.modules[1]
@@ -5483,6 +5517,7 @@ function GPS.FloatDockAt(left, top)
     end
     dockFrame:SetAlpha(1)
     dockFrame:Show()
+    dockFrame.Lift()
     -- A grip the game stopped drawing (shown, yet not visible under a
     -- visible header) comes back with a hide and show.
     if dockFrame.grip and dockFrame.head and dockFrame.head:IsVisible() and not dockFrame.grip:IsVisible() then
@@ -5833,8 +5868,8 @@ local function BuildPopout()
     -- Its Classic frame at a window's full weight.
     f._efClassicStyle = "window"
     f:SetSize((PopoutSize()), 120)
-    -- Over the action bars, which share MEDIUM and cut into a window there.
-    f:SetFrameStrata("HIGH")
+    f:SetFrameStrata("MEDIUM")
+    GPS.RaiseLikeAWindow(f)
     f:SetClampedToScreen(true)
     f:SetMovable(true)
     f:EnableMouse(true)
