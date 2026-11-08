@@ -506,6 +506,16 @@ function tests.loginWarm_fillsTheTablesAhead()
     H.assertEq(find(append, "vermin")[1].name, "Koboldungeziefer")
 end
 
+-- A creature by its English name on another client: the core's named
+-- places (a weapon master) ask with the English name they ship.
+function tests.byName_findsInEitherLanguage()
+    local _, Npcs = fresh("Koboldungeziefer\n\n\n")
+    local kobold = Npcs.ByName("Kobold Vermin")
+    H.assertEq(kobold.name, "Koboldungeziefer", "the English name finds, the client's shows")
+    H.assertEq(Npcs.ByName("koboldungeziefer").npcID, kobold.npcID)
+    H.assertNil(Npcs.ByName("Nobody"))
+end
+
 function tests.anItemFindsWhoSellsIt()
     local append = fresh(nil, nil, nil, GOODS)
     local rows = find(append, "sharp arrow")
@@ -518,6 +528,25 @@ function tests.anItemFindsWhoSellsIt()
     H.assertTrue(not table.concat(find(append, "brog")[1].keywords, ","):find("Arrow", 1, true),
         "and the item's keyword is gone")
     H.assertEq(#find(append, "sharp", 1433), 0, "a zone's own search keeps its own vendors")
+end
+
+-- "sharp arrow vendor", "buy arrow": the word for who sells names no item,
+-- so the item still matches and its vendors answer; the typed word rides
+-- along for the map search, which scores every word (2026-11-07: "salt
+-- vendor" found nothing while "salt" listed the vendors far down).
+function tests.aWordForWhoSells_leavesTheItemToMatch()
+    local append = fresh(nil, nil, nil, GOODS)
+    for _, q in ipairs({ "sharp arrow vendor", "vendor sharp arrow", "arrow seller", "arrow sells", "buy arrow",
+                         "sharp arrow merchant", "arrow shop" }) do
+        local rows = find(append, q)
+        H.assertEq(#rows, 1, q)
+        H.assertEq(rows[1].name, "Brog Hamfist", q)
+        H.assertEq(rows[1].matchNote, "Sells Sharp Arrow", q)
+    end
+    H.assertEq(table.concat(find(append, "arrow seller")[1].keywords, ","), "Sharp Arrow,seller")
+    H.assertEq(table.concat(find(append, "buy sharp arrow")[1].keywords, ","), "Sharp Arrow,buy")
+    H.assertEq(table.concat(find(append, "sharp arrow")[1].keywords, ","), "Sharp Arrow", "none typed, none added")
+    H.assertEq(#find(append, "water vendor"), 1, "the kobold sells it too, but will not serve the Alliance")
 end
 
 -- A creature named for the query still says what it sells that matches,

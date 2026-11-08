@@ -38,7 +38,7 @@ local ROLE_GROUP = { quest = 1, vendor = 2 + 256, trainer = 4, flight = 8, servi
 -- every client, the client's own beside them. Food, ammo and reagents are
 -- what a vendor sells.
 local SERVICES = {
-    { bits = 2, en = "vendor merchant", key = "NPC_WORDS_VENDOR" },
+    { bits = 2, en = "vendor vendors merchant seller sell sells buy shop", key = "NPC_WORDS_VENDOR" },
     { bits = 256, en = "repair", key = "NPC_WORDS_REPAIR" },
     { bits = 512, en = "food drink water", key = "NPC_WORDS_FOOD" },
     { bits = 1024, en = "ammo arrows bullets restock", key = "NPC_WORDS_AMMO" },
@@ -53,6 +53,8 @@ local SERVICES = {
 -- A trainer titled with a class's name (Hunter Trainer): no catalog role,
 -- its title marked as shipped (classTitle, dev/tools/npc_plain.py).
 local CLASS_TRAINER = 4096
+-- "salt vendor", "buy salt": the word asks for who sells, it names no item.
+local VENDOR = 2
 local FAR = math.huge
 
 -- The catalog as it ships (dev/tools/npc_plain.py), each part one string
@@ -72,7 +74,7 @@ local N = {
     titleAt = "", titleCreatures = "", roleIds = {},
     -- Per query word whether it names a service or title (wordRole) or a
     -- place (wordPlace); the places named and the maps of the chosen ones.
-    wordRole = {}, wordPlace = {}, placeHit = {}, placeWordsOf = {}, placeList = {}, placeWords = {}, mapSet = {},
+    wordRole = {}, wordPlace = {}, placeHit = {}, placeWordsOf = {}, placeList = {}, placeWords = {}, askWords = {}, mapSet = {},
     -- What vendors sell: per item (index j) its names (goodsText, goodsLow,
     -- goodsAt; goodsEn* in English), weapon type and stock lists, per
     -- creature the list it sells (Sells).
@@ -245,9 +247,11 @@ N.Name = Name
 function N.ByName(name)
     if not name or name == "" then return nil end
     if not (N.Load and N.Load()) then return nil end
-    local p = sfind(N.low, "\n" .. string.lower(name) .. "\n", 1, true)
+    local key = "\n" .. string.lower(name) .. "\n"
+    local p, at = sfind(N.low, key, 1, true), N.at
+    if not p and N.enLow then p, at = sfind(N.enLow, key, 1, true), N.enAt end
     if not p then return nil end
-    local i = LineAt(N.at, N.n, p + 1)
+    local i = LineAt(at, N.n, p + 1)
     local display = Rec.display(i)
     return { name = Name(i), npcID = Rec.id(i), displayID = display ~= 0 and display or nil }
 end
@@ -377,13 +381,18 @@ local function Sells(i)
     return l ~= 0 and l or nil
 end
 
+-- A query word that could name an item: not a place, not a word for who sells.
+local function GoodsWord(w)
+    return not N.wordPlace[w] and band(N.wordBits[w], VENDOR) == 0
+end
+
 -- Every word of the query in a name (low, or alt in English): 3 when the
 -- name starts with the first, 2 when a word in it does, else 1; 0 when not.
 local function WordsScore(low, alt)
-    local words, wordPlace = N.words, N.wordPlace
+    local words = N.words
     local score, first = 0, true
     for w = 1, #words do
-        if not wordPlace[w] then
+        if GoodsWord(w) then
             local word = words[w]
             local at = sfind(low, word, 1, true)
             local altAt = alt and sfind(alt, word, 1, true)
@@ -431,10 +440,10 @@ local function MatchGoods()
     end
     N.bestItem = nil
     if not LoadGoods() then return false end
-    local words, wordPlace = N.words, N.wordPlace
+    local words = N.words
     local first
     for w = 1, #words do
-        if not wordPlace[w] then
+        if GoodsWord(w) then
             first = words[w]
             break
         end
@@ -936,11 +945,11 @@ local function Row(i, k)
     -- left out, as every such vendor is, so the nearest leads (not a "Staff
     -- & Mace Merchant" across the world for quarter staff).
     local scoredAs = N.byItem[i] and N.bestItem or nil
-    local placeKey = N.placeKey
-    if poi.soldName ~= soldName or poi.placeKey ~= placeKey or poi.scoredAs ~= scoredAs then
-        poi.soldName, poi.placeKey, poi.scoredAs = soldName, placeKey, scoredAs
+    local placeKey, askKey = N.placeKey, N.askKey
+    if poi.soldName ~= soldName or poi.placeKey ~= placeKey or poi.askKey ~= askKey or poi.scoredAs ~= scoredAs then
+        poi.soldName, poi.placeKey, poi.askKey, poi.scoredAs = soldName, placeKey, askKey, scoredAs
         local keywords = poi.baseKeywords
-        if soldName or placeKey then
+        if soldName or placeKey or askKey then
             keywords = {}
             local item = scoredAs or j
             if item then
@@ -948,9 +957,11 @@ local function Row(i, k)
                 keywords[1] = it and N.typeName[it] or GoodsName(item)
                 if not it then keywords[2] = GoodsEnglishLow(item) end
             end
-            if placeKey then
-                for w = 1, #N.words do
-                    if N.wordPlace[w] then keywords[#keywords + 1] = N.words[w] end
+            -- The place words and the words for who sells ("vendor") typed
+            -- ride along too: the map search scores every word.
+            for w = 1, #N.words do
+                if N.wordPlace[w] or (askKey and band(N.wordBits[w], VENDOR) ~= 0) then
+                    keywords[#keywords + 1] = N.words[w]
                 end
             end
             if not scoredAs then
@@ -1301,6 +1312,17 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
         placeKey = tconcat(list, " ")
     end
     N.placeKey = placeKey
+    -- The words asking for who sells ("salt vendor", "buy salt").
+    local askKey
+    if goods then
+        local list = N.askWords
+        for p = #list, 1, -1 do list[p] = nil end
+        for w = 1, #words do
+            if band(wordBits[w], VENDOR) ~= 0 then list[#list + 1] = words[w] end
+        end
+        if #list > 0 then askKey = tconcat(list, " ") end
+    end
+    N.askKey = askKey
     local f = EasyFind.db and EasyFind.db.npcFilters
     local horde = UnitFactionGroup and UnitFactionGroup("player") == "Horde"
     -- Candidates: the creatures whose name, English name or title holds
