@@ -4169,12 +4169,13 @@ local function PlaceDock()
         return RenderDock(dockFrame)
     end
     -- Nothing left to snap into (the tracker hidden or emptied): the window,
-    -- snapped back in on the next open.
+    -- snapped back in when a tracker shows again.
     if dockFrame.docked and not (dockFrame.dragging or dockFrame.ghost) and Host() == nil then
         GPS:Undock()
+        GPS:TogglePopout(true)
         local db = DB()
         if db then db.gpsDocked = true end
-        return GPS:TogglePopout(true)
+        return GPS.AwaitHost(0)
     end
     local watch, api = Watch()
     if watch then return Look.PlaceInWatch(watch, api) end
@@ -5704,17 +5705,57 @@ function GPS:Dock(slot)
     return true
 end
 
+-- The tracker not up yet (Questie's shows a moment after a reload) or gone
+-- (hidden, emptied): the section waits for one and snaps in when it shows.
+-- The window opens meanwhile, after the grace, and leaves for the tracker
+-- on its return. The wait ends with the window closed or snapping off.
+local HOST_GRACE = 5
+function GPS.AwaitHost(grace)
+    if GPS.hostWait then return end
+    local started = GetTime()
+    GPS.hostWait = C_Timer.NewTicker(0.5, function()
+        local db, c = DB(), CharDB()
+        local wanted = db and db.gpsDocked and not db.gpsNeverDock and not (c and c.popoutOpen == false)
+        if not wanted or (dockFrame and dockFrame.docked) then return GPS.StopAwaitingHost() end
+        if dockFrame and dockFrame.dragging then return end
+        if Tracker() or Watch() then
+            GPS.StopAwaitingHost()
+            if GPS:Dock() then
+                if c then c.popoutOpen = true end
+                GPS.ShowWhileFolded()
+            end
+        elseif not GPS:IsWindowOpen() and GetTime() - started >= grace then
+            GPS:TogglePopout(true)
+            db.gpsDocked = true
+        end
+    end)
+end
+
+function GPS.StopAwaitingHost()
+    if GPS.hostWait then
+        GPS.hostWait:Cancel()
+        GPS.hostWait = nil
+    end
+end
+
 -- The window as it was left: snapped into the tracker when it was there
--- (and there is one), else the window at its last spot.
-function GPS:OpenWindow()
+-- (and there is one), else the window at its last spot. atLogin: the
+-- tracker may be a moment away, so the window waits for it too.
+function GPS:OpenWindow(atLogin)
     local db = DB()
-    if db and db.gpsDocked and not db.gpsNeverDock and GPS:Dock() then
+    local snap = db and db.gpsDocked and not db.gpsNeverDock
+    if snap and GPS:Dock() then
         local c = CharDB()
         if c then c.popoutOpen = true end
         GPS.ShowWhileFolded()
         return
     end
+    if snap then
+        GPS.AwaitHost(atLogin and HOST_GRACE or 0)
+        if atLogin then return end
+    end
     GPS:TogglePopout(true)
+    if snap then db.gpsDocked = true end
 end
 
 -- Opened or routed to with the tracker folded: the section shows on its
@@ -6790,7 +6831,7 @@ loginFrame:SetScript("OnEvent", function(self, event, unit, _, spellID)
     local c = CharDB()
     -- Open as it was left; nil while snapped in is a save from before
     -- closing it was remembered.
-    if c and (c.popoutOpen or (c.popoutOpen == nil and db and db.gpsDocked)) then GPS:OpenWindow() end
+    if c and (c.popoutOpen or (c.popoutOpen == nil and db and db.gpsDocked)) then GPS:OpenWindow(true) end
     local route = Route()
     if not route then return end
     -- A route is for the trip in progress; one left from another day is

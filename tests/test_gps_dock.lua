@@ -90,6 +90,101 @@ function tests.backInItsSlotAfterADrag()
     H.assertEq(rel, uiParent, "back under the tracker, not on the window")
 end
 
+-- GPS.AwaitHost and GPS:OpenWindow cut from GPS.lua, with the tracker, the
+-- ticker and the clock in the test's hands.
+local function LoadOpen()
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("local HOST_GRACE = 5", 1, true), "HOST_GRACE not in GPS.lua")
+    local e = assert(src:find("-- Opened or routed to with the tracker folded", s, true), "end of OpenWindow not found")
+    local w = { now = 0, host = nil, open = false, docked = 0, db = { gpsDocked = true }, c = {} }
+    local GPS = {
+        Dock = function() if w.host then w.docked = w.docked + 1 return true end return false end,
+        TogglePopout = function(_, show) w.open = show w.db.gpsDocked = nil end,
+        IsWindowOpen = function() return w.open end,
+        ShowWhileFolded = function() end,
+    }
+    local env = setmetatable({
+        GPS = GPS,
+        DB = function() return w.db end,
+        CharDB = function() return w.c end,
+        Tracker = function() return w.host end,
+        Watch = function() return nil end,
+        GetTime = function() return w.now end,
+        C_Timer = { NewTicker = function(_, fn)
+            local t = { fn = fn }
+            function t:Cancel() self.cancelled = true end
+            w.ticker = t
+            return t
+        end },
+    }, { __index = _G })
+    assert(load(src:sub(s, e - 1), "=GPS.lua OpenWindow", "t", env))()
+    function w.Tick()
+        w.now = w.now + 0.5
+        if w.ticker and not w.ticker.cancelled then w.ticker.fn() end
+    end
+    return GPS, w
+end
+
+-- After a reload Questie's tracker shows a moment late: the section waits
+-- for it and snaps in, no window in between.
+function tests.atLogin_waitsForTheTrackerAndSnapsIn()
+    local GPS, w = LoadOpen()
+    GPS:OpenWindow(true)
+    H.assertEq(w.open, false, "no window while the tracker may be a moment away")
+    w.Tick()
+    H.assertEq(w.docked, 0)
+    w.host = {}
+    w.Tick()
+    H.assertEq(w.docked, 1, "snapped in as the tracker showed")
+    H.assertEq(w.c.popoutOpen, true)
+    H.assertEq(w.ticker.cancelled, true, "the wait is over")
+    H.assertEq(w.open, false, "never a window")
+end
+
+-- No tracker within the grace: the window opens, still wanting the
+-- tracker, and leaves for it when it shows.
+function tests.atLogin_opensTheWindowAfterTheGrace_thenSnapsIn()
+    local GPS, w = LoadOpen()
+    GPS:OpenWindow(true)
+    for _ = 1, 11 do w.Tick() end
+    H.assertEq(w.open, true, "the window after the grace")
+    H.assertEq(w.db.gpsDocked, true, "the snap kept")
+    H.assertEq(w.ticker.cancelled, nil, "still waiting for a tracker")
+    w.host = {}
+    w.Tick()
+    H.assertEq(w.docked, 1, "snapped in when the tracker showed")
+end
+
+-- The player closed the window or turned snapping off: the wait ends.
+function tests.aClosedWindowOrSnapOff_endsTheWait()
+    local GPS, w = LoadOpen()
+    GPS:OpenWindow(true)
+    w.c.popoutOpen = false
+    w.host = {}
+    w.Tick()
+    H.assertEq(w.docked, 0, "nothing snaps in behind a closed window")
+    H.assertEq(w.ticker.cancelled, true)
+    GPS, w = LoadOpen()
+    w.db.gpsNeverDock = true
+    GPS:OpenWindow(true)
+    H.assertEq(w.open, true, "snapping off: the window at once")
+    H.assertEq(w.ticker, nil, "and no wait")
+end
+
+-- Opened by hand with no tracker up: the window now, and the section
+-- snaps in when a tracker shows.
+function tests.openedByHand_theWindowNow_thenSnapsIn()
+    local GPS, w = LoadOpen()
+    GPS:OpenWindow()
+    H.assertEq(w.open, true)
+    H.assertEq(w.db.gpsDocked, true, "the snap kept")
+    w.host = {}
+    w.Tick()
+    H.assertEq(w.docked, 1)
+end
+
 -- Every line of the section is a button, and a button that takes only the
 -- left click swallows the right one: each takes it and opens a menu.
 function tests.everyLineOpensTheMenuOnRightClick()
@@ -436,7 +531,7 @@ local function Windows(db, folded)
     local f = assert(io.open(H.Path("GPS.lua"), "rb"))
     local src = f:read("*a")
     f:close()
-    local s = assert(src:find("function GPS:OpenWindow()", 1, true), "GPS:OpenWindow not in GPS.lua")
+    local s = assert(src:find("function GPS:OpenWindow(atLogin)", 1, true), "GPS:OpenWindow not in GPS.lua")
     local c2 = assert(src:find("function GPS:CloseWindow()", s, true), "GPS:CloseWindow not after it")
     local _, e = src:find("\nend\r?\n", c2)
     local c = {}
@@ -680,7 +775,10 @@ function tests.aTrackerGoneLeavesForTheWindowRememberingTheSnap()
         db.gpsDocked = nil
         dock.docked = nil
     end
-    function GPS:TogglePopout(show) window = show end
+    -- As GPS:TogglePopout: showing the window leaves the tracker.
+    function GPS:TogglePopout(show) window = show db.gpsDocked = nil end
+    local awaited
+    function GPS.AwaitHost(grace) awaited = grace end
     local env = setmetatable({
         dockFrame = dock, GPS = GPS, DB = function() return db end, Host = function() return nil end,
         SectionLook = function() return "game" end, Look = {},
@@ -689,6 +787,7 @@ function tests.aTrackerGoneLeavesForTheWindowRememberingTheSnap()
     H.assertTrue(window, "the window shows the route")
     H.assertNil(dock.docked)
     H.assertTrue(db.gpsDocked, "remembered as snapped in")
+    H.assertEq(awaited, 0, "and waits for a tracker to snap back into, the window up")
 end
 
 local pass, fail, failures = H.runSuite("GPSDock", tests)
