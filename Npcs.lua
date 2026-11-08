@@ -360,6 +360,7 @@ end
 local function GoodsName(j)
     return Line(N.goodsText, N.goodsAt, j)
 end
+N.GoodsName = GoodsName
 local function GoodsEnglishLow(j)
     if not N.goodsEnText then return nil end
     local a, b = At(N.goodsEnAt, j), At(N.goodsEnAt, j + 1) - 2
