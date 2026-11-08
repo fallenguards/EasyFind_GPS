@@ -1476,6 +1476,23 @@ function tests.elevator_isAStepNamedByTheLevelItReaches()
     H.assertEq(up[1].text, "Take the elevator to Ruins of Lordaeron", "ridden backwards, named by the hall")
 end
 
+-- The walk to a lift's door ends at the door, not in the usual 40 yd ring:
+-- from the hall's loop round Undercity's lifts, 20 yd off, the ride read as
+-- begun (2026-11-08).
+function tests.elevator_itsDoorIsReachedAtTheDoor()
+    local _, ns, Route = fresh(function(env)
+        env.C_Map.GetAreaInfo = function(area) return ({ [153] = "Ruins of Lordaeron", [1497] = "Undercity" })[area] end
+    end)
+    ns.L.GPS_STEP_ELEVATOR_FMT, ns.L.GPS_REACH_ELEVATOR_FMT = "Take the elevator to %s", "Go to the elevator to %s"
+    local steps = buildAll(Route, P(1, 0.3, 0.5), { name = "Below", mapID = 1, x = 0.91, y = 0.5 }, { data = liftTrip() })
+    H.assertEq(steps[1].approach, true, "the walk to the door comes first")
+    H.assertEq(steps[1].text, "Go to the elevator to Undercity")
+    H.assertEq(steps[1].arriveYards, 10, "done at the door")
+    H.assertEq(steps[2].kind, "elevator")
+    local plain = buildAll(Route, P(1, 0.1, 0.5), { name = "Nearby", mapID = 1, x = 0.2, y = 0.5 })
+    H.assertNil(plain[1].arriveYards, "a plain walk keeps the usual ring")
+end
+
 -- A city whose map's middle is no way in names its gate: a zone goal
 -- walks there, and only stops inside the zone itself end the trip early.
 function tests.zoneGoal_aCityGateStandsForItsMiddle()

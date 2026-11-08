@@ -757,6 +757,7 @@ end
 local TOWER_YARDS, SAME_DOCK = 75, 10
 local MASTER_YARDS = 40
 local DOCK_ARRIVE = 0.3   -- of the gap to the next dock: the walk there is done this close
+local LIFT_ARRIVE = 10    -- yards from a lift's door: the walk there is done this close
 local SIDE_KEYS = { "GPS_SIDE_N", "GPS_SIDE_NE", "GPS_SIDE_E", "GPS_SIDE_SE",
                     "GPS_SIDE_S", "GPS_SIDE_SW", "GPS_SIDE_W", "GPS_SIDE_NW" }
 local atan2 = math.atan2 or math.atan
@@ -1000,8 +1001,9 @@ local function Steps(g, path, goalName, goalStep)
             -- one than any other, so the wrong one never reads as reached.
             local dockGap
             if e.kind == "zeppelin" and not floor and not e.reverse then text, dockGap = ZeppelinStep(g.data, from.p, dest) end
+            -- A lift's door is reached at the door, not from the hall's ring round it.
             Approach(from.p, reachText or (L[GoKey(g)]):format(AreaName(from.p.area) or MapName(from.p.m)), from.inside,
-                dockGap and dockGap * DOCK_ARRIVE)
+                (dockGap and dockGap * DOCK_ARRIVE) or (e.kind == "elevator" and LIFT_ARRIVE) or nil)
             -- The other faction's transport: said so on the step.
             if e.hostile then text = text .. " (" .. (_G["HOSTILE"] or "Hostile") .. ")" end
             tinsert(steps, { kind = e.kind, text = text, hostile = e.hostile,
