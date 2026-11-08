@@ -721,6 +721,31 @@ function tests.aNameHoldingEveryWordBeatsThePlaceReading()
     H.assertEq(rows[1].name, "Bea")
 end
 
+-- "simple wood" found no vendor (Forever, 2026-11-08): "wood" read as a
+-- town's word, "simple" alone named the item, so the query became the
+-- vendors of Simple Wood within 300 yd of that town's inn, and there were
+-- none. An item named by every word is the item, its vendors anywhere; an
+-- item named by the other words alone still keeps the town.
+function tests.anItemNamedByEveryWordBeatsThePlaceReading()
+    local list = {
+        { 1, 0, REPAIR, 0, 1, { 1429, xy(0.5, 0.5), 1 } },   -- Bea, far from the town
+        { 2, 0, REPAIR, 0, 1, { 1433, xy(0.1, 0.1), 1 } },   -- Dana, at the town's inn
+    }
+    local goods = { types = { 0, 0 }, lists = { { 1 }, { 2 } }, sells = { [1] = 1, [2] = 2 },
+                    names = "Simple Wood\nSimple Flour" }
+    local append, _, env = fresh(nil, list, "Bea\nDana", goods)
+    env.UnitFactionGroup = function() return "Alliance" end
+    env.EasyFind._ns.GPSData = { binds = { [1] = { m = 1433, x = 0.1, y = 0.1, ci = 0, wx = 1533, wy = 100 } } }
+    env.C_Map.GetAreaInfo = function(a) return a == 1 and "Woodhaven" or nil end
+    local rows = find(append, "simple wood")
+    H.assertEq(#rows, 1)
+    H.assertEq(rows[1].name, "Bea", "the item named whole: its vendor, far from the town")
+    H.assertEq(rows[1].matchNote, "Sells Simple Wood")
+    rows = find(append, "wood simple flour")
+    H.assertEq(#rows, 1, "the town and an item named by the other words: its vendors there")
+    H.assertEq(rows[1].name, "Dana")
+end
+
 -- "rothide mystic" found nothing while "rot hide mystic" did
 -- (2026-11-02): a word typed without the name's space is matched against
 -- the names with their spaces out, and still counts as starting the name.

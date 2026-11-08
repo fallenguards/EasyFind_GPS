@@ -74,7 +74,7 @@ local N = {
     titleAt = "", titleCreatures = "", roleIds = {},
     -- Per query word whether it names a service or title (wordRole) or a
     -- place (wordPlace); the places named and the maps of the chosen ones.
-    wordRole = {}, wordPlace = {}, placeHit = {}, placeWordsOf = {}, placeList = {}, placeWords = {}, askWords = {}, mapSet = {},
+    wordRole = {}, wordPlace = {}, hadPlace = {}, placeHit = {}, placeWordsOf = {}, placeList = {}, placeWords = {}, askWords = {}, mapSet = {},
     -- What vendors sell: per item (index j) its names (goodsText, goodsLow,
     -- goodsAt; goodsEn* in English), weapon type and stock lists, per
     -- creature the list it sells (Sells).
@@ -1253,6 +1253,35 @@ local function Keep(set, pci, px, py, r2, goods, f, horde, service)
     return n
 end
 
+-- Whether an item sold is named by every word of the query, the words read
+-- as places too (simple wood is the item, not simple goods in a town
+-- named Wood...): each word starts a word of its name, in either language.
+-- The goods match is left as it was found.
+local function ItemNamedByAll()
+    local words, wordPlace, had = N.words, N.wordPlace, N.hadPlace
+    for w = 1, #words do had[w], wordPlace[w] = wordPlace[w], nil end
+    local named = false
+    if MatchGoods() then
+        local matched = N.matched
+        for m = 1, #matched do
+            local j = matched[m]
+            local low = ssub(N.goodsLow, At(N.goodsAt, j), At(N.goodsAt, j + 1) - 2)
+            local en = GoodsEnglishLow(j)
+            local all = true
+            for w = 1, #words do
+                if GoodsWord(w) and not (WordStarts(low, words[w]) or (en and WordStarts(en, words[w]))) then
+                    all = false
+                    break
+                end
+            end
+            if all then named = true break end
+        end
+    end
+    for w = 1, #words do wordPlace[w] = had[w] end
+    if not named then MatchGoods() end
+    return named
+end
+
 -- Appends the creatures matching query to out (map POIs). onlyMap keeps
 -- those standing on that map; nearMap (the player's) does so for a query
 -- of services alone (repair, inn), everywhere when that map has none. A
@@ -1289,10 +1318,11 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
     local town, placed = Places()
     local goods = MatchGoods()
     if placed then
-        -- A plain name word beside the place (org thrall), or a creature
-        -- named by every word, the place's too (greater dusk is the Greater
-        -- Duskbat, not the vendors of greater goods in Duskwood): no place meant.
-        local plain = NamedByAll()
+        -- A plain name word beside the place (org thrall), or a creature or
+        -- item named by every word, the place's too (greater dusk is the
+        -- Greater Duskbat, not the vendors of greater goods in Duskwood;
+        -- simple wood the item, not a town): no place meant.
+        local plain = NamedByAll() or ItemNamedByAll()
         for w = 1, #words do
             if plain or not (wordPlace[w] or wordRole[w] or goods) then
                 placed, town = false, nil
