@@ -40,12 +40,13 @@ local function StopPoint(stop)
     return { ci = ci, wx = wx, wy = wy, m = stop.mapID, x = stop.x or 0.5, y = stop.y or 0.5, name = stop.name }
 end
 
--- The stops planned leg by leg, each leg from the stop before: the steps
--- joined, the times added, the first leg's advice. Nil when a leg has no way.
-function Trip.Build(stops, via, avoid, quick, draw)
+-- The stops planned leg by leg, the first from startFrom (as BuildRoute
+-- takes it), each after from the stop before: the steps joined, the times
+-- added, the first leg's advice. Nil when a leg has no way.
+function Trip.Build(stops, via, avoid, quick, draw, startFrom)
     local g = ns.GPS
     local steps, total, priced, advice = {}, 0, true, nil
-    local from
+    local from = startFrom
     for k = 1, #stops do
         local legSteps, legTotal, legAdvice = g:BuildRoute(stops[k], k == 1 and via or nil, avoid, quick, draw, from)
         if not legSteps then return nil end

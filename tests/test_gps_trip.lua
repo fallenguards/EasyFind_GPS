@@ -64,6 +64,16 @@ function tests.build_plansEachLegFromTheStopBefore()
     H.assertEq(legs[3].from, "B")
 end
 
+function tests.build_startsTheFirstLegWhereItIsTold()
+    local Trip, _, legs = Load()
+    local a, b = { name = "A", mapID = 1, x = 0.2, y = 0.3 }, { name = "B", mapID = 2, x = 0.4, y = 0.4 }
+    Trip.Build({ a, b }, nil, nil, true, "first", { name = "S" })
+    H.assertEq(legs[1].from, "S", "the first leg from the point given")
+    H.assertEq(legs[2].from, "A")
+    Trip.Build({ a, b }, nil, nil, true, "first", false)
+    H.assertEq(legs[3].from, false, "false: the player, whatever start is set")
+end
+
 function tests.build_unpricedLegLeavesNoTotal()
     local Trip = Load()
     local _, total = Trip.Build({ { name = "A", mapID = 1 }, { name = "B", mapID = 2, sec = "none" } })

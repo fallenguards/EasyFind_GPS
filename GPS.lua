@@ -444,7 +444,9 @@ end
 
 -- avoid: ways to leave out, the settings' by default; quick: no advice;
 -- draw: "first" draws the walk set out on (a route to show), nothing
--- otherwise (a route to compare).
+-- otherwise (a route to compare); startFrom: a world point to set out
+-- from, false for the player whatever start is set, nil for the start
+-- as set, else the player.
 -- The flight points the player dropped from the trip dest belongs to.
 function GPS.SkipFor(dest)
     local route = Route()
@@ -457,7 +459,7 @@ end
 
 function GPS:BuildRoute(dest, via, avoid, quick, draw, startFrom, dropLimit)
     local Route = ns.GPSRoute
-    local planned = startFrom or StartPoint()
+    local planned = startFrom or (startFrom == nil and StartPoint()) or nil
     local origin = planned or GPS.PlayerStart()
     if Route and ns.GPSData then
         local h = HearthPoint()
@@ -523,11 +525,19 @@ end
 
 GPS.WorldPos = WorldPos   -- the trip's legs start at a stop's world spot
 
+-- Where a route's plans set out from now: its start as set until the
+-- player reaches it, the player from then on (false: whatever start is set).
+function GPS.RouteStart(route)
+    if route.origin and not route.joined then return route.origin end
+    return false
+end
+
 -- The route's stops planned leg by leg (Trip.lua); one stop is the route itself.
 function GPS:BuildStops(route, via, avoid, quick, draw)
     local Trip = ns.GPSTrip
-    if Trip and route.stops and #route.stops > 1 then return Trip.Build(route.stops, via, avoid, quick, draw) end
-    return self:BuildRoute(route.dest, via, avoid, quick, draw)
+    local from = GPS.RouteStart(route)
+    if Trip and route.stops and #route.stops > 1 then return Trip.Build(route.stops, via, avoid, quick, draw, from) end
+    return self:BuildRoute(route.dest, via, avoid, quick, draw, from)
 end
 
 PlayerWorldPos = function()
@@ -1103,8 +1113,18 @@ function GPS.StepPassed(route, ci, px, py)
     return toNext < ((sx - nx) ^ 2 + (sy - ny) ^ 2) ^ 0.5 - PASS_MARGIN
 end
 
--- The route again from where the player stands, to the same place. A stop
--- to learn a flight master stays until that master is learned.
+-- A plan of the same trip taken up: its steps and times, and its start
+-- where the plan set out from (BuildStops), so the drawn way begins there.
+function GPS.Replanned(route, steps, total, advice)
+    route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
+    local here = GPS.RouteStart(route) or GPS.PlayerStart()
+    route.from = here and { ci = here.ci, wx = here.wx, wy = here.wy } or nil
+    closing.step = nil
+end
+
+-- The route again from where it stands (the start as set until reached,
+-- the player from then on), to the same place. A stop to learn a flight
+-- master stays until that master is learned.
 local function Reroute(route)
     if GPS:IsPlanning() then return end
     local via = GPS.ViaLeft(route, ns.GPSRoute and ns.GPSRoute.recordedKnown)
@@ -1115,7 +1135,7 @@ local function Reroute(route)
 end
 
 function GPS.Rerouted(route, via, steps, total, advice)
-    local here = GPS.PlayerStart()
+    local here = GPS.RouteStart(route) or GPS.PlayerStart()
     local ci, wx, wy
     if here then ci, wx, wy = here.ci, here.wx, here.wy end
     -- The report keeps the first plan, and counts the starts over.
@@ -1123,6 +1143,7 @@ function GPS.Rerouted(route, via, steps, total, advice)
     if report then report.re = (report.re or 0) + 1 end
     CharDB().route = { dest = route.dest, steps = steps, active = 1, t = time(), eta = total, total = total, advice = advice,
                        via = via, from = ci and { ci = ci, wx = wx, wy = wy } or nil, report = report,
+                       origin = route.origin, joined = route.joined, stops = route.stops, skipLearn = route.skipLearn,
                        wayAvoid = route.wayAvoid, dangerSeen = route.dangerSeen }
     closing.step = nil
     if GPS.AfterRoute then GPS.AfterRoute() end
@@ -1432,12 +1453,9 @@ function GPS:DropLearn(nodeID)
 end
 
 function GPS.StopAdded(route, via, tip, steps, total, advice)
-    route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
+    GPS.Replanned(route, steps, total, advice)
     route.via = via
     if route.report and tip.id then route.report.via = tip.id end
-    local ci, wx, wy = PlayerWorldPos()
-    route.from = ci and { ci = ci, wx = wx, wy = wy } or nil
-    closing.step = nil
     TrackStep(1)
     if GPS.AfterRoute then GPS.AfterRoute(true) end
 end
@@ -1670,9 +1688,8 @@ function GPS:TakeOtherWay(other)
     self:Plan(route.dest.name, function() return self:BuildStops(route, nil, other.avoid, true, "first") end,
         function(steps, total, advice)
             if not (steps and Route() == route) then return end
-            route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
+            GPS.Replanned(route, steps, total, advice)
             route.wayAvoid, route.others = other.avoid, nil
-            closing.step = nil
             TrackStep(1)
             AfterRoute()
         end)
@@ -6437,8 +6454,7 @@ local function RecordKnownFlights()
         return steps, total, advice
     end, function(steps, total, advice)
         if not (steps and Route() == route) then return end
-        route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
-        closing.step = nil
+        GPS.Replanned(route, steps, total, advice)
         TrackStep(1)
         AfterRoute(true)
     end)
