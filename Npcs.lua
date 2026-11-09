@@ -86,6 +86,8 @@ local N = {
     typeName = {}, typeLow = {}, typeScore = {}, soldType = {},
     -- The query's best item, and per creature whether only its stock matched.
     bestItem = nil, byItem = {},
+    -- Set to an item's lowercase name while only its vendors are wanted (Sellers).
+    sellersOnly = nil,
     ROLE_GROUPS = { "quest", "vendor", "trainer", "flight", "services", "other" },
     -- Reads the words extensions give creatures (EasyFind API MINOR 7).
     decoratorWords = true,
@@ -1218,6 +1220,11 @@ end
 
 -- Scores the candidates, keeping those within the set's maps or r2 of the
 -- point, passing the filters and serving the player: hits, in no order.
+-- Whether item j is the one named, in either language.
+local function GoodsNamed(j, low)
+    return ssub(N.goodsLow, At(N.goodsAt, j), At(N.goodsAt, j + 1) - 2) == low or GoodsEnglishLow(j) == low
+end
+
 local function Keep(set, pci, px, py, r2, goods, f, horde, service)
     local cand, hits, score = N.cand, N.hits, N.score
     local listHit, sold, len, at = N.listHit, N.sold, N.len, N.at
@@ -1231,6 +1238,7 @@ local function Keep(set, pci, px, py, r2, goods, f, horde, service)
         local l = goods and Sells(i)
         local j = l and listHit[l] or false
         if j and N.itemScore[j] < 2 then j = false end
+        if j and N.sellersOnly and not GoodsNamed(j, N.sellersOnly) then j = false end
         local byItem = false
         if s == 0 and j then s, byItem = N.itemScore[N.bestItem], true end
         if s > 0 and (set or r2) and not Within(i, set, pci, px, py, r2) then s = 0 end
@@ -1315,7 +1323,10 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
             or (#words[w] >= MIN_QUERY and WordedIDs(words[w]) ~= nil)
     end
     N.allService = service and allService
-    local town, placed = Places()
+    -- Only an item's vendors wanted: no place read, no creature named like it.
+    local sellers = N.sellersOnly
+    local town, placed = nil, false
+    if not sellers then town, placed = Places() end
     local goods = MatchGoods()
     if placed then
         -- A plain name word beside the place (org thrall), or a creature or
@@ -1367,28 +1378,30 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
         if not wordPlace[w] and (not lw or #words[w] > #words[lw]) then lw = w end
     end
     local longest = words[lw]
-    MarkLines(N.low, N.at, N.n, longest, Mark)
-    if N.enLow then MarkLines(N.enLow, N.enAt, N.n, longest, Mark) end
-    -- Typed joined (rothide): the names with their spaces out hold it.
-    if #cand == 0 then
-        local sqLow, sqAt, sqEnLow, sqEnAt = Joined()
-        MarkLines(sqLow, sqAt, N.n, longest, Mark)
-        if sqEnLow then MarkLines(sqEnLow, sqEnAt, N.n, longest, Mark) end
-    end
-    local titleHit, anyTitle = N.titleHit, false
-    for t = 1, #N.titleLow do
-        local hit = sfind(N.titleLow[t], longest, 1, true)
-            or (N.titleLowEnglish[t] and sfind(N.titleLowEnglish[t], longest, 1, true))
-        titleHit[t] = hit and true or nil
-        if hit then anyTitle = true end
-    end
-    local bits = wordBits[lw]
-    if anyTitle or bits ~= 0 then MarkTitlesAndRoles(titleHit, bits) end
-    local worded = WordedIDs(longest)
-    if worded then
-        for npcID in pairs(worded) do
-            local i = IndexOfID(npcID)
-            if i then Mark(i) end
+    if not sellers then
+        MarkLines(N.low, N.at, N.n, longest, Mark)
+        if N.enLow then MarkLines(N.enLow, N.enAt, N.n, longest, Mark) end
+        -- Typed joined (rothide): the names with their spaces out hold it.
+        if #cand == 0 then
+            local sqLow, sqAt, sqEnLow, sqEnAt = Joined()
+            MarkLines(sqLow, sqAt, N.n, longest, Mark)
+            if sqEnLow then MarkLines(sqEnLow, sqEnAt, N.n, longest, Mark) end
+        end
+        local titleHit, anyTitle = N.titleHit, false
+        for t = 1, #N.titleLow do
+            local hit = sfind(N.titleLow[t], longest, 1, true)
+                or (N.titleLowEnglish[t] and sfind(N.titleLowEnglish[t], longest, 1, true))
+            titleHit[t] = hit and true or nil
+            if hit then anyTitle = true end
+        end
+        local bits = wordBits[lw]
+        if anyTitle or bits ~= 0 then MarkTitlesAndRoles(titleHit, bits) end
+        local worded = WordedIDs(longest)
+        if worded then
+            for npcID in pairs(worded) do
+                local i = IndexOfID(npcID)
+                if i then Mark(i) end
+            end
         end
     end
     if goods then
@@ -1459,6 +1472,21 @@ function N.Append(out, nameSet, query, onlyMap, nearMap, along)
         if poi and not (nameSet and nameSet[poi.nameLower]) then out[#out + 1] = poi end
     end
     return n > MAX_ROWS
+end
+
+-- The vendors of one item, nearest first, appended to out: the item's
+-- name as the query, read as goods alone.
+function N.Sellers(out, name)
+    N.sellersOnly = slower(name)
+    local ok, err = pcall(N.Append, out, nil, name)
+    N.sellersOnly = nil
+    if not ok then error(err, 0) end
+    return out
+end
+
+-- For EasyFind's item sources page: who sells an item (API action).
+if EasyFind and EasyFind.API and EasyFind.API.RegisterAction then
+    EasyFind.API.RegisterAction("gps", "sellers", function(name) return N.Sellers({}, name) end)
 end
 
 -- What the filter menu offers: the creature types by id with the client's

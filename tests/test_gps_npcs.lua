@@ -530,6 +530,23 @@ function tests.anItemFindsWhoSellsIt()
     H.assertEq(#find(append, "sharp", 1433), 0, "a zone's own search keeps its own vendors")
 end
 
+-- EasyFind's sources page asks for one item's vendors by its exact name:
+-- the goods alone answer, no creature named like it, no place read, and
+-- the flag is gone after.
+function tests.sellersListTheItemsVendorsAlone()
+    local append, N = fresh(nil, nil, nil, goodsNamed("Refreshing Spring Water\nHogger Tonic"))
+    local rows = N.Sellers({}, "Hogger Tonic")
+    H.assertEq(#rows, 1, "Hogger sells nothing: his name does not bring him")
+    H.assertEq(rows[1].name, "Brog Hamfist")
+    H.assertEq(rows[1].matchNote, "Sells Hogger Tonic")
+    rows = N.Sellers({}, "Refreshing Spring Water")
+    H.assertEq(#rows, 1, "the kobold sells it too, but will not serve the Alliance")
+    H.assertEq(rows[1].matchNote, "Sells Refreshing Spring Water")
+    H.assertEq(#N.Sellers({}, "Refreshing Spring"), 0, "the exact name only")
+    H.assertNil(N.sellersOnly, "the flag is gone after")
+    H.assertEq(find(append, "hogger")[1].name, "Hogger", "a search finds by name again")
+end
+
 -- "sharp arrow vendor", "buy arrow": the word for who sells names no item,
 -- so the item still matches and its vendors answer; the typed word rides
 -- along for the map search, which scores every word (2026-11-07: "salt
