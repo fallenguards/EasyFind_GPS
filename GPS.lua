@@ -2233,7 +2233,7 @@ GPS.dangerFound = setmetatable({}, { __mode = "k" })
 function GPS.DangerText(route)
     local db = DB()
     if route.dangerSeen or route.arrived or (db and db.gpsDangerWarn == false) then return nil end
-    local Npcs, Engine, Follow = ns.GPSNpcs, ns.GPSRoute, ns.GPSFollow
+    local Npcs, Engine, Follow = ns.Npcs, ns.GPSRoute, ns.GPSFollow
     local level = UnitLevel("player")
     if not (Npcs and Npcs.DeadlyAlong and Engine and Engine.WalkPath and Follow and level) then return nil end
     local steps, active = route.steps, route.active or 1

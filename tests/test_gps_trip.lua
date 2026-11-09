@@ -243,7 +243,7 @@ function tests.along_theLeastOutOfTheWayFirst()
         }
     end
     local asked
-    ns.GPSNpcs = {
+    ns.Npcs = {
         Append = function(out, _, q, _, _, along)
             asked = q
             if along(1, 500, 50) then out[#out + 1] = { name = "Innkeeper", mapID = 1, x = 500, y = 50 } end
@@ -270,7 +270,7 @@ function tests.along_aCreatureThePlacesKeptComesOnce()
                  { name = "Innkeeper Far", mapID = 1, x = 500, y = 5000 } }
     end
     local told
-    ns.GPSNpcs = {
+    ns.Npcs = {
         Append = function(out, nameSet)
             told = nameSet
             for _, name in ipairs({ "Innkeeper Renee", "Innkeeper Far", "Innkeeper Norman" }) do

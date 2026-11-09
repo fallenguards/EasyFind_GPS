@@ -483,7 +483,7 @@ end
 -- end: pen(red) as it starts and wherever it enters or leaves ground
 -- deadly to the player on continent ci (nil: none), to(x, y) per point.
 function Preview.Trace(path, ci, s, x, y, from, pen, to)
-    local Npcs = ns.GPSNpcs
+    local Npcs = ns.Npcs
     local db = EasyFind and EasyFind.db
     local d = ci and Npcs and Npcs.DeadlyAlong and not (db and db.gpsDangerRed == false)
         and Npcs.DeadlyAlong(path, ci, UnitLevel("player"), UnitFactionGroup("player"))

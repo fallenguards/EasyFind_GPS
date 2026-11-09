@@ -280,7 +280,7 @@ function Trip.AlongPlaces(q)
         local low = r.nameLower or (r.name and r.name:lower())
         if low then alongNames[low] = true end
     end
-    local npcs = ns.GPSNpcs
+    local npcs = ns.Npcs
     wipe(alongFound)
     if npcs and npcs.Append then npcs.Append(alongFound, alongNames, q, nil, nil, detour) end
     for i = 1, #alongFound do KeepAlong(alongFound[i], detour) end

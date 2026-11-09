@@ -801,7 +801,7 @@ Route._TowerDocks = TowerDocks   -- tests
 local function ZeppelinStep(data, p, dest)
     local L = ns.L
     local others, side, gap = TowerDocks(data, p, "zeppelin")
-    local Npcs = ns.GPSNpcs
+    local Npcs = ns.Npcs
     local master = p and p.wx and Npcs and Npcs.TitledNear
         and Npcs.TitledNear("Zeppelin Master", p.ci, p.wx, p.wy, MASTER_YARDS, others)
     local text = master and (L["GPS_STEP_ZEPPELIN_AT_FMT"]):format(dest, master)
@@ -1651,7 +1651,7 @@ function Route:Build(dest, opts)
     end
     -- Walks go around what this character should not walk through
     -- (opts.level: the character's level, the player's by default).
-    local Npcs = ns.GPSNpcs
+    local Npcs = ns.Npcs
     if Nav and Nav.SetDanger then
         local on = opts.avoid and opts.avoid.danger and Npcs and Npcs.DangerTiles
         Nav.SetDanger(on and Npcs.DangerTiles(opts.level or (UnitLevel and UnitLevel("player")),

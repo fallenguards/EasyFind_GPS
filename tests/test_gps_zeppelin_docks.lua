@@ -27,7 +27,7 @@ local function Engine(npcs)
     env.GetLocale = function() return "enUS" end
     H.loadModule("Locales/enUS.lua", env, ns)
     H.loadModule("Route.lua", env, ns)
-    ns.GPSNpcs = npcs
+    ns.Npcs = npcs
     return ns.GPSRoute, ns
 end
 
@@ -40,9 +40,10 @@ local function Catalog(flavor)
     env.C_EncodingUtil = { DecodeBase64 = Inflate.DecodeBase64, DecompressString = function(s) return Inflate.Raw(s) end }
     ns.MapSearch = {}
     ns.MapSearchSearch = { PreparePOI = function(p) return p end }
-    H.loadModule("Npcs_" .. flavor .. ".lua", env, ns)
-    H.loadModule("Npcs.lua", env, ns)
-    return ns.GPSNpcs
+    -- The catalog and its reader are EasyFind's own (Database, MapSearch).
+    H.loadModule("Database/Npcs_" .. flavor .. ".lua", env, ns)
+    H.loadModule("MapSearch/Npcs.lua", env, ns)
+    return ns.Npcs
 end
 
 -- Each classic tower's docks, by where the zeppelin goes.
@@ -105,7 +106,7 @@ function tests.tirisfalToOrgrimmar_theWalkEndsAtItsDock()
     for _, f in ipairs({ "Walk_EasternKingdoms.lua", "Walk_Kalimdor.lua", "Floors.lua", "Nav.lua" }) do H.loadModule(f, env, ns) end
     ns.GPS = { PlayerWorldPos = function() return nil end }
     for _, f in ipairs({ "Locales/enUS.lua", "Data_Forever.lua", "Route.lua" }) do H.loadModule(f, env, ns) end
-    ns.GPSNpcs = { TitledNear = function(_, _, x) return x == 2062 and "Zapetta" or "Hin Denburg" end }
+    ns.Npcs = { TitledNear = function(_, _, x) return x == 2062 and "Zapetta" or "Hin Denburg" end }
     env.CreateVector2D = function(x, y) return { x = x, y = y, GetXY = function(v) return v.x, v.y end } end
     local ORG = { 1338.46, -5083.21, 2273.88, -3680.6 }
     env.C_Map = {
