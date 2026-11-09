@@ -1858,8 +1858,28 @@ local function WalkPieces(step, from, data, env, first)
     step.jumps = path.jumps
     local pts, cum = path.pts, path.cum
     local runs = {}
+    -- The continent names the zone around a city for the city's own points
+    -- (Thunder Bluff's read as Mulgore, 2026-11-09): inside the map box of
+    -- the city set out from, or walked to, a point is the city's.
+    local cities = {}
+    if first and env.startCity then cities[#cities + 1] = env.startCity end
+    if env.goalCity and not (env.startCity and env.startCity.map == env.goalCity.map) then
+        cities[#cities + 1] = env.goalCity
+    end
+    local function Within(mapID, x, y)
+        if not env.mapPos then return false end
+        local mx, my = env.mapPos(ci, x, y, mapID)
+        return mx ~= nil and mx >= 0 and mx <= 1 and my >= 0 and my <= 1
+    end
     local function Read(x, y, at)
         local map, name = env.zoneAt(ci, x, y)
+        for i = 1, #cities do
+            local city = cities[i]
+            if map ~= city.map and Within(city.map, x, y) then
+                map, name = city.map, city.name
+                break
+            end
+        end
         local run = runs[#runs]
         if map and (not run or run.map ~= map) then
             runs[#runs + 1] = { map = map, name = name or "?", at = at, x = x, y = y }
@@ -1992,8 +2012,8 @@ local function WalkPieces(step, from, data, env, first)
 end
 
 -- Each long walk as a step per zone crossed. env: zoneAt(ci, wx, wy) -> map, name;
--- mapPos(ci, wx, wy, mapID); isCity(mapID); startCity { map, name }; goalZone;
--- wholeWalks: a walk stays one step.
+-- mapPos(ci, wx, wy, mapID); isCity(mapID); startCity { map, name }; goalCity
+-- { map, name }; goalZone; wholeWalks: a walk stays one step.
 function Route.SplitWalks(steps, start, data, env)
     local out = {}
     for i = 1, #steps do

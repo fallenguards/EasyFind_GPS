@@ -1055,6 +1055,40 @@ function tests.walk_fromInsideACityStartsWithLeavingIt()
     H.assertEq(out[1].enter, 10, "done on entering the zone around it")
 end
 
+-- The continent names the zone around a city for the city's own points
+-- (Thunder Bluff's read as Mulgore, so a walk to the Pools of Vision began
+-- with a three-yard "Exit Thunder Bluff" and drew nothing on the city map,
+-- 2026-11-09): inside the map box of the city set out from, or walked to,
+-- a point is the city's. A walk within one city stays one step; a walk
+-- out of it exits where the box ends.
+function tests.walk_insideACitysBoxIsTheCitys()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local steps, start = walk(Route)
+    local isCity = function(m) return m == 99 end
+    -- The city's box takes the whole walk; the zones around read as before.
+    local wholeBox = function(_, x, y, mapID)
+        if mapID == 99 then return (x + 100) / 2000, (y + 100) / 2000 end
+        return (x + 100) / 2000, (y + 100) / 2000
+    end
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = wholeBox, isCity = isCity,
+        startCity = { map = 99, name = "City" }, goalCity = { map = 99, name = "City" } })
+    H.assertTrue(#out == 1 and out[1] == steps[1], "one city from end to end: the walk stays one step, untouched")
+    -- The box ends at y = 400: the exit step ends there, the zone around it next.
+    local lowBox = function(_, x, y, mapID)
+        if mapID == 99 then return (x + 100) / 2000, (y + 100) / 500 end
+        return (x + 100) / 2000, (y + 100) / 2000
+    end
+    out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = lowBox, isCity = isCity,
+        startCity = { map = 99, name = "City" } })
+    H.assertTrue(out ~= nil and #out >= 2, "a walk out of the city splits")
+    H.assertEq(out[1].walkZone, 99, "the city first")
+    -- The 100 yd of Alpha past the box are under WALK_MIN_RUN: they fold into
+    -- the exit, which runs on to Bravo's border at 500.
+    H.assertTrue(out[1].arrive.wy > 300 and out[1].arrive.wy < 600, "the exit ends past the box's edge: " .. tostring(out[1].arrive.wy))
+    H.assertEq(out[1].enter, 11, "Bravo is what it enters, the clipped zone folded")
+end
+
 -- A city's map reaches past its walls: read mid-walk (Undercity's over the
 -- lake road), or at the start of a walk not set out from inside it, it is
 -- no step of its own; walked to, or set out from, it stays.

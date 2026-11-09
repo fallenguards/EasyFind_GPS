@@ -389,6 +389,7 @@ local function SplitWalks(steps, dest, origin)
     local ok, out = pcall(Route.SplitWalks, steps, start, ns.GPSData, {
         zoneAt = ZoneAt, mapPos = MapPos, isCity = IsCity,
         startCity = hereInfo and { map = here, name = hereInfo.name } or nil,
+        goalCity = dest.mapID and IsCity(dest.mapID) and { map = dest.mapID, name = (C_Map.GetMapInfo(dest.mapID) or {}).name } or nil,
         goalZone = dest.zone and dest.mapID or nil,
         wholeWalks = db ~= nil and db.gpsZoneSteps == false,
     })
