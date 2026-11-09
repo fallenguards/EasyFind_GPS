@@ -61,7 +61,7 @@ watch:SetScript("OnEvent", function(_, event, button)
         local p = pressed
         pressed = nil
         Utils.SafeAfter(0, function()
-            if map:IsShown() and map:GetMapID() ~= p.mapID then map:SetMapID(p.mapID) end
+            if map:IsShown() and map:GetMapID() ~= p.mapID then ns.MapSearch.TurnMap(p.mapID) end
         end)
         Go(p.mapID, p.x, p.y, p.name)
     end

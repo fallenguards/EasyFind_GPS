@@ -29,7 +29,8 @@ local function Load()
     function map:IsVisible() return self.shown end
     function map:IsShown() return self.shown end
     function map:GetMapID() return self.mapID end
-    function map:SetMapID(id) self.mapID = id end
+    local turned = {}
+    ns.MapSearch.TurnMap = function(id) turned[#turned + 1] = id map.mapID = id end
     function map:GetNormalizedCursorPosition() return self.cursor[1], self.cursor[2] end
     function map:HookScript(name, fn) scripts[name] = fn end
     function map:GetScript(name) return scripts[name] end
@@ -49,10 +50,11 @@ local function Load()
     for _, f in ipairs(frames) do if f.OnEvent and f.events.PLAYER_LOGIN then f.OnEvent(f, "PLAYER_LOGIN") end end
     local watch = frames[1]
     return {
-        went = went, map = map, tip = tip, foci = foci, scripts = scripts,
+        went = went, map = map, tip = tip, foci = foci, scripts = scripts, turned = turned,
         alt = function(v) alt = v end,
-        press = function(button)
+        press = function(button, between)
             watch.OnEvent(watch, "GLOBAL_MOUSE_DOWN", button or "LeftButton")
+            if between then between() end
             watch.OnEvent(watch, "GLOBAL_MOUSE_UP", button or "LeftButton")
         end,
         link = function(link, button) itemRef(link, "[Map Pin]", button or "LeftButton") end,
@@ -67,11 +69,15 @@ function tests.altClickOnTheMap_routesToTheSpot_andTheZoomGoesBack()
     t.scripts.OnShow(t.map)
     H.assertTrue(t.watching(), "the mouse watched while the map is up")
     t.alt(true)
-    t.press()
+    -- The game's own Alt-click zooms the map; the turn back goes through
+    -- EasyFind's door, never a bare SetMapID.
+    t.press(nil, function() t.map.mapID = 85 end)
     H.assertEq(#t.went, 1)
     H.assertEq(t.went[1].mapID, 84)
     H.assertEq(t.went[1].x, 0.25)
     H.assertEq(t.went[1].name, "Map 84 25.0, 75.0")
+    H.assertEq(t.turned[1], 84, "the map turned back through MapSearch.TurnMap")
+    H.assertEq(t.map.mapID, 84)
 end
 
 function tests.thePinUnderTheCursor_givesItsSpotAndName()

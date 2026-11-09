@@ -902,7 +902,7 @@ function Preview:Show(index)
     local mapID = TargetMap(route, index)
     local here = WorldMapFrame and WorldMapFrame.GetMapID and WorldMapFrame:GetMapID()
     if index == Following() then pinned = nil else pinned = index end
-    if mapID and here ~= mapID and WorldMapFrame.SetMapID then pcall(WorldMapFrame.SetMapID, WorldMapFrame, mapID) end
+    if mapID and here ~= mapID then ns.MapSearch.TurnMap(mapID) end
     dirty = true
     Draw()
     local db = EasyFind and EasyFind.db
