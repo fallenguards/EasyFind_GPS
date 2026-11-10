@@ -49,6 +49,7 @@ local DEST_EDGE = 0.44             -- of its size: the line stops at the emblem'
 local overlay, lines, marks, syms
 local shownMap, shownIndex
 local since = 0
+local gamePin, gameR, gameCheck = nil, nil, 0   -- the map's own pin on the end, its radius
 
 local function Route() local g = ns and ns.GPS return g and g.CurrentRoute and g.CurrentRoute() end
 
@@ -557,6 +558,32 @@ local function EndOnMap(route, mapID)
     return endSpot.x, endSpot.y
 end
 
+-- A pin the map placed itself standing on the journey's end on the map
+-- shown (a quest's "?", a flight master): that icon is the end's mark,
+-- nothing of ours over it, the line stopping at its edge. Icon-sized pins
+-- only: a layer pin (a quest's areas, the group's dots) spans the map.
+-- The game's waypoint pin is ours, set on each step's end: no place's own.
+local NOT_THE_PLACES = { WaypointLocationPinTemplate = true }
+local function GamePinAtEnd(route, mapID)
+    local map, canvas = WorldMapFrame, Canvas()
+    local x, y = EndOnMap(route, mapID)
+    if not (x and map and map.pinPools and canvas) then return nil end
+    local cw, ch = canvas:GetWidth(), canvas:GetHeight()
+    for template, pool in pairs(map.pinPools) do
+        if not NOT_THE_PLACES[template] then
+            for pin in pool:EnumerateActive() do
+                local pinX, pinY
+                if pin.GetPosition and pin:IsShown() then pinX, pinY = pin:GetPosition() end
+                local r = pinX and pin:GetWidth() * pin:GetScale() / 2
+                if r and r > 0 and r < cw / 8 and ((pinX - x) * cw) ^ 2 + ((pinY - y) * ch) ^ 2 <= r * r then
+                    return pin, r
+                end
+            end
+        end
+    end
+    return nil
+end
+
 -- Whether the map's own pin stands on the journey's end on this map.
 local function PinAtEnd(route, mapID)
     local MapSearch = ns.MapSearch
@@ -604,7 +631,16 @@ local function Draw()
         return
     end
     if not overlay and not Build() then return end
-    if drawn.route ~= route or drawn.map ~= mapID then PinEnd(route, mapID) end
+    -- The map's pins come and go with its data: looked for again each second.
+    local changed = drawn.route ~= route or drawn.map ~= mapID
+    if changed or gameCheck >= 10 then
+        gameCheck = 0
+        local pin, r = GamePinAtEnd(route, mapID)
+        if pin ~= gamePin or r ~= gameR then gamePin, gameR, dirty = pin, r, true end
+        -- The pin alone: the route's waypoint and its tracking stay.
+        if gamePin and ns.MapSearch and ns.MapSearch.HideRouteEnd then ns.MapSearch:HideRouteEnd() end
+    end
+    if changed and not gamePin then PinEnd(route, mapID) end
     shownMap, shownIndex = mapID, Shown()
     local span, round = px(Span()), px(ROUND)
     local cw, ch = canvas:GetWidth(), canvas:GetHeight()
@@ -633,8 +669,9 @@ local function Draw()
     local hovered
     local lineW = span * 0.4
     local last = #route.steps
-    -- The last leg stops at the emblem's ring on the journey's end.
-    local destTrim = px(DEST) * DEST_EDGE
+    -- The last leg stops at the emblem's ring on the journey's end, or at
+    -- the edge of the map's own icon there.
+    local destTrim = gamePin and gameR or px(DEST) * DEST_EDGE
     pen.span, pen.round, pen.cw, pen.ch, pen.n = span, round, cw, ch, 0
     lines:Begin()
     -- Index 0 is the whole route: every leg bright, one arrowhead at its end.
@@ -759,8 +796,9 @@ local function Draw()
     -- own (its own pin is under the stop, not to be covered).
     local place = hovered and hovered.b and (hovered.final and route.dest or hovered.step.tripStop) or nil
     local own = place and not place.zone and (place.displayID or place.icon) or nil
-    if hovered and hovered.b and hovered.final and PinAtEnd(route, mapID) then
-        -- The map's own pin stands on the end: it is the mark, nothing of ours over it.
+    if hovered and hovered.b and hovered.final and (gamePin or PinAtEnd(route, mapID)) then
+        -- A pin of the map's, or ours from the map tab, stands on the end:
+        -- it is the mark, nothing of ours over it.
         marks.stop:Hide()
         marks.symbol:Hide()
     elseif hovered and hovered.b and (hovered.final or own) then
@@ -935,6 +973,7 @@ local function Tick(_, dt)
     since = since + dt
     if since < 0.1 then return end
     since = 0
+    gameCheck = gameCheck + 1
     Draw()
 end
 if WorldMapFrame then
