@@ -45,6 +45,12 @@ local TEX_CORE = "Interface\\AddOns\\EasyFind_GPS\\textures\\route_core"
 local TEX_EDGE = "Interface\\AddOns\\EasyFind_GPS\\textures\\route_edge"
 local DEST = 30                    -- the journey's end: the addon's emblem, centered on the spot
 local DEST_EDGE = 0.44             -- of its size: the line stops at the emblem's ring
+-- A quest's start or turn-in the map shows no mark for: the game's quest
+-- button, its ring with the "!" of its quest offers or its turn-in "?".
+local QUEST_BUTTON, QUEST_EDGE = 40, 0.34
+local QUEST_RING = "UI-QuestPoi-QuestNumber"
+local QUEST_GLYPHS = { offer = "QuestNormal", turnin = "UI-QuestIcon-TurnIn-Normal" }
+local QUEST_GLYPH_SIZE = { offer = 0.625, turnin = 1 }   -- of the button: the "!" as tall as the "?"
 
 local overlay, lines, marks, syms
 local shownMap, shownIndex
@@ -52,6 +58,15 @@ local since = 0
 local gamePin, gameR, gameCheck = nil, nil, 0   -- the map's own pin on the end, its radius
 
 local function Route() local g = ns and ns.GPS return g and g.CurrentRoute and g.CurrentRoute() end
+
+-- The glyph a destination's quest mark is drawn with, where the client has
+-- the game's quest button art (the classic clients lack the ring).
+local function QuestGlyph(dest)
+    local glyph = dest and QUEST_GLYPHS[dest.questMark]
+    local info = C_Texture and C_Texture.GetAtlasInfo
+    return glyph and info and info(QUEST_RING) and info(glyph) and glyph or nil
+end
+Preview.QuestGlyph = QuestGlyph
 
 local function Canvas()
     return WorldMapFrame and WorldMapFrame.ScrollContainer and WorldMapFrame.ScrollContainer.Child
@@ -93,6 +108,14 @@ local function Build()
     -- Or the place's own: a creature's face, a map icon.
     marks.destIcon = overlay:CreateTexture(nil, "OVERLAY", nil, 5)
     marks.destIcon:Hide()
+    -- Or a quest's, as the game draws its quest buttons.
+    local quest = CreateFrame("Frame", nil, overlay)
+    quest.ring = quest:CreateTexture(nil, "OVERLAY", nil, 5)
+    quest.ring:SetAllPoints()
+    quest.glyph = quest:CreateTexture(nil, "OVERLAY", nil, 6)
+    quest.glyph:SetPoint("CENTER")
+    quest:Hide()
+    marks.quest = quest
     -- Over the journey's end: a right-click ends the route, as on our map pins.
     local hit = CreateFrame("Button", nil, overlay)
     hit:SetFrameLevel(overlay:GetFrameLevel() + 10)
@@ -602,7 +625,7 @@ end
 -- cleared by hand stays cleared.
 local function PinEnd(route, mapID)
     local MapSearch, dest = ns.MapSearch, route.dest
-    if route.arrived or not dest or dest.zone or not (MapSearch and MapSearch.PinRouteEnd
+    if route.arrived or not dest or dest.zone or QuestGlyph(dest) or not (MapSearch and MapSearch.PinRouteEnd
         and (dest.icon or dest.displayID or dest.category)) then return end
     local x, y = EndOnMap(route, mapID)
     if not x or PinAtEnd(route, mapID) then return end
@@ -670,8 +693,9 @@ local function Draw()
     local lineW = span * 0.4
     local last = #route.steps
     -- The last leg stops at the emblem's ring on the journey's end, or at
-    -- the edge of the map's own icon there.
-    local destTrim = gamePin and gameR or px(DEST) * DEST_EDGE
+    -- the edge of the map's own icon or our quest button there.
+    local questGlyph = not gamePin and QuestGlyph(route.dest)
+    local destTrim = gamePin and gameR or questGlyph and px(QUEST_BUTTON) * QUEST_EDGE or px(DEST) * DEST_EDGE
     pen.span, pen.round, pen.cw, pen.ch, pen.n = span, round, cw, ch, 0
     lines:Begin()
     -- Index 0 is the whole route: every leg bright, one arrowhead at its end.
@@ -790,6 +814,7 @@ local function Draw()
     local symbol = hovered and hovered.symbol
     marks.dest:Hide()
     marks.destIcon:Hide()
+    marks.quest:Hide()
     marks.hit:Hide()
     marks.stopCasing:Hide()
     -- The journey's end, or a stop on the way with a face or icon of its
@@ -801,6 +826,20 @@ local function Draw()
         -- it is the mark, nothing of ours over it.
         marks.stop:Hide()
         marks.symbol:Hide()
+    elseif hovered and hovered.b and hovered.final and questGlyph then
+        marks.stop:Hide()
+        marks.symbol:Hide()
+        local q, size = marks.quest, px(QUEST_BUTTON)
+        local g = size * QUEST_GLYPH_SIZE[route.dest.questMark]
+        q.ring:SetAtlas(QUEST_RING)
+        q.glyph:SetAtlas(questGlyph)
+        q.glyph:SetSize(g, g)
+        q:ClearAllPoints()
+        q:SetSize(size, size)
+        q:SetPoint("CENTER", overlay, "TOPLEFT", hovered.b[1], hovered.b[2])
+        q:Show()
+        marks.hit:SetAllPoints(q)
+        marks.hit:Show()
     elseif hovered and hovered.b and (hovered.final or own) then
         -- The place's own icon when it has one, else the emblem, centered
         -- on the spot.
@@ -945,7 +984,7 @@ function Preview:Show(index)
     Draw()
     local db = EasyFind and EasyFind.db
     if not marks or (db and db.gpsClickPulse == false) then return end
-    for _, mark in ipairs({ marks.symbol, marks.stop, marks.stopCasing, marks.dest, marks.destIcon }) do
+    for _, mark in ipairs({ marks.symbol, marks.stop, marks.stopCasing, marks.dest, marks.destIcon, marks.quest }) do
         if mark:IsShown() then Pulse(mark) end
     end
 end

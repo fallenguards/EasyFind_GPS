@@ -283,8 +283,9 @@ end
 local INSTANCE_CATEGORIES = { dungeon = true, raid = true, delve = true }
 
 local function Destination(data)
+    -- questMark: "offer" or "turnin", the quest button its end wears.
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
-                   step = type(data.step) == "string" and data.step or nil }
+                   step = type(data.step) == "string" and data.step or nil, questMark = data.questMark }
     local em, ex, ey
     if data.isDungeonEntrance and not (data.x and data.y) then em, ex, ey = EntranceOf(data) end
     if em then
@@ -1830,7 +1831,7 @@ function GPS:SetStart(data, quiet)
             ns.GPSTrip.Navigate({ quiet = true })
         else
             GPS:NavigateTo({ name = dest.name, icon = dest.icon, category = dest.category, isZone = dest.zone,
-                             displayID = dest.displayID,
+                             displayID = dest.displayID, questMark = dest.questMark,
                              mapID = dest.mapID, x = not dest.zone and dest.x or nil, y = not dest.zone and dest.y or nil },
                            { quiet = true })
         end

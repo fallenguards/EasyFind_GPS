@@ -2,7 +2,9 @@
 -- GamePinAtEnd): a quest's "?" or a flight master is the end's mark, so
 -- nothing of ours covers it (the emblem, EasyFind's pin) and the line
 -- stops at its edge. Before, a route to a quest turn-in drew our emblem
--- over the quest's "?".
+-- over the quest's "?". A quest's end with no such pin (a quest to take)
+-- wears the game's quest button instead: its ring with the "!" of its
+-- quest offers, or its turn-in "?".
 local H = require("Harness")
 
 local CANVAS_W, CANVAS_H = 1000, 800
@@ -37,6 +39,7 @@ local function Load(pins, waypointPins)
     local env = setmetatable({
         ns = { MapSearch = { PinRouteEnd = function() end, GetActivePinState = function() return nil end } },
         World = function(p) return p.ci, p.wx, p.wy end,
+        QuestGlyph = function() return nil end,
         C_Map = { GetMapPosFromWorldPos = function() return nil end },
         CreateVector2D = function(x, y) return { x = x, y = y } end,
         WorldMapFrame = { pinPools = { QuestPinTemplate = pool, WaypointLocationPinTemplate = waypoints } },
@@ -89,6 +92,53 @@ function tests.theDrawPass_leavesTheEndToIt()
         "no EasyFind pin placed on it")
     H.assertTrue(src:find("if gamePin and ns.MapSearch and ns.MapSearch.HideRouteEnd then", 1, true) ~= nil,
         "one placed before it came goes")
+end
+
+local function LoadQuestGlyph(atlases)
+    local f = assert(io.open(H.Path("Preview.lua"), "rb"))
+    local src = f:read("*a"):gsub("\r\n", "\n")
+    f:close()
+    local s = assert(src:find("local QUEST_BUTTON, QUEST_EDGE", 1, true))
+    local e = select(2, assert(src:find("Preview.QuestGlyph = QuestGlyph\n", s, true)))
+    local env = setmetatable({
+        Preview = {}, ns = {},
+        C_Texture = { GetAtlasInfo = function(name) return atlases[name] and {} or nil end },
+    }, { __index = _G })
+    return assert(load(src:sub(s, e) .. "\nreturn QuestGlyph", "=Preview.lua quest glyph", "t", env))()
+end
+
+local RING = "UI-QuestPoi-QuestNumber"
+
+function tests.aQuestToTake_wearsTheGamesOfferBang_aTurnInItsQuestionMark()
+    local QuestGlyph = LoadQuestGlyph({ [RING] = true, QuestNormal = true, ["UI-QuestIcon-TurnIn-Normal"] = true })
+    H.assertEq(QuestGlyph({ questMark = "offer" }), "QuestNormal")
+    H.assertEq(QuestGlyph({ questMark = "turnin" }), "UI-QuestIcon-TurnIn-Normal")
+    H.assertNil(QuestGlyph({ name = "Inn" }), "no quest: the emblem or its icon as before")
+end
+
+function tests.aClientWithoutTheGamesQuestButton_keepsTheOldMark()
+    local QuestGlyph = LoadQuestGlyph({ QuestNormal = true })
+    H.assertNil(QuestGlyph({ questMark = "offer" }), "no ring on this client")
+end
+
+-- The button replaces EasyFind's pin on the end (its icon in a dark well),
+-- and the mark travels from the row to the route and on a new plan.
+function tests.theQuestButton_isTheEndsMark_fromRowToRoute()
+    local function Read(path)
+        local f = assert(io.open(H.Path(path), "rb"))
+        local src = f:read("*a")
+        f:close()
+        return src
+    end
+    local preview = Read("Preview.lua")
+    H.assertTrue(preview:find("dest.zone or QuestGlyph(dest) or not", 1, true) ~= nil, "no EasyFind pin under it")
+    H.assertTrue(preview:find("hovered.final and questGlyph then", 1, true) ~= nil, "drawn on the end")
+    H.assertTrue(preview:find("questGlyph and px(QUEST_BUTTON) * QUEST_EDGE", 1, true) ~= nil, "the line stops at its ring")
+    local gps = Read("GPS.lua")
+    H.assertTrue(gps:find("questMark = data.questMark", 1, true) ~= nil, "the row's mark kept")
+    H.assertTrue(gps:find("questMark = dest.questMark", 1, true) ~= nil, "and kept on a new plan")
+    H.assertTrue(Read("QuestDirections.lua"):find("questMark = done and \"turnin\" or nil", 1, true) ~= nil,
+        "a finished log quest is a turn-in")
 end
 
 local pass, fail, failures = H.runSuite("GPSGamePinEnd", tests)
