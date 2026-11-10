@@ -141,5 +141,19 @@ function tests.theQuestButton_isTheEndsMark_fromRowToRoute()
         "a finished log quest is a turn-in")
 end
 
+-- The line runs under the map's own icons (it crossed a quest's "?" on
+-- Forever, 2026-11-10): its own frame one above the zone highlight's layer,
+-- shown with the marks' overlay, which stays over everything.
+function tests.theLine_runsUnderTheMapsIcons()
+    local f = assert(io.open(H.Path("Preview.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    H.assertTrue(src:find("lines = Preview.NewLines(under, \"TOPLEFT\")", 1, true) ~= nil, "on its own frame")
+    H.assertTrue(src:find("GetFrameLevelStart(\"PIN_FRAME_LEVEL_MAP_HIGHLIGHT\") + 1", 1, true) ~= nil,
+        "just above the zone highlight, under every icon layer")
+    H.assertTrue(src:find("overlay:SetScript(\"OnHide\", function() under:Hide() end)", 1, true) ~= nil,
+        "hidden with the marks")
+end
+
 local pass, fail, failures = H.runSuite("GPSGamePinEnd", tests)
 return { pass = pass, fail = fail, failures = failures }

@@ -81,6 +81,16 @@ function Preview.LineColor(kind)
 end
 Preview.LINE_KINDS = LINE_KINDS
 
+-- The route's line goes under the map's own icons (a quest's "?" stays
+-- whole), over its land and its zone highlight: one above the highlight's
+-- layer, which is one level on every client.
+local function LineLevel(canvas)
+    local map = WorldMapFrame
+    local levels = map and map.GetPinFrameLevelsManager and map:GetPinFrameLevelsManager()
+    if not (levels and levels.GetFrameLevelStart) then return canvas:GetFrameLevel() + 1 end
+    return levels:GetFrameLevelStart("PIN_FRAME_LEVEL_MAP_HIGHLIGHT") + 1
+end
+
 local function Build()
     local canvas = Canvas()
     if not canvas then return false end
@@ -89,7 +99,18 @@ local function Build()
     overlay:SetFrameStrata("HIGH")
     overlay:SetFrameLevel(300)
     overlay:EnableMouse(false)
-    lines = Preview.NewLines(overlay, "TOPLEFT")
+    -- The line on a layer of its own among the map's; our marks stay over all.
+    local under = CreateFrame("Frame", nil, canvas)
+    under:SetAllPoints(canvas)
+    under:EnableMouse(false)
+    under:Hide()
+    overlay:SetScript("OnShow", function()
+        under:SetFrameLevel(LineLevel(canvas))
+        under:Show()
+    end)
+    overlay:SetScript("OnHide", function() under:Hide() end)
+    Preview._under = under   -- dev tools
+    lines = Preview.NewLines(under, "TOPLEFT")
     marks = { start = overlay:CreateTexture(nil, "OVERLAY", nil, 2), stop = overlay:CreateTexture(nil, "OVERLAY", nil, 3) }
     marks.start:SetTexture("Interface\\AddOns\\EasyFind_GPS\\textures\\beam_flare")
     marks.start:SetBlendMode("ADD")
@@ -1024,6 +1045,15 @@ if WorldMapFrame then
         driver:SetScript("OnUpdate", Tick)
     end)
     WorldMapFrame:HookScript("OnHide", function() driver:SetScript("OnUpdate", nil) end)
+end
+
+-- For the dev tools: the end on the map shown and the map's pin taken as its mark.
+function Preview.EndState()
+    local route = Route()
+    local mapID = WorldMapFrame and WorldMapFrame.GetMapID and WorldMapFrame:GetMapID()
+    if not (route and mapID) then return nil end
+    local x, y = EndOnMap(route, mapID)
+    return x, y, gamePin, gameR
 end
 
 -- For the dev tools: what a step's preview would draw, and where it stops.
