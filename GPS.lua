@@ -1077,6 +1077,14 @@ local function OffRoute(route, ci, px, py)
             local nearEnd = aci == ci and ax and (px - ax) ^ 2 + (py - ay) ^ 2 <= ARRIVE.cross * ARRIVE.cross
             return gx ~= nil and not nearEnd and (px - gx) ^ 2 + (py - gy) ^ 2 > LEFT_DOCK_YARDS * LEFT_DOCK_YARDS
         end
+        -- Another way taken (flown to the city the hearth was for): on the
+        -- destination's map and well away from where this step set out,
+        -- the route starts over from here.
+        local dest = route.dest
+        if dest and dest.mapID and not dest.zone and fci ~= nil and fx and OnMap(dest.mapID)
+            and (ci ~= fci or (px - fx) ^ 2 + (py - fy) ^ 2 > OFF_ROUTE_YARDS * OFF_ROUTE_YARDS) then
+            return true
+        end
         return false
     end
     local tci, tx, ty = PointWorld(step.go or step.arrive)
@@ -1112,6 +1120,28 @@ function GPS.StepPassed(route, ci, px, py)
     if (px - sx) ^ 2 + (py - sy) ^ 2 > PASS_YARDS * PASS_YARDS then return false end
     local toNext = ((px - nx) ^ 2 + (py - ny) ^ 2) ^ 0.5
     return toNext < ((sx - nx) ^ 2 + (sy - ny) ^ 2) ^ 0.5 - PASS_MARGIN
+end
+
+-- While a crossing is the step (a hearth, a flight), a later step the
+-- player stands at, whatever way got him there (flown to the city the
+-- hearth was for): the furthest one. At its spot it is taken up; at where
+-- it lands, the step after it, or the journey's end. A walk's own
+-- detours are the reroute's and StepPassed's.
+function GPS.StepReached(route, ci, px, py)
+    local steps, active = route.steps, route.active or 1
+    local step = steps[active]
+    if not step or step.kind == "travel" or step.corpse then return nil end
+    local reach = ARRIVE.yards * ARRIVE.yards
+    for k = #steps, active + 1, -1 do
+        local later = steps[k]
+        local aci, ax, ay = PointWorld(later.arrive)
+        if aci == ci and ax and (px - ax) ^ 2 + (py - ay) ^ 2 <= reach then
+            return steps[k + 1] and k + 1 or "arrive"
+        end
+        local gci, gx, gy = PointWorld(later.go)
+        if gci == ci and gx and (px - gx) ^ 2 + (py - gy) ^ 2 <= reach then return k end
+    end
+    return nil
 end
 
 -- A plan of the same trip taken up: its steps and times, and its start
@@ -1269,6 +1299,16 @@ local function Tick()
     if not planned and GPS.StepPassed(route, ci, px, py) then
         TrackStep((route.active or 1) + 1)
         return
+    end
+    if not planned and not (UnitOnTaxi and UnitOnTaxi("player")) then
+        local reached = GPS.StepReached(route, ci, px, py)
+        if reached == "arrive" then
+            Arrive(route)
+            return
+        elseif reached then
+            TrackStep(reached)
+            return
+        end
     end
     -- A step is done where it lands you (the far side of a portal or a
     -- flight), which is not always where it starts.
