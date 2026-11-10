@@ -5,9 +5,22 @@ if not ns then return end
 if not (ns.Caps and ns.Caps.tbc) then return end
 ns.GPSFloorData = ns.GPSFloorData or {}
 ns.GPSFloorData[0] = {
-    -- Per city its box (x0, y0, x1, y1) and its floors' names by language.
+    -- Per city its box (x0, y0, x1, y1), what the client calls the whole
+    -- of it (zone) and its floors' names, by language.
     cities = {
-        { box = { 1230, -90, 1880, 880 }, names = {
+        { box = { 1230, -90, 1880, 880 }, zone = {
+            enUS = { "Undercity" },
+            deDE = { "Unterstadt" },
+            esES = { "Entrañas" },
+            esMX = { "Entrañas" },
+            frFR = { "Fossoyeuse" },
+            itIT = { "Undercity" },
+            koKR = { "언더시티" },
+            ptBR = { "Cidade Baixa" },
+            ruRU = { "Подгород" },
+            zhCN = { "幽暗城" },
+            zhTW = { "幽暗城" },
+        }, names = {
             enUS = { "Sewers", "Canals", "Trade Quarter", "Ruins of Lordaeron", "Magic Quarter", "War Quarter", "Royal Quarter", "The Apothecarium", "Rogues' Quarter" },
             deDE = { "Die Abwasserkanäle", "Kanäle", "Handwerksviertel", "Ruinen von Lordaeron", "Magieviertel", "Kriegsviertel", "Königsviertel", "Das Apothekarium", "Schurkenviertel" },
             esES = { "Cloacas", "Canales", "Barrio del Comercio", "Ruinas de Lordaeron", "Barrio de la Magia", "Barrio de la Guerra", "Barrio Real", "El Apothecarium", "Barrio de los Pícaros" },
