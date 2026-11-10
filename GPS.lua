@@ -4018,6 +4018,7 @@ ShowGameMenu = function(owner, defs)
     end)
     return ok
 end
+GPS.ShowGameMenu = ShowGameMenu
 
 local function HideMenus()
     if ns.HideTogglePopup then
