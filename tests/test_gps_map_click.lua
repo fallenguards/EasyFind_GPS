@@ -203,6 +203,8 @@ function tests.aQuestPin_isNamedByItsQuest_andJoinsARouteAsAStop()
     H.assertEq(t.stops[1].name, "Quest 42")
     H.assertEq(t.stops[1].mapID, 84)
     H.assertEq(t.stops[1].x, 0.1)
+    defs[2].onClick()
+    H.assertEq(t.went[1].questID, 42, "its quest, tracked itself on the route's last step")
 end
 
 function tests.aRightClickOnTheBareMap_orUnderTheClientsOwnMenu_opensNothing()

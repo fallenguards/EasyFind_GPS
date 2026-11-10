@@ -283,9 +283,11 @@ end
 local INSTANCE_CATEGORIES = { dungeon = true, raid = true, delve = true }
 
 local function Destination(data)
-    -- questMark: "offer" or "turnin", the quest button its end wears.
+    -- questMark: "offer" or "turnin", the quest button its end wears;
+    -- questID: a log quest's, tracked itself on the last step.
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
-                   step = type(data.step) == "string" and data.step or nil, questMark = data.questMark }
+                   step = type(data.step) == "string" and data.step or nil, questMark = data.questMark,
+                   questID = data.questID }
     local em, ex, ey
     if data.isDungeonEntrance and not (data.x and data.y) then em, ex, ey = EntranceOf(data) end
     if em then
@@ -723,6 +725,17 @@ function GPS.TrackGamePin(on)
         GPS.GamePinChange("track", function() C_SuperTrack.SetSuperTrackedUserWaypoint(on) end)
     end
 end
+-- The quest a route's last step tracks in place of the game's pin: the
+-- destination's, while it is in the log and the client tracks quests.
+function GPS.EndQuest(route, index)
+    local quest = route.dest and route.dest.questID
+    if not (quest and index == #route.steps and C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID) then return nil end
+    local QL = C_QuestLog
+    return QL and QL.GetLogIndexForQuestID and QL.GetLogIndexForQuestID(quest) and quest or nil
+end
+function GPS.TrackQuest(quest)
+    GPS.GamePinChange("quest", function() C_SuperTrack.SetSuperTrackedQuestID(quest) end)
+end
 function GPS.DropWaitingPin()
     local MS = ns.MapSearch
     if MS and MS.DropWaypointChange then MS.DropWaypointChange("place") end
@@ -866,10 +879,19 @@ TrackStep = function(index)
     -- None for a spot in a building's hall: on the city's map it reads as
     -- the ground outside and the game leads back out (Buildings.lua); the
     -- pin set before goes too, and the arrow and minimap line lead.
+    -- The last step to a quest in the log tracks the quest itself: its own
+    -- icon is the end's mark (the game's pin drew over it), and the beacon
+    -- stands on the game's way to it.
     local MapSearch = ns.MapSearch
     local mapID, x, y
-    if step.inside then GPS.DropPin(route) end
-    if not (step.noWay or step.inside) then mapID, x, y = WaypointPoint(step) end
+    local quest = GPS.EndQuest(route, index)
+    route.questTracked = quest
+    if step.inside or quest then GPS.DropPin(route) end
+    if quest then
+        if not route.untracked then GPS.TrackQuest(quest) end
+    elseif not (step.noWay or step.inside) then
+        mapID, x, y = WaypointPoint(step)
+    end
     if mapID and UiMapPoint and MapSearch and MapSearch.PlaceUserWaypoint then
         MapSearch:PlaceUserWaypoint(UiMapPoint.CreateFromCoordinates(mapID, x, y))
         route.pin = { mapID, x, y }
@@ -1831,7 +1853,7 @@ function GPS:SetStart(data, quiet)
             ns.GPSTrip.Navigate({ quiet = true })
         else
             GPS:NavigateTo({ name = dest.name, icon = dest.icon, category = dest.category, isZone = dest.zone,
-                             displayID = dest.displayID, questMark = dest.questMark,
+                             displayID = dest.displayID, questMark = dest.questMark, questID = dest.questID,
                              mapID = dest.mapID, x = not dest.zone and dest.x or nil, y = not dest.zone and dest.y or nil },
                            { quiet = true })
         end
@@ -3184,6 +3206,10 @@ do
             local ST = C_SuperTrack
             if not (route and RouteTracked() and not route.arrived and ST and ST.IsSuperTrackingQuest
                 and ST.IsSuperTrackingQuest()) then
+                return
+            end
+            -- The route's own last step tracking its quest: no pick of the player's.
+            if route.questTracked and ST.GetSuperTrackedQuestID and ST.GetSuperTrackedQuestID() == route.questTracked then
                 return
             end
             GPS.ReleaseTracking(route)

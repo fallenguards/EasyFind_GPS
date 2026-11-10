@@ -68,7 +68,7 @@ local function Destination(questID)
     local done = QL.IsComplete and QL.IsComplete(questID)
     local dest = { name = QuestTitle(questID) or L["APP_GPS"], mapID = mapID, x = x, y = y,
                    icon = done and ICON_TURN_IN or ICON_IN_PROGRESS, category = KEY,
-                   questMark = done and "turnin" or nil }
+                   questMark = done and "turnin" or nil, questID = questID }
     return GPS:CanNavigate(dest) and dest or nil
 end
 

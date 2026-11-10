@@ -40,20 +40,25 @@ local function PinName(pin)
     return type(name) == "string" and name ~= "" and name or nil
 end
 
+-- A quest pin's quest, for the route to track it on its last step.
+local function QuestOf(pin)
+    return type(pin.questID) == "number" and pin.questID > 0 and pin.questID or nil
+end
+
 -- What a right-click is on: a pin, or with areas a quest's objective area
 -- (the map's quest layer, asked where the client asks for its tooltip).
 local function TargetUnder(map, areas)
     local pin = PinUnder(map)
     local x, y
     if pin then x, y = pin:GetPosition() end
-    if x then return { mapID = map:GetMapID(), x = x, y = y, name = PinName(pin) } end
+    if x then return { mapID = map:GetMapID(), x = x, y = y, name = PinName(pin), questID = QuestOf(pin) } end
     if not areas then return nil end
     x, y = map:GetNormalizedCursorPosition()
     for blob in map:EnumeratePinsByTemplate("QuestBlobPinTemplate") do
         local questID = blob:IsShown() and blob:UpdateMouseOverTooltip(x, y)
         if questID then
             local title = C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(questID)
-            return { mapID = map:GetMapID(), x = x, y = y, name = title ~= "" and title or nil }
+            return { mapID = map:GetMapID(), x = x, y = y, name = title ~= "" and title or nil, questID = questID }
         end
     end
 end
@@ -64,9 +69,9 @@ end
 -- every map click as ours.
 local claims = false
 
-local function Go(mapID, x, y, name)
+local function Go(mapID, x, y, name, questID)
     if not (mapID and x and y and x >= 0 and x <= 1 and y >= 0 and y <= 1) then return end
-    GPS:NavigateTo({ name = name or MapClick.PointName(mapID, x, y), mapID = mapID, x = x, y = y })
+    GPS:NavigateTo({ name = name or MapClick.PointName(mapID, x, y), mapID = mapID, x = x, y = y, questID = questID })
 end
 
 -- A right-click on a pin or a quest's area: its menu, the directions to it
@@ -80,7 +85,7 @@ local function PinMenu(p)
     local name = p.name or MapClick.PointName(p.mapID, p.x, p.y)
     local defs = {
         { kind = "title", label = name },
-        { kind = "action", label = L["GPS_MENU_DIRECTIONS"], onClick = function() Go(p.mapID, p.x, p.y, p.name) end },
+        { kind = "action", label = L["GPS_MENU_DIRECTIONS"], onClick = function() Go(p.mapID, p.x, p.y, p.name, p.questID) end },
     }
     local Trip = ns.GPSTrip
     if Trip and Trip.Insert and GPS.CurrentRoute and GPS.CurrentRoute() then
@@ -121,14 +126,14 @@ watch:SetScript("OnEvent", function(_, event, button)
         local x, y
         if pin then x, y = pin:GetPosition() end
         if not x then x, y = map:GetNormalizedCursorPosition() end
-        pressed = { mapID = map:GetMapID(), x = x, y = y, name = PinName(pin) }
+        pressed = { mapID = map:GetMapID(), x = x, y = y, name = PinName(pin), questID = pin and QuestOf(pin) }
     elseif pressed then
         local p = pressed
         pressed = nil
         Utils.SafeAfter(0, function()
             if map:IsShown() and map:GetMapID() ~= p.mapID then ns.MapSearch.TurnMap(p.mapID) end
         end)
-        Go(p.mapID, p.x, p.y, p.name)
+        Go(p.mapID, p.x, p.y, p.name, p.questID)
     elseif pressedPin and button == "RightButton" then
         local p = pressedPin
         pressedPin = nil
