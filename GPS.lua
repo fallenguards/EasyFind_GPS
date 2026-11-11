@@ -284,10 +284,11 @@ local INSTANCE_CATEGORIES = { dungeon = true, raid = true, delve = true }
 
 local function Destination(data)
     -- questMark: "offer" or "turnin", the quest button its end wears;
-    -- questID: a log quest's, tracked itself on the last step.
+    -- questID: a log quest's, tracked itself on the last step; followGUID:
+    -- a group member followed (UnitDirections.lua).
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
                    step = type(data.step) == "string" and data.step or nil, questMark = data.questMark,
-                   questID = data.questID }
+                   questID = data.questID, followGUID = data.followGUID }
     local em, ex, ey
     if data.isDungeonEntrance and not (data.x and data.y) then em, ex, ey = EntranceOf(data) end
     if em then
@@ -1854,6 +1855,7 @@ function GPS:SetStart(data, quiet)
         else
             GPS:NavigateTo({ name = dest.name, icon = dest.icon, category = dest.category, isZone = dest.zone,
                              displayID = dest.displayID, questMark = dest.questMark, questID = dest.questID,
+                             followGUID = dest.followGUID,
                              mapID = dest.mapID, x = not dest.zone and dest.x or nil, y = not dest.zone and dest.y or nil },
                            { quiet = true })
         end

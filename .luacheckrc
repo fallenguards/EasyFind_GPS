@@ -52,7 +52,7 @@ read_globals = {
     -- Menus
     "MenuUtil",
     "ColorPickerFrame", "TooltipDataProcessor", "tContains", "GetInstanceInfo",
-    "UnitIsUnit", "C_PvP", "C_ChallengeMode", "GetNumClasses", "GetClassInfo", "GetNormalizedRealmName",
+    "UnitIsUnit", "UnitInParty", "UnitInRaid", "GetNumGroupMembers", "C_PvP", "C_ChallengeMode", "GetNumClasses", "GetClassInfo", "GetNormalizedRealmName",
 
     -- Clock
     "FlashClientIcon", "GameTime_GetFormattedTime", "UnitAffectingCombat",
