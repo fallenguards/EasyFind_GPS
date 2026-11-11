@@ -704,7 +704,7 @@ local function LiftPin(route)
     if math.abs(wp.position.x - x) > 0.001 or math.abs(wp.position.y - y) > 0.001 then return end
     if ns.MapSearch and ns.MapSearch.SetEasyFindWaypointPlaced then ns.MapSearch:SetEasyFindWaypointPlaced(false) end
     GPS.TrackGamePin(false)
-    if C_Map.ClearUserWaypoint then C_Map.ClearUserWaypoint() end
+    if C_Map.ClearUserWaypoint then GPS.GamePinChange("clear", C_Map.ClearUserWaypoint) end
 end
 
 -- A flight path to learn at or after the active step.
@@ -751,7 +751,7 @@ function GPS.DropPin(route)
     if math.abs(wp.position.x - pin[2]) > 0.001 or math.abs(wp.position.y - pin[3]) > 0.001 then return end
     if ns.MapSearch and ns.MapSearch.SetEasyFindWaypointPlaced then ns.MapSearch:SetEasyFindWaypointPlaced(false) end
     GPS.TrackGamePin(false)
-    if C_Map.ClearUserWaypoint then C_Map.ClearUserWaypoint() end
+    if C_Map.ClearUserWaypoint then GPS.GamePinChange("clear", C_Map.ClearUserWaypoint) end
 end
 
 local REACH_YARDS = 40
