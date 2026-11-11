@@ -182,7 +182,7 @@ function tests.aRightClickOnAPin_opensItsMenu_withTheDirections()
     local defs = t.menus[1]
     H.assertEq(defs[1].kind, "title")
     H.assertEq(defs[1].label, "Flight Master")
-    H.assertEq(defs[2].label, "GPS_MENU_DIRECTIONS")
+    H.assertEq(defs[2].label, "GPS_MENU_EASYFIND_DIRECTIONS")
     H.assertEq(#defs, 2, "no route up: nothing to add a stop to")
     defs[2].onClick()
     H.assertEq(t.went[1].name, "Flight Master")

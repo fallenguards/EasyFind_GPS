@@ -232,6 +232,7 @@ L["GPS_DANGER_WARN_TT"]                 = "Un avviso rosso sopra i passi quando 
 L["GPS_DANGER_RED"]                     = "Rosso sui tratti pericolosi"
 L["GPS_DANGER_RED_TT"]                  = "Il percorso diventa rosso sulla mappa e sulla minimappa dove attraversa quel terreno."
 L["GPS_MENU_DIRECTIONS"]               = "Indicazioni"
+L["GPS_MENU_EASYFIND_DIRECTIONS"]      = "Indicazioni EasyFind"
 L["GPS_QUEST_LEVEL_FMT"]               = "Livello %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Richiede EasyFind %s o successivo: aggiorna EasyFind."
 L["GPS_MINIMAP_WIDTH"]                  = "Linea della minimappa"

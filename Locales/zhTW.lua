@@ -232,6 +232,7 @@ L["GPS_DANGER_WARN_TT"]                 = "路線經過遠高於你等級的生�
 L["GPS_DANGER_RED"]                     = "危險路段顯示紅色"
 L["GPS_DANGER_RED_TT"]                  = "路線經過這類地區時，在地圖和小地圖上顯示為紅色。"
 L["GPS_MENU_DIRECTIONS"]               = "導航"
+L["GPS_MENU_EASYFIND_DIRECTIONS"]      = "EasyFind 導航"
 L["GPS_QUEST_LEVEL_FMT"]               = "等級 %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "需要 EasyFind %s 或更新版本：請更新 EasyFind。"
 L["GPS_MINIMAP_WIDTH"]                  = "小地圖線條"

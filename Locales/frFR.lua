@@ -232,6 +232,7 @@ L["GPS_DANGER_WARN_TT"]                 = "Une alerte rouge au-dessus des étape
 L["GPS_DANGER_RED"]                     = "Rouge sur les passages dangereux"
 L["GPS_DANGER_RED_TT"]                  = "L'itinéraire devient rouge sur la carte et la minicarte là où il traverse ce terrain."
 L["GPS_MENU_DIRECTIONS"]               = "Itinéraire"
+L["GPS_MENU_EASYFIND_DIRECTIONS"]      = "Itinéraire EasyFind"
 L["GPS_QUEST_LEVEL_FMT"]               = "Niveau %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Nécessite EasyFind %s ou plus récent : mettez EasyFind à jour."
 L["GPS_MINIMAP_WIDTH"]                  = "Ligne de la minicarte"

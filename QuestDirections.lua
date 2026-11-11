@@ -84,7 +84,7 @@ local function AddDirections(root, questID)
     local dest = Destination(questID)
     if not dest then return end
     root:CreateDivider()
-    root:CreateButton(L["GPS_MENU_DIRECTIONS"], function() Navigate(dest) end)
+    root:CreateButton(L["GPS_MENU_EASYFIND_DIRECTIONS"], function() Navigate(dest) end)
 end
 
 -- The quest a frame under the cursor stands for (a tracker block's id, a
@@ -211,14 +211,14 @@ if Menu and Menu.ModifyMenu then
             local guid, name = UnitGUID(unit), UnitName(unit)
             if not (Plain(guid) and Plain(name) and MemberSpot(unit)) then return end
             root:CreateDivider()
-            root:CreateButton(L["GPS_MENU_DIRECTIONS"], function() Follow(guid, name) end)
+            root:CreateButton(L["GPS_MENU_EASYFIND_DIRECTIONS"], function() Follow(guid, name) end)
             return
         end
         local id = NpcID(unit)
         local spot = id and ns.Npcs and ns.Npcs.SpotOfID and ns.Npcs.SpotOfID(id)
         if not spot then return end
         root:CreateDivider()
-        root:CreateButton(L["GPS_MENU_DIRECTIONS"], function() Navigate(spot) end)
+        root:CreateButton(L["GPS_MENU_EASYFIND_DIRECTIONS"], function() Navigate(spot) end)
     end
 
     for _, which in ipairs({ "TARGET", "FOCUS", "BOSS", "PARTY", "RAID_PLAYER", "RAID" }) do

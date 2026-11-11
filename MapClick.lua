@@ -85,7 +85,7 @@ local function PinMenu(p)
     local name = p.name or MapClick.PointName(p.mapID, p.x, p.y)
     local defs = {
         { kind = "title", label = name },
-        { kind = "action", label = L["GPS_MENU_DIRECTIONS"], onClick = function() Go(p.mapID, p.x, p.y, p.name, p.questID) end },
+        { kind = "action", label = L["GPS_MENU_EASYFIND_DIRECTIONS"], onClick = function() Go(p.mapID, p.x, p.y, p.name, p.questID) end },
     }
     local Trip = ns.GPSTrip
     if Trip and Trip.Insert and GPS.CurrentRoute and GPS.CurrentRoute() then

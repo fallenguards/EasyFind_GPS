@@ -232,6 +232,7 @@ L["GPS_DANGER_WARN_TT"]                 = "경로가 레벨이 훨씬 높은 생
 L["GPS_DANGER_RED"]                     = "위험 구간 빨간색"
 L["GPS_DANGER_RED_TT"]                  = "경로가 그런 지역을 지나는 곳은 지도와 미니맵에서 빨간색이 됩니다."
 L["GPS_MENU_DIRECTIONS"]               = "길 안내"
+L["GPS_MENU_EASYFIND_DIRECTIONS"]      = "EasyFind 길 안내"
 L["GPS_QUEST_LEVEL_FMT"]               = "%d 레벨"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "EasyFind %s 이상이 필요합니다: EasyFind를 업데이트하세요."
 L["GPS_MINIMAP_WIDTH"]                  = "미니맵 선"

@@ -232,6 +232,7 @@ L["GPS_DANGER_WARN_TT"]                 = "Eine rote Warnung über den Schritten
 L["GPS_DANGER_RED"]                     = "Rot auf gefährlichen Abschnitten"
 L["GPS_DANGER_RED_TT"]                  = "Die Route wird auf der Karte und der Minikarte rot, wo sie solches Gelände durchquert."
 L["GPS_MENU_DIRECTIONS"]               = "Wegbeschreibung"
+L["GPS_MENU_EASYFIND_DIRECTIONS"]      = "EasyFind-Wegbeschreibung"
 L["GPS_QUEST_LEVEL_FMT"]               = "Stufe %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Benötigt EasyFind %s oder neuer: Bitte EasyFind aktualisieren."
 L["GPS_MINIMAP_WIDTH"]                  = "Minikartenlinie"

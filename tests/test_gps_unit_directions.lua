@@ -70,7 +70,7 @@ function tests.anNpcsPortrait_routesToTheSpotItsRowShows()
     local t = Load()
     t.units.target = { guid = "Creature-0-1-2-3-448-0000ABCD", name = "Hogger" }
     local rows = Menu(t, "TARGET", "target")
-    H.assertEq(rows[2].label, "GPS_MENU_DIRECTIONS")
+    H.assertEq(rows[2].label, "GPS_MENU_EASYFIND_DIRECTIONS")
     rows[2].fn()
     H.assertEq(t.navigated[1].dest.name, "Hogger")
     H.assertEq(t.navigated[1].dest.x, 0.3)
