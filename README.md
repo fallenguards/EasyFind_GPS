@@ -20,7 +20,7 @@ Retail, WoW Forever, Classic Era, TBC Anniversary and Mists Classic.
 
 ## How to use it
 
-Search for a place in EasyFind and click the GPS button on its row, or right-click a row or map pin and pick GPS. Open GPS from EasyFind's extensions menu to plan a trip from any start. Its settings are in EasyFind's options, under Extensions > GPS.
+Search for a place in EasyFind and click the GPS button on its row, or right-click a row or map pin and pick GPS. Alt-click any spot on the world map for directions there, or right-click a portrait (target, focus, party, raid) for directions to that unit. Open GPS from EasyFind's extensions menu to plan a trip from any start. Its settings are in EasyFind's options, under Extensions > GPS.
 
 ## Feedback
 
