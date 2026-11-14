@@ -508,6 +508,42 @@ function tests.hearth_boundInADistrictLandsInItsTown()
     H.assertEq(steps[1].arrive.wx, 5000, "lands at the town's spot")
 end
 
+-- The hearthstone and the teleports each answer to their own switch.
+function tests.hearthAndTeleports_areAvoidedApart()
+    local env, _, Route = fresh()
+    env.C_Map.GetAreaInfo = function(area) return area == 87 and "Goldshire" or nil end
+    local hearth = { id = 8690, n = "Hearthstone", item = 6948, cd = 1800, cast = 10, bind = "hearth" }
+    local spell = { id = 3561, n = "Teleport: Over There", cd = 0, cast = 10, to = P(2, 0.5, 0.55) }
+    local function first(ability, avoid)
+        local d = data()
+        d.binds = { [87] = P(2, 0.5, 0.55) }
+        d.abilities = { ability }
+        local steps = build(Route, P(1, 0.1, 0.1), { name = "Over there", mapID = 2, x = 0.5, y = 0.6 },
+            { data = d, bindName = "Goldshire", owns = function() return true end, avoid = avoid })
+        return steps[1]
+    end
+    H.assertEq(first(hearth, { teleports = true }).itemID, 6948, "teleports off: the hearthstone is still used")
+    H.assertEq(first(hearth, { hearth = true }).kind, "portal", "hearthstone off: the portal")
+    H.assertEq(first(spell, { hearth = true }).spellID, 3561, "hearthstone off: the teleport is still used")
+    H.assertEq(first(spell, { teleports = true }).kind, "portal", "teleports off: the portal")
+end
+
+function tests.hasTeleports_isTheCharactersOwn()
+    local env, _, Route = fresh()
+    local d = { abilities = {
+        { id = 8690, n = "Hearthstone", item = 6948, bind = "hearth" },
+        { id = 3561, n = "Teleport: Stormwind", class = "MAGE", faction = "Alliance", to = P(1, 0.5, 0.5) },
+    } }
+    env.UnitFactionGroup = function() return "Alliance" end
+    env.UnitRace = function() return "Human", "Human" end
+    env.UnitClass = function() return "Hunter", "HUNTER" end
+    H.assertFalse(Route.HasTeleports(d), "a hunter has the hearthstone alone")
+    env.UnitClass = function() return "Mage", "MAGE" end
+    H.assertTrue(Route.HasTeleports(d))
+    env.UnitFactionGroup = function() return "Horde" end
+    H.assertFalse(Route.HasTeleports(d), "the other faction's teleport")
+end
+
 function tests.gatedMarker_isNotOffered()
     local _, _, Route = fresh()
     local d = data()

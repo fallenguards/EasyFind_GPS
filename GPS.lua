@@ -108,6 +108,17 @@ local function DB()
     return EasyFind and EasyFind.db
 end
 
+-- The ways of travel switched off. Until 1.7.0 one switch, "teleport", held
+-- the hearthstone and the teleports: a save or profile from then has both off.
+function GPS.Avoids()
+    local db = DB()
+    local avoid = db and db.gpsAvoid
+    if avoid and avoid.teleport then
+        avoid.teleport, avoid.hearth, avoid.teleports = nil, true, true
+    end
+    return avoid
+end
+
 -- This character's slot: the route in progress and whether its pop-out was open.
 -- Style, dock slot and size are shared settings.
 local function CharKey()
@@ -471,7 +482,7 @@ function GPS:BuildRoute(dest, via, avoid, quick, draw, startFrom, dropLimit)
         local db = DB()
         -- Set out from where the player stands: indoors there or not (a
         -- building's hall, Buildings.lua).
-        local opts = { hearth = h and { point = h } or nil, via = via, avoid = avoid or (db and db.gpsAvoid) or nil,
+        local opts = { hearth = h and { point = h } or nil, via = via, avoid = avoid or GPS.Avoids() or nil,
                        start = origin, draw = draw, dropLimit = dropLimit,
                        startIndoors = not planned and IsIndoors and IsIndoors() or nil,
                        autoLearn = not (db and db.gpsAutoLearn == false), skipLearn = GPS.SkipFor(dest) }
@@ -1600,7 +1611,7 @@ end
 -- and with no transport at all; up to OTHER_WAYS that differ from it.
 local OTHER_WAYS = 2
 local WAY_ORDER = { "teleport", "portal", "boat", "zeppelin", "taxi" }
-local NO_TRANSPORT = { "taxi", "boat", "zeppelin", "portal", "teleport" }
+local NO_TRANSPORT = { "taxi", "boat", "zeppelin", "portal", "hearth", "teleports" }
 
 -- The main way a route travels: its first transport by WAY_ORDER, else "walk".
 local function WayOf(steps)
@@ -1619,7 +1630,7 @@ end
 local function OtherWays(route)
     local db = DB()
     if db and db.gpsShowOtherWays == false then return nil end
-    local base = route.wayAvoid or (db and db.gpsAvoid) or {}
+    local base = route.wayAvoid or GPS.Avoids() or {}
     local best = WayOf(route.steps)
     local found, ways = { [best] = true }, {}
     local function Try(extra, label)
@@ -1636,7 +1647,8 @@ local function OtherWays(route)
     -- A route that jumps down a ledge: the way without, for who would rather not.
     local J = ns.GPSJumps
     if J and J.Any(route.steps) then Try({ "jumps" }, "nojump") end
-    if best ~= "walk" then Try({ best }) end
+    -- A teleport is the hearthstone's or a spell's: both switches.
+    if best ~= "walk" then Try(best == "teleport" and { "hearth", "teleports" } or { best }) end
     Try(NO_TRANSPORT)
     table.sort(ways, function(a, b) return a.total < b.total end)
     for i = #ways, OTHER_WAYS + 1, -1 do ways[i] = nil end
@@ -1876,8 +1888,7 @@ function GPS:ReportRoute(stepIndex)
     local route = Route()
     local Engine = ns.GPSRoute
     if not (route and Engine and Engine.ReportCode and EasyFind.OpenRouteReport) then return end
-    local db = DB()
-    local code = Engine.ReportCode(route, { version = ns.version, avoid = db and db.gpsAvoid, hearth = HearthPoint() })
+    local code = Engine.ReportCode(route, { version = ns.version, avoid = GPS.Avoids(), hearth = HearthPoint() })
     local step = stepIndex and route.steps and route.steps[stepIndex]
     local line
     if step then
@@ -3902,7 +3913,9 @@ end
 -- The ways of travel a route may avoid, and each one's switch: the
 -- settings page and Route planning's Avoid flyout share them.
 function GPS.AvoidKinds()
-    local kinds = { "taxi", "boat", "zeppelin", "portal", "teleport" }
+    local kinds = { "taxi", "boat", "zeppelin", "portal", "hearth" }
+    -- A character with no teleport of its own gets no switch for them.
+    if ns.GPSRoute and ns.GPSRoute.HasTeleports(ns.GPSData) then kinds[#kinds + 1] = "teleports" end
     if ns.NPC_DATA and ns.NPC_DATA.danger then kinds[#kinds + 1] = "danger" end
     if ns.GPSNav and ns.GPSNav.HasRoads and ns.GPSNav.HasRoads(0) then kinds[#kinds + 1] = "offroad" end
     if ns.GPSNav and ns.GPSNav.DropHeights and ns.GPSNav.DropHeights(0) then kinds[#kinds + 1] = "jumps" end
@@ -3914,11 +3927,11 @@ local AVOID_OWN_TIP = { danger = true, offroad = true, jumps = true }
 function GPS.AvoidRow(kind)
     local key = "GPS_AVOID_" .. kind:upper()
     return { kind = "check", label = L[key], tooltip = AVOID_OWN_TIP[kind] and L[key .. "_TT"] or L["GPS_AVOID_TT"],
-        get = function() local d = DB() return d and d.gpsAvoid and d.gpsAvoid[kind] or false end,
+        get = function() local avoid = GPS.Avoids() return avoid and avoid[kind] or false end,
         set = function(on)
             local d = DB()
             if not d then return end
-            d.gpsAvoid = d.gpsAvoid or {}
+            d.gpsAvoid = GPS.Avoids() or {}
             d.gpsAvoid[kind] = on or nil
             local route = Route()
             if route and not route.arrived then Reroute(route) end

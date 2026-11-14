@@ -26,7 +26,8 @@ local ABILITY_WAIT_MAX = 600 -- a cooldown longer than this is not worth waiting
 local TELEPORT_MIN_YARDS = 1000 -- a teleport landing closer than this to the start is no trip
 local HOSTILE_SECONDS = 1800 -- the other faction's boat or zeppelin: a last resort, never banned
 local AVOID_SECONDS = 3600  -- a way the player chose to avoid: taken only when nothing else gets there
--- Which avoid setting each way of travel answers to.
+-- Which avoid setting each way of travel answers to. A teleport is the
+-- way; its switch is "hearth" or "teleports" (BuildGraph).
 local AVOID_KIND = { taxi = "taxi", boat = "boat", ferry = "boat", zeppelin = "zeppelin", skyship = "zeppelin",
                      portal = "portal", tram = "portal", teleport = "teleport" }
 Route.AVOID_KIND = AVOID_KIND
@@ -164,9 +165,24 @@ end
 -- hall's (a portal there); elsewhere in the outline it is the street above.
 local GOAL_IN_HALL = 25
 
+-- Whether the data lists a teleport this character's class, faction and
+-- race could have, the hearthstone's kind aside.
+function Route.HasTeleports(data)
+    local faction = UnitFactionGroup and UnitFactionGroup("player")
+    local class = UnitClass and select(2, UnitClass("player"))
+    local race = UnitRace and select(2, UnitRace("player"))
+    for _, a in ipairs(data and data.abilities or {}) do
+        if not a.bind and a.to and (not a.class or a.class == class) and (not a.faction or a.faction == faction)
+            and (not a.race or a.race == race) then
+            return true
+        end
+    end
+    return false
+end
+
 -- ctx: start, goal, faction, canFly, data, cooldown(ability) -> seconds left,
 -- known and listed { nodeID = true } (nil: every node learned / exists),
--- avoid { taxi, boat, zeppelin, portal, teleport = true }
+-- avoid { taxi, boat, zeppelin, portal, hearth, teleports = true }
 local function BuildGraph(ctx)
     local avoid = ctx.avoid or {}
     local function Avoided(kind) return avoid[AVOID_KIND[kind] or kind] and AVOID_SECONDS or 0 end
@@ -314,7 +330,7 @@ local function BuildGraph(ctx)
                 end
                 local ti = AddNode(dest, "teleportTo", { ability = a })
                 tinsert(teleports, { to = ti, sec = wait + cast + 8 + ((a.guess or a.approx) and 20 or 0),
-                                     pen = Avoided("teleport"), ability = a })
+                                     pen = Avoided(a.bind and "hearth" or "teleports"), ability = a })
             end
         end
     end
