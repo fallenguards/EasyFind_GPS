@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.7.0] - 2026-11-14
+
+### Changed
+- **Hearthstone has its own Avoid switch**: Route planning > Avoid lists Hearthstone and Teleports apart, where one switch covered both. Teleports shows on a character that has one, and a setting that had the old switch on keeps both on
+
+---
+
 ## [1.6.0] - 2026-11-11
 
 ### Added
