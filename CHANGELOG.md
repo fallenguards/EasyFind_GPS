@@ -4,6 +4,14 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.7.1] - 2026-11-15
+
+### Fixed
+- **An error during fights on WoW Forever**: planning a route in a fight, such as quest directions updating, stopped with an error when a teleport spell's cooldown was hidden by the game. A cooldown seen before the fight still counts
+- **An error on the world map**: the route line drawn from your position could stop the map's drawing with an error; it also clears now when you leave that leg
+
+---
+
 ## [1.7.0] - 2026-11-14
 
 ### Changed
