@@ -1,7 +1,8 @@
 -- EasyFind GPS: which floor a point stands on where a city's floors stack
 -- (Undercity's upper ring over its auction house; the client tells no
 -- height). A destination takes the height of the spawn beside it, the
--- player the floor named like the sub-zone the client shows there.
+-- player the floor named like the sub-zone the client shows there. In a
+-- room elsewhere (an inn's upper floor) only a spawn's floor is known.
 -- dev/tools/navmesh/city_floors.py writes the data (Floors_<Client>.lua).
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
@@ -23,6 +24,8 @@ local NAME_CELLS = 5          -- how far off a floor named like the sub-zone is 
 local TOLD_KEPT = 256
 
 local tiles = setmetatable({}, { __mode = "v" })   -- decoded, by continent and tile key
+local roomTiles = setmetatable({}, { __mode = "v" })
+local LEVEL_WORDS = { "upper", "lower" }
 local want = {}                                    -- Want's answer, one at a time
 -- What the client named a spot while the player stood there, kept once he
 -- has left: a trip's start keeps its floor (gone, the highest was taken).
@@ -55,8 +58,8 @@ local function Tile(ci, key)
         flat[n + 1] = count
         n = n + 1
         for _ = 1, count do
-            flat[n + 1], flat[n + 2] = tonumber(ssub(s, i, i + 1), 16) - 128, tonumber(ssub(s, i + 2, i + 3), 16)
-            n, i = n + 2, i + 4
+            flat[n + 1], flat[n + 2] = tonumber(ssub(s, i, i + 2), 16) - 2048, tonumber(ssub(s, i + 3, i + 4), 16)
+            n, i = n + 2, i + 5
         end
     end
     tiles[id] = t
@@ -155,6 +158,48 @@ local function NamedHeight(ci, city, x, y, sub, zone)
     return land
 end
 
+-- A tile's room spawns, flat: x, y, height and level each.
+local function RoomTile(ci, key, sx, sy)
+    local id = ci * 65536 + key
+    local r = roomTiles[id]
+    if r then return r end
+    local data = Data(ci)
+    local s = data and data.rooms and data.rooms[key]
+    if not s then return nil end
+    r = {}
+    for i = 1, #s, 13 do
+        local n = #r
+        r[n + 1] = sx + tonumber(ssub(s, i, i + 3), 16) / 10
+        r[n + 2] = sy + tonumber(ssub(s, i + 4, i + 7), 16) / 10
+        r[n + 3] = tonumber(ssub(s, i + 8, i + 11), 16) / 10 - 2048
+        r[n + 4] = tonumber(ssub(s, i + 12, i + 12), 16)
+    end
+    roomTiles[id] = r
+    return r
+end
+
+-- The height and level of the room spawn beside (x, y), or nil.
+local function RoomSpawn(ci, x, y)
+    local Nav = ns.GPSNav
+    if not (Nav and Nav.TileOf) then return nil end
+    local key, sx, sy = Nav.TileOf(x, y)
+    local r = RoomTile(ci, key, sx, sy)
+    if not r then return nil end
+    local best, bz, bl = ANCHOR_YARDS * ANCHOR_YARDS, nil, nil
+    for i = 1, #r, 4 do
+        local d = (r[i] - x) ^ 2 + (r[i + 1] - y) ^ 2
+        if d <= best then best, bz, bl = d, r[i + 2], r[i + 3] end
+    end
+    return bz, bl
+end
+
+-- "upper" or "lower": a spawn's floor in a room above or below the ground
+-- outside; nil on the ground's floor or where no room is known.
+function Floors.Level(ci, x, y)
+    local _, level = RoomSpawn(ci, x, y)
+    return LEVEL_WORDS[level]
+end
+
 local function SpotKey(ci, x, y)
     return (ci * 400000 + mfloor(x * 10 + 0.5) + 200000) * 400000 + mfloor(y * 10 + 0.5) + 200000
 end
@@ -165,10 +210,18 @@ end
 -- reused: read it before the next call.
 function Floors.Want(ci, x, y, spawnOnly)
     local data = Data(ci)
-    local city = data and City(data, x, y)
-    if not city then return nil end
+    if not data then return nil end
+    local city = City(data, x, y)
     local pci, px, py
     if not spawnOnly then pci, px, py = PlayerSpot() end
+    if not city then
+        -- A room names no floor: the player's own is not known.
+        if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS then return nil end
+        local z = RoomSpawn(ci, x, y)
+        if not z then return nil end
+        want.city, want.sub, want.z = nil, nil, z
+        return want
+    end
     if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS and GetSubZoneText then
         local sub, zone = GetSubZoneText() or "", GetZoneText and GetZoneText() or ""
         local k = SpotKey(ci, x, y)

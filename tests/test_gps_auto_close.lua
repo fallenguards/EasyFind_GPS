@@ -77,5 +77,19 @@ function tests.alreadyClosed_notClosedAgain()
     H.assertEq(w.closed, 0)
 end
 
+-- The arrival line carries the floor the last walk named.
+function tests.arrivalLine_namesTheFloor()
+    local env = setmetatable({
+        GPS = {}, sformat = string.format,
+        L = { GPS_ARRIVED_AT_FMT = "You have arrived at %s.", GPS_ARRIVED = "You have arrived." },
+        ns = { GPSRoute = { WithFloor = function(text, floor) return text .. " (" .. floor .. ")" end } },
+    }, { __index = _G })
+    assert(load(Slice(Source(), "function GPS.ArrivedText(route)"), "=GPS.lua ArrivedText", "t", env))()
+    local text = env.GPS.ArrivedText
+    H.assertEq(text({ dest = { name = "Warlock Trainer" }, steps = { {}, { floor = "upper" } } }),
+        "You have arrived at Warlock Trainer (upper).")
+    H.assertEq(text({ dest = { name = "Innkeeper" }, steps = { {} } }), "You have arrived at Innkeeper.")
+end
+
 local pass, fail, failures = H.runSuite("GPSAutoClose", tests)
 return { pass = pass, fail = fail, failures = failures }

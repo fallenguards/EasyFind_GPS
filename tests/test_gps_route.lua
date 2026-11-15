@@ -1616,5 +1616,19 @@ function tests.zoneGoal_aCityGateStandsForItsMiddle()
     H.assertTrue(steps[1].text:find("Map 2", 1, true) ~= nil, steps[1].text)
 end
 
+-- A destination on a room's upper floor or in a cellar: the last walk says
+-- which (Floors.Level by its spawn); elsewhere nothing is added.
+function tests.goalInARoom_theWalkNamesItsFloor()
+    local _, ns, Route = fresh()
+    ns.GPSFloors = { Level = function(_, x) if x == 2000 then return "upper" end end }
+    local steps = build(Route, P(1, 0.1, 0.1), { name = "Upstairs", mapID = 1, x = 0.2, y = 0.1 })
+    local last = steps[#steps]
+    H.assertEq(last.floor, "upper")
+    H.assertTrue(last.text:sub(-#" (GPS_FLOOR_UPPER)") == " (GPS_FLOOR_UPPER)", last.text)
+    steps = build(Route, P(1, 0.1, 0.1), { name = "Outside", mapID = 1, x = 0.3, y = 0.1 })
+    H.assertNil(steps[#steps].floor)
+    H.assertNil(steps[#steps].text:find("GPS_FLOOR", 1, true), steps[#steps].text)
+end
+
 local pass, fail, failures = H.runSuite("GPSRoute", tests)
 return { pass = pass, fail = fail, failures = failures }

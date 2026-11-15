@@ -961,6 +961,17 @@ local function Arrive(route)
     end)
 end
 
+-- The arrival line, with the floor the last walk named (an inn's upper floor).
+function GPS.ArrivedText(route)
+    local fmt = L["GPS_ARRIVED_AT_FMT"]
+    if not fmt then return L["GPS_ARRIVED"] end
+    local last = route.steps and route.steps[#route.steps]
+    local name = route.dest and route.dest.name or "?"
+    local Engine = ns.GPSRoute
+    if last and last.floor and Engine and Engine.WithFloor then name = Engine.WithFloor(name, last.floor) end
+    return sformat(fmt, name)
+end
+
 -- The step followed: the yards along its way at the last tick and when,
 -- the seconds moved on it and the fastest pace the game gave meanwhile
 -- (its speed, once enough), what the last tick answered, and the estimate.
@@ -2470,7 +2481,7 @@ local function Render(container)
         container.eta:SetText("")
         container:PlaceEtaTag(false)
         if container.trip then ns.GPSTrip.PlaceEmpty(container, false) end
-        container.empty:SetText(L["GPS_ARRIVED_AT_FMT"] and sformat(L["GPS_ARRIVED_AT_FMT"], route.dest.name or "?") or L["GPS_ARRIVED"])
+        container.empty:SetText(GPS.ArrivedText(route))
         container.empty:Show()
     else
         local eta = ""
@@ -4978,7 +4989,7 @@ function Look.RenderEra(f)
         end
         local items = route.steps
         if route.arrived then
-            items = { { text = L["GPS_ARRIVED_AT_FMT"] and sformat(L["GPS_ARRIVED_AT_FMT"], route.dest.name or "?") or L["GPS_ARRIVED"] } }
+            items = { { text = GPS.ArrivedText(route) } }
         end
         local at = route.active or 1
         local tips = AdviceLines(route)
@@ -5138,7 +5149,7 @@ RenderDock = function(f)
             -- Arrived: one line with the announcement in the steps' place.
             local items = route.steps
             if route.arrived then
-                items = { { text = L["GPS_ARRIVED_AT_FMT"] and sformat(L["GPS_ARRIVED_AT_FMT"], route.dest.name or "?") or L["GPS_ARRIVED"] } }
+                items = { { text = GPS.ArrivedText(route) } }
             end
             local tips = AdviceLines(route)
             local function DockTips(list)

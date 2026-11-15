@@ -80,7 +80,7 @@ local function MatchedCells(client)
                     H.assertEq(shipped, n, "continent " .. ci .. " tile " .. key .. " cell " .. cell .. " floors")
                 end
                 checked[ci] = checked[ci] + 1
-                i = i + 5 + 4 * n
+                i = i + 5 + 5 * n
             end
         end
     end
@@ -100,7 +100,7 @@ local function CavernCell(ns)
             local cell, n = tonumber(s:sub(i, i + 3), 16), tonumber(s:sub(i + 4, i + 4), 16)
             local zoneNamed = false
             for r = 0, n - 1 do
-                if tonumber(s:sub(i + 7 + 4 * r, i + 8 + 4 * r), 16) == 255 then zoneNamed = true end
+                if tonumber(s:sub(i + 8 + 5 * r, i + 9 + 5 * r), 16) == 255 then zoneNamed = true end
             end
             local row, col = math.floor(cell / 133), cell % 133
             local x = ORIGIN - ty * TILE - TILE + (row + 0.5) * TILE / 133
@@ -108,7 +108,7 @@ local function CavernCell(ns)
             if n >= 2 and zoneNamed and x >= cave[1] and x <= cave[3] and y >= cave[2] and y <= cave[4] then
                 return x, y
             end
-            i = i + 5 + 4 * n
+            i = i + 5 + 5 * n
         end
     end
 end
@@ -270,6 +270,41 @@ function tests.theRoyalQuarter_walkedToThroughTheCity()
         local cost = ns.GPSNav.Walk(0, 1385.1, 341.7, 1341.7, 310.2)
         H.assertTrue(cost ~= nil and cost < 700, client.walk .. ": ring to Royal Quarter " .. tostring(cost))
     end
+end
+
+-- Brill's inn on Forever: the class trainers stand on its upper floor, a
+-- cellar under it; the route led under Rupert Boch to the hearth and said
+-- arrived there (2026-11-15). A room's spawn gives its floor and its level.
+local RUPERT = { 2259.05, 250.317 }    -- warlock trainer, upper floor (41.2)
+local AUSTIL = { 2254.76, 238.445 }    -- warrior trainer, ground floor (33.7)
+local CELLAR = { 2288.9, 243.4 }       -- a spawn in the cellar (27.2)
+local STREET = { 2235, 290 }
+
+function tests.brillsInn_eachSpawnsFloor()
+    for i, client in ipairs(CLIENTS) do
+        local ns = Load(client, { sub = "" })
+        local F = ns.GPSFloors
+        H.assertEq(F.Level(0, RUPERT[1], RUPERT[2]), "upper", client.floors .. ": Rupert Boch upstairs")
+        H.assertNil(F.Level(0, AUSTIL[1], AUSTIL[2]), client.floors .. ": Austil de Mon on the ground floor")
+        H.assertEq(F.Level(0, CELLAR[1], CELLAR[2]), "lower", client.floors .. ": the cellar")
+        H.assertNil(F.Level(0, STREET[1], STREET[2]), client.floors .. ": the street names no floor")
+        H.assertTrue(HeightAt(ns, RUPERT[1], RUPERT[2]) > 38, client.floors .. ": the walk ends upstairs")
+        H.assertTrue(HeightAt(ns, AUSTIL[1], AUSTIL[2]) < 37, client.floors .. ": the walk ends downstairs")
+        if i == 3 then
+            local up = ns.GPSNav.Walk(0, STREET[1], STREET[2], RUPERT[1], RUPERT[2])
+            local down = ns.GPSNav.Walk(0, STREET[1], STREET[2], AUSTIL[1], AUSTIL[2])
+            H.assertTrue(up and down and up > down + 30, "only Rupert's walk climbs the stairs: "
+                .. tostring(up) .. " vs " .. tostring(down))
+        end
+    end
+end
+
+-- Standing in a room the player's floor is not known: no spawn's height
+-- is taken for it.
+function tests.aRoom_thePlayersOwnSpotTakesNoSpawnsFloor()
+    local ns = Load(CLIENTS[3], { x = RUPERT[1], y = RUPERT[2], sub = "" })
+    H.assertNil(ns.GPSFloors.Want(0, RUPERT[1], RUPERT[2]))
+    H.assertNotNil(ns.GPSFloors.Want(0, RUPERT[1], RUPERT[2], true), "as a spot: the spawn's")
 end
 
 local pass, fail, failures = H.runSuite("GPS floors", tests)

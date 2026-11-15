@@ -762,12 +762,21 @@ local function FloorHint(_, p)
     return nil
 end
 
+-- A destination's floor in a room above or below the ground outside (an
+-- inn's upper floor, a basement), from its spawn's height (Floors).
+local function GoalFloor(p)
+    local F = ns.GPSFloors
+    if not (F and F.Level and p and p.wx) then return nil end
+    return F.Level(p.ci, p.wx, p.wy)
+end
+
 local function WithFloor(text, floor)
     if not floor then return text end
     local L = ns.L
     local word = floor == "lower" and L["GPS_FLOOR_LOWER"] or L["GPS_FLOOR_UPPER"]
     return text .. " (" .. tostring(word) .. ")"
 end
+Route.WithFloor = WithFloor
 
 -- A zeppelin tower's docks lie this close together; nearer is one dock.
 local TOWER_YARDS, SAME_DOCK = 75, 10
@@ -967,10 +976,11 @@ local function Steps(g, path, goalName, goalStep)
                 tinsert(steps, { kind = "travel", text = (L["GPS_STEP_ARRIVE_IN_FMT"]):format(name or "?"),
                                  mapID = from.p.m, x = from.p.x, y = from.p.y, go = from.p, arrive = from.p, sec = 0 })
             else
+                local floor = node.kind == "goal" and not g.zoneGoal and GoalFloor(node.p) or nil
                 tinsert(steps, { kind = "travel",
-                                 text = (node.kind == "goal" and goalStep) or (L[GoKey(g)]):format(name or "?"),
+                                 text = WithFloor((node.kind == "goal" and goalStep) or (L[GoKey(g)]):format(name or "?"), floor),
                                  mapID = node.p.m, x = node.p.x, y = node.p.y, go = node.p, arrive = node.p, sec = e.sec,
-                                 wind = e.wind, near = e.near, fly = g.fly, inside = node.inside })
+                                 wind = e.wind, near = e.near, fly = g.fly, inside = node.inside, floor = floor })
             end
             i = i + 1
         elseif e.kind == "taxi" then
