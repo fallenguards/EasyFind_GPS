@@ -954,7 +954,10 @@ local function Arrive(route)
     end
     Utils.SafeAfter(ARRIVED_LINGER, function()
         local r = Route()
-        if r and r.arrived then GPS:Clear() end
+        if not (r and r.arrived) then return end
+        GPS:Clear()
+        local db = DB()
+        if db and db.gpsAutoClose and GPS:IsWindowOpen() then GPS:CloseWindow() end
     end)
 end
 
@@ -6729,6 +6732,12 @@ do
                 if d then d.gpsHideDone = on or nil end
                 Refresh()
             end)
+        Check("autoClose", L["GPS_AUTO_CLOSE"], L["GPS_AUTO_CLOSE_TT"],
+            function() local d = DB() return d ~= nil and d.gpsAutoClose == true end,
+            function(on)
+                local d = DB()
+                if d then d.gpsAutoClose = on or nil end
+            end)
         for _, kind in ipairs(GPS.AvoidKinds()) do
             local d = GPS.AvoidRow(kind)
             Check("avoid_" .. kind, d.label, d.tooltip, d.get, d.set, Under(L["GPS_AVOID"], d.label))
@@ -6814,7 +6823,7 @@ do
         end
         Place("plateBorder", 0, -6)
         for _, key in ipairs({ "gpsArrow", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
-                               "gpsDangerRed", "gpsRowButton", "hideDone" }) do
+                               "gpsDangerRed", "gpsRowButton", "hideDone", "autoClose" }) do
             if rows[key] then Place(key) end
         end
         -- Ways of travel a route leaves out unless nothing else gets there.
