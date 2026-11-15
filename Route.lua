@@ -1500,13 +1500,26 @@ local function ViaStop(route, dest, opts, start, known, listed)
     return steps, t1 + LEARN_SECONDS + t2, ViaAdvice(list, a1, a2, via.id, t1, t2)
 end
 
+-- Each spell's cooldown end from its last plain reading: in a fight Forever
+-- answers the numbers secret (isActive stays plain), and comparing one threw
+-- at every plan (2026-11-15). An active one never read is the global cooldown.
+local spellCooldownEnds = {}
+
 local function Cooldown(a)
     if a.item and C_Item and C_Item.GetItemCooldown then
         local ok, s, d = pcall(C_Item.GetItemCooldown, a.item)
         if ok and d and d > 5 then return mmax(0, s + d - GetTime()) end
     elseif a.id and C_Spell and C_Spell.GetSpellCooldown then
         local ok, cd = pcall(C_Spell.GetSpellCooldown, a.id)
-        if ok and cd and cd.duration and cd.duration > 5 then return mmax(0, cd.startTime + cd.duration - GetTime()) end
+        if not (ok and cd and cd.duration) then return 0 end
+        if issecretvalue and issecretvalue(cd.duration) then
+            local ends = cd.isActive and spellCooldownEnds[a.id]
+            return ends and mmax(0, ends - GetTime()) or 0
+        end
+        if cd.duration > 5 then
+            spellCooldownEnds[a.id] = cd.startTime + cd.duration
+            return mmax(0, cd.startTime + cd.duration - GetTime())
+        end
     end
     return 0
 end

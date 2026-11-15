@@ -122,6 +122,43 @@ function tests.teleport_notTakenBehindALongCooldown()
     H.assertEq(steps[1].kind, "portal")
 end
 
+-- Forever answers a spell's cooldown secret in a fight; comparing it threw
+-- at every plan (Route.lua:1493, 38 times, 2026-11-15). The end read before
+-- the fight still counts; an active one never read is the global cooldown.
+local function SecretCooldownWorld(cooldown)
+    local secret = {}
+    local world = { cd = cooldown }
+    local _, _, Route = fresh(function(env)
+        env.issecretvalue = function(v) return v == secret end
+        env.C_Spell = { GetSpellCooldown = function() return world.cd end }
+    end)
+    function world.Secret() world.cd = { startTime = secret, duration = secret, isActive = true } end
+    function world.FirstStep()
+        local d = data()
+        d.abilities = { { id = 18960, n = "Teleport", cd = 1800, cast = 10, to = P(2, 0.2, 0.2) } }
+        local steps = Route:Build({ name = "Over there", mapID = 2, x = 0.5, y = 0.6 },
+            { data = d, start = P(1, 0.1, 0.1), faction = "Alliance", canFly = false, groundSpeed = 10,
+              owns = function() return true end })
+        for i = 1, #steps do
+            if not steps[i].approach then return steps[i].kind end
+        end
+    end
+    return world
+end
+
+function tests.teleport_aSecretCooldown_keepsTheEndReadBeforeTheFight()
+    local world = SecretCooldownWorld({ startTime = 0, duration = 1500, isActive = true })
+    H.assertEq(world.FirstStep(), "portal", "out of a fight: 25 minutes to wait")
+    world.Secret()
+    H.assertEq(world.FirstStep(), "portal", "in the fight: the end read before it")
+end
+
+function tests.teleport_aSecretCooldownNeverRead_isTheGlobalOne()
+    local world = SecretCooldownWorld()
+    world.Secret()
+    H.assertEq(world.FirstStep(), "teleport")
+end
+
 function tests.factionEdge_onlyForItsFaction()
     local _, _, Route = fresh()
     local alliance = build(Route, P(1, 0.1, 0.1), { name = "Over there", mapID = 2, x = 0.5, y = 0.6 })
