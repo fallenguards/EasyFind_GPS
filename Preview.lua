@@ -665,6 +665,15 @@ local function DrawsOn(step, mapID)
 end
 Preview._DrawsOn = DrawsOn   -- tests
 
+-- The player's spot against the one last drawn: none then and none now, or
+-- within the tolerance. One that comes or goes is a change (the line from
+-- the player starting on an unchanged route subtracted the missing one).
+local function SameSpot(qx, qy, dqx, dqy, tolerance)
+    if not (qx and dqx) then return qx == dqx end
+    return (qx - dqx) ^ 2 + (qy - dqy) ^ 2 < tolerance ^ 2
+end
+Preview._SameSpot = SameSpot   -- tests
+
 local function Draw()
     local route = Route()
     local canvas = Canvas()
@@ -702,7 +711,7 @@ local function Draw()
     end
     if not dirty and drawn.route == route and drawn.map == mapID and drawn.span == span and drawn.cw == cw
         and drawn.ch == ch and drawn.shown == shownIndex and drawn.active == active
-        and drawn.seg == (f and f.seg) and (not qx or (qx - drawn.qx) ^ 2 + (qy - drawn.qy) ^ 2 < px(0.5) ^ 2) then
+        and drawn.seg == (f and f.seg) and SameSpot(qx, qy, drawn.qx, drawn.qy, px(0.5)) then
         return
     end
     dirty = false

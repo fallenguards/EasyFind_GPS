@@ -30,6 +30,22 @@ end
 
 local tests = {}
 
+-- The map's line redraws only on a change. The line from the player
+-- starting on an unchanged route threw on the spot never drawn
+-- (Preview.lua:705, Forever 2026-11-15).
+function tests.aSpotThatComesOrGoes_isAChange()
+    local env = H.newEnv()
+    local ns = H.newNs(env)
+    env.EasyFind._ns = ns
+    H.loadModule("Preview.lua", env, ns)
+    local Same = ns.GPSPreview._SameSpot
+    H.assertTrue(Same(nil, nil, nil, nil, 1), "no spot then or now")
+    H.assertFalse(Same(398, 238, nil, nil, 1), "a spot now, none drawn")
+    H.assertFalse(Same(nil, nil, 398, 238, 1), "the spot gone")
+    H.assertTrue(Same(398.2, 238, 398, 238, 1), "within the tolerance")
+    H.assertFalse(Same(402, 238, 398, 238, 1), "moved")
+end
+
 function tests.aRightAngleTurnsInSmallSteps()
     local Round = fresh()
     local p, n = Round({ 0, 0, 100, 0, 100, 100 }, 6, 20)
