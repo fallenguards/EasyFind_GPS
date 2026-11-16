@@ -12,6 +12,7 @@ local function Load(data)
     local names = { [1637] = "Orgrimmar", [392] = "Ratchet" }
     local maps = { [1445] = { name = "Dustwallow Marsh" }, [1413] = { name = "The Barrens" } }
     local env = setmetatable({
+        GPS = {}, L = {},  -- the rides it adds after them have tests of their own
         ns = { GPSData = data },
         C_Map = { GetAreaInfo = function(id) return names[id] or ("Town " .. id) end, GetMapInfo = function(m) return maps[m] end },
         wipe = function(t) for k in pairs(t) do t[k] = nil end return t end,

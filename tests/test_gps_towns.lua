@@ -11,6 +11,7 @@ local function Load(binds, areas)
     local fs = assert(src:find("local function WithTowns(q, results)", s, true))
     local _, e = src:find("\nend\r?\n", fs)
     local env = setmetatable({
+        GPS = { AddRideHits = function() end },   -- rides: test_gps_ride_search.lua
         ns = { GPSData = { binds = binds } },
         C_Map = {
             GetAreaInfo = function(area) return areas[area] end,

@@ -2783,7 +2783,49 @@ local function WithTowns(q, results)
         local at = t.lower:find(lq, 1, true)
         if at and at > 1 and not listedNames[t.row.name] then mergedHits[#mergedHits + 1] = t.row end
     end
+    GPS.AddRideHits(lq, mergedHits)
     return mergedHits
+end
+
+-- Each boat, zeppelin, skyship and tram leg as a place at its boarding
+-- spot, named as GPS names the ride and said where it leaves from.
+function GPS.RideRows()
+    if GPS.rideRows then return GPS.rideRows end
+    local rows, data = {}, ns.GPSData
+    local icons = ns.MapSearchData and ns.MapSearchData.CATEGORY_ICONS or {}
+    local symbol = { boat = "boat", ferry = "boat", zeppelin = "zeppelin", skyship = "skyship", tram = "tram" }
+    local word = { boat = L["GPS_AVOID_BOAT"], ferry = L["GPS_AVOID_BOAT"], zeppelin = L["GPS_AVOID_ZEPPELIN"],
+                   skyship = L["GPS_AVOID_ZEPPELIN"], tram = L["GPS_LINE_TRAM"] }
+    for _, r in ipairs(data and data.routes or {}) do
+        local sym, f = symbol[r.kind], r.from
+        if sym and r.n and f and f.m and f.x and f.y then
+            local from = f.area and C_Map.GetAreaInfo and C_Map.GetAreaInfo(f.area)
+            if not from then
+                local info = C_Map.GetMapInfo(f.m)
+                from = info and info.name
+            end
+            rows[#rows + 1] = {
+                hay = (r.n .. " " .. (from or "") .. " " .. r.kind .. " " .. (word[r.kind] or "")):lower(),
+                row = { name = r.n, mapID = f.m, x = f.x, y = f.y, category = sym, icon = icons[sym],
+                        zoneName = from and L["GPS_RIDE_FROM_FMT"]:format(from) or nil },
+            }
+        end
+    end
+    GPS.rideRows = rows
+    return rows
+end
+
+-- The rides whose name, kind or leaving place hold every word typed
+-- ("zeppelin", "boat menethil", "zep undercity"), after the places.
+function GPS.AddRideHits(lq, out)
+    if #lq < 3 then return end
+    for _, ride in ipairs(GPS.RideRows()) do
+        local all = true
+        for w in lq:gmatch("%S+") do
+            if not ride.hay:find(w, 1, true) then all = false break end
+        end
+        if all then out[#out + 1] = ride.row end
+    end
 end
 
 -- Places for a typed name, for the trip editor: the map search's, then towns.

@@ -180,6 +180,7 @@ L["GPS_AVOID_TT"]                       = "Routes leave these out unless nothing
 L["GPS_AVOID_TAXI"]                     = "Flight paths"
 L["GPS_AVOID_BOAT"]                     = "Boats"
 L["GPS_AVOID_ZEPPELIN"]                 = "Zeppelins and skyships"
+L["GPS_RIDE_FROM_FMT"]                  = "from %s"
 L["GPS_AVOID_PORTAL"]                   = "Portals and the tram"
 L["GPS_AVOID_HEARTH"]                   = "Hearthstone"
 L["GPS_AVOID_TELEPORTS"]                = "Teleports"
