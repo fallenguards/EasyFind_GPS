@@ -25,8 +25,11 @@ local TOLD_KEPT = 256
 
 local tiles = setmetatable({}, { __mode = "v" })   -- decoded, by continent and tile key
 local roomTiles = setmetatable({}, { __mode = "v" })
-local LEVEL_WORDS = { "upper", "lower" }
+local LEVEL_WORDS = { "upper", "lower", "inside" }
 local want = {}                                    -- Want's answer, one at a time
+-- Journeys' ends: one with no spawn's height known takes the indoor floor
+-- where one stacks under open ground (a cave under its hill).
+local goals, goalsN = {}, 0
 -- What the client named a spot while the player stood there, kept once he
 -- has left: a trip's start keeps its floor (gone, the highest was taken).
 local told, toldN = {}, 0
@@ -194,7 +197,7 @@ local function RoomSpawn(ci, x, y)
 end
 
 -- "upper" or "lower": a spawn's floor in a room above or below the ground
--- outside; nil on the ground's floor or where no room is known.
+-- outside; "inside" indoors under open ground; nil elsewhere or unknown.
 function Floors.Level(ci, x, y)
     local _, level = RoomSpawn(ci, x, y)
     return LEVEL_WORDS[level]
@@ -204,22 +207,33 @@ local function SpotKey(ci, x, y)
     return (ci * 400000 + mfloor(x * 10 + 0.5) + 200000) * 400000 + mfloor(y * 10 + 0.5) + 200000
 end
 
+-- (x, y) is where a journey ends.
+function Floors.Goal(ci, x, y)
+    local k = SpotKey(ci, x, y)
+    if goals[k] then return end
+    if goalsN >= TOLD_KEPT then goals, goalsN = {}, 0 end
+    goals[k], goalsN = true, goalsN + 1
+end
+
 -- What picks (x, y)'s floor in a stacked city: the player's sub-zone at
 -- the player's spot (unless spawnOnly), what it was there once he left,
 -- else the height of the spawn beside it; nil outside. The answer is
 -- reused: read it before the next call.
 function Floors.Want(ci, x, y, spawnOnly)
     local data = Data(ci)
-    if not data then return nil end
-    local city = City(data, x, y)
+    local city = data and City(data, x, y)
     local pci, px, py
     if not spawnOnly then pci, px, py = PlayerSpot() end
     if not city then
         -- A room names no floor: the player's own is not known.
         if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS then return nil end
-        local z = RoomSpawn(ci, x, y)
-        if not z then return nil end
-        want.city, want.sub, want.z = nil, nil, z
+        local z = data and RoomSpawn(ci, x, y)
+        if z then
+            want.city, want.sub, want.z, want.inside = nil, nil, z, nil
+            return want
+        end
+        if not goals[SpotKey(ci, x, y)] then return nil end
+        want.city, want.sub, want.z, want.inside = nil, nil, nil, true
         return want
     end
     if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS and GetSubZoneText then
@@ -240,7 +254,7 @@ function Floors.Want(ci, x, y, spawnOnly)
         local t = told[SpotKey(ci, x, y)]
         if t then return t end
     end
-    want.city, want.sub, want.z = city, nil, NearestAnchor(data, x, y)
+    want.city, want.sub, want.z, want.inside = city, nil, NearestAnchor(data, x, y), nil
     if want.z then return want end
     return nil
 end
@@ -269,6 +283,7 @@ function Floors.Tag(ci, x, y)
     local w = Floors.Want(ci, x, y)
     if not w then return "" end
     if w.sub then return "s" .. w.sub end
+    if w.inside then return "i" end
     return "z" .. mfloor(w.z + 0.5)
 end
 

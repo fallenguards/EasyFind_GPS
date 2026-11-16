@@ -472,9 +472,10 @@ local PULLED = 0.955
 
 -- The floor under (x, y): where a city's floors stack, the one Floors
 -- wants (the player's named one, a spawn's height); else indoors an
--- indoor one, else one outdoors, then ground over water (one stands on the
--- ground beside a swim), else the highest; off the grid the nearest
--- within SNAP_CELLS (or snap).
+-- indoor one (a journey's end of unknown height: a cave under its hill),
+-- else one outdoors, then ground over water (one stands on the ground
+-- beside a swim), else the highest; off the grid the nearest within
+-- SNAP_CELLS (or snap).
 local function Locate(w, x, y, indoors, snap)
     local key, sx, sy = TileOf(x, y)
     local t = Tile(w, key)
@@ -482,6 +483,7 @@ local function Locate(w, x, y, indoors, snap)
     local N, cell = w.N, w.cell
     local r0, c0 = mfloor((x - sx) / cell), mfloor((y - sy) / cell)
     local want = Floors and Floors.Want(w.ci, x, y)
+    if want and want.inside then indoors = true end
     for ring = 0, snap or SNAP_CELLS do
         local best, bestScore
         for r = r0 - ring, r0 + ring do
@@ -1669,6 +1671,25 @@ end
 -- Probe (dev tools, tests): the tile and floor under a point (exact: its
 -- own cell only), its cell, and how many of its tile's entrance sides it
 -- reaches of how many.
+-- Where indoor floors stack with outdoor ones under (x, y) (a cave under a
+-- hill, a hall under a roof walked on): whether the floor a walk ending
+-- there stops on is indoors. nil where the cell holds only one kind.
+function Nav.InsideAt(ci, x, y)
+    local w = World(ci)
+    if not w then return nil end
+    local t, g = Locate(w, x, y, nil, 0)
+    if not g then return nil end
+    local key, sx, sy = TileOf(x, y)
+    if key ~= t.key then return nil end
+    local cc = mfloor((x - sx) / w.cell) * w.N + mfloor((y - sy) / w.cell)
+    local inside, outside = false, false
+    for f = U16(t.cf, cc + 1), U16(t.cf, cc + 2) - 1 do
+        if sbyte(t.fl, f) % 4 >= 2 then inside = true else outside = true end
+    end
+    if not (inside and outside) then return nil end
+    return sbyte(t.fl, g) % 4 >= 2
+end
+
 function Nav.Probe(ci, x, y, indoors, exact)
     local w = World(ci)
     if not w then return nil end

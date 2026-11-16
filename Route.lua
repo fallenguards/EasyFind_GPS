@@ -763,18 +763,22 @@ local function FloorHint(_, p)
 end
 
 -- A destination's floor in a room above or below the ground outside (an
--- inn's upper floor, a basement), from its spawn's height (Floors).
+-- inn's upper floor, a basement), from its spawn's height (Floors); inside
+-- where the walk ends indoors under open ground (a cave under its hill).
 local function GoalFloor(p)
-    local F = ns.GPSFloors
-    if not (F and F.Level and p and p.wx) then return nil end
-    return F.Level(p.ci, p.wx, p.wy)
+    local F, Nav = ns.GPSFloors, ns.GPSNav
+    if not (p and p.wx) then return nil end
+    local level = F and F.Level and F.Level(p.ci, p.wx, p.wy)
+    if level == "upper" or level == "lower" then return level end
+    if level or (Nav and Nav.InsideAt and Nav.InsideAt(p.ci, p.wx, p.wy)) then return "inside" end
+    return nil
 end
 
+local FLOOR_WORDS = { upper = "GPS_FLOOR_UPPER", lower = "GPS_FLOOR_LOWER", inside = "GPS_FLOOR_INSIDE" }
+
 local function WithFloor(text, floor)
-    if not floor then return text end
-    local L = ns.L
-    local word = floor == "lower" and L["GPS_FLOOR_LOWER"] or L["GPS_FLOOR_UPPER"]
-    return text .. " (" .. tostring(word) .. ")"
+    if not FLOOR_WORDS[floor] then return text end
+    return text .. " (" .. tostring(ns.L[FLOOR_WORDS[floor]]) .. ")"
 end
 Route.WithFloor = WithFloor
 
@@ -1653,6 +1657,8 @@ function Route:Build(dest, opts)
     if not data then return nil end
     local goal = Resolve({ m = dest.mapID, x = dest.x, y = dest.y })
     if not goal then return nil end
+    local Floors = ns.GPSFloors
+    if not dest.zone and Floors and Floors.Goal then Floors.Goal(goal.ci, goal.wx, goal.wy) end
     local Nav = ns.GPSNav
     local start = opts.start
     if not start then

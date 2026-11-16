@@ -1630,5 +1630,25 @@ function tests.goalInARoom_theWalkNamesItsFloor()
     H.assertNil(steps[#steps].text:find("GPS_FLOOR", 1, true), steps[#steps].text)
 end
 
+-- One in a cave under its hill (Chol'aruk, Forever): the walk says inside,
+-- by the spawn's level or, its height unknown, by the floor it ends on; the
+-- spot is marked a journey's end before any walk there is asked.
+function tests.goalInACave_theWalkSaysInside()
+    local _, ns, Route = fresh()
+    local goals = {}
+    ns.GPSFloors = {
+        Level = function(_, x) if x == 3000 then return "inside" end end,
+        Goal = function(_, x) goals[#goals + 1] = x end,
+    }
+    ns.GPSNav = { InsideAt = function(_, x) return x == 2000 end, Ensure = function() return false end }
+    local steps = build(Route, P(1, 0.1, 0.1), { name = "Chol'aruk", mapID = 1, x = 0.2, y = 0.1 })
+    H.assertEq(steps[#steps].floor, "inside", "its height unknown: the floor the walk ends on")
+    H.assertTrue(steps[#steps].text:sub(-#" (GPS_FLOOR_INSIDE)") == " (GPS_FLOOR_INSIDE)", steps[#steps].text)
+    H.assertEq(goals[1], 2000, "marked a journey's end")
+    steps = build(Route, P(1, 0.1, 0.1), { name = "Kobold Miner", mapID = 1, x = 0.3, y = 0.1 })
+    H.assertEq(steps[#steps].floor, "inside", "a known spawn's level")
+    H.assertNil(build(Route, P(1, 0.1, 0.1), { name = "Field", mapID = 1, x = 0.4, y = 0.1 })[1].floor)
+end
+
 local pass, fail, failures = H.runSuite("GPSRoute", tests)
 return { pass = pass, fail = fail, failures = failures }

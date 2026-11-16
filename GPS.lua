@@ -1475,14 +1475,19 @@ local function Tick()
         -- The marks stay on a creature until the player stands beside it
         -- (several stand in a town); an entrance keeps the wider ring.
         local dest = route.dest
-        if not crossing and not route.steps[(route.active or 1) + 1] and dest and not dest.zone
-           and not INSTANCE_CATEGORIES[dest.category] then
-            radius = ARRIVE.spot
-        end
+        local spot = not crossing and not route.steps[(route.active or 1) + 1] and dest and not dest.zone
+           and not INSTANCE_CATEGORIES[dest.category]
+        if spot then radius = ARRIVE.spot end
         local dx, dy = px - sx, py - sy
         if (dx * dx + dy * dy) > radius * radius then return end
         -- Over the spot on another floor (the ring above an auction house).
         if ns.GPSFloors and not ns.GPSFloors.SameLevel(ci, sx, sy) then return end
+        -- A cave under its hill, or the hill over one: the game says which.
+        local Nav = ns.GPSNav
+        if spot and Nav and Nav.InsideAt and IsIndoors then
+            local inside = Nav.InsideAt(ci, sx, sy)
+            if inside ~= nil and inside ~= (IsIndoors() and true or false) then return end
+        end
     end
     if route.steps[(route.active or 1) + 1] then
         TrackStep((route.active or 1) + 1)
@@ -7028,5 +7033,9 @@ loginFrame:SetScript("OnEvent", function(self, event, unit, _, spellID)
     if Engine and Engine.KeepWalk then
         for _, w in ipairs(route.walks or {}) do Engine.KeepWalk(w) end
     end
+    -- Its end a journey's end again: a cave's floor, not the hill over it.
+    local Floors, last = ns.GPSFloors, route.steps and route.steps[#route.steps]
+    local p = last and (last.go or last.arrive)
+    if Floors and Floors.Goal and route.dest and not route.dest.zone and p and p.wx then Floors.Goal(p.ci, p.wx, p.wy) end
     AfterRoute(route.others ~= nil)
 end)

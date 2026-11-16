@@ -73,6 +73,7 @@ L["GPS_STEP_ENTER_SANCTUM_FMT"]         = "Enter the %s: up the stairs into the 
 L["GPS_STEP_LEAVE_SANCTUM_FMT"]         = "Leave the %s: the teleport at the end of the hall, then down the stairs"
 L["GPS_FLOOR_UPPER"]                    = "upper floor"
 L["GPS_FLOOR_LOWER"]                    = "lower floor"
+L["GPS_FLOOR_INSIDE"]                   = "inside"
 L["GPS_STEP_BOAT_FMT"]                  = "Board the boat to %s"
 L["GPS_STEP_ZEPPELIN_FMT"]              = "Board the zeppelin to %s"
 L["GPS_STEP_ZEPPELIN_AT_FMT"]           = "Board the zeppelin to %s at %s"
