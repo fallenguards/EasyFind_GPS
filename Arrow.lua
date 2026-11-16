@@ -217,6 +217,128 @@ end
 -- away while it does.
 function Arrow:Guiding() return frame ~= nil and frame:IsShown() end
 
+-- The NPC a route leads to: near its spot, a Target button under the plate.
+-- The game targets and marks only on the player's press: a secure macro.
+local TARGET_YARDS, TARGET_EVERY = 40, 0.5
+local target = {}   -- btn, npc { dest, name, ci, wx, wy }, ticker, shown macro and spot
+
+function Arrow.TargetMark()
+    local db = DB()
+    local mark = db and db.gpsTargetMark
+    if mark == nil then return 8 end
+    return mark
+end
+
+-- The route's NPC, kept past arrival until another route or the player leaves.
+local function TargetNpc()
+    local route = Route()
+    local dest = route and route.dest
+    if dest and dest.npc and dest.mapID and dest.x and ns.GPS.WorldPos then
+        if not (target.npc and target.npc.dest == dest) then
+            local ci, wx, wy = ns.GPS.WorldPos(dest.mapID, dest.x, dest.y)
+            target.npc = ci and { dest = dest, name = dest.npc, ci = ci, wx = wx, wy = wy } or nil
+        end
+    elseif route then
+        target.npc = nil
+    end
+    return target.npc
+end
+
+local function TargetButton()
+    if target.btn then return target.btn end
+    -- starts shown: hidden at the end of its setup
+    local btn = CreateFrame("Button", "EasyFindGPSTarget", UIParent, "SecureActionButtonTemplate")
+    btn:SetFrameStrata("LOW")
+    btn:RegisterForClicks("AnyUp", "AnyDown")
+    btn:SetAttribute("useOnKeyDown", false)
+    local look = ns.GPSWorldPin.NewPlate(btn)
+    look:SetAllPoints(btn)
+    look:EnableMouse(false)
+    look.text:ClearAllPoints()
+    look.text:SetPoint("CENTER")
+    btn.look = look
+    btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    btn:Hide()
+    target.btn = btn
+    return btn
+end
+
+local function HideTarget()
+    local btn = target.btn
+    if not btn or InCombatLockdown() then return end
+    btn:Hide()
+    btn:ClearAllPoints()
+    btn:SetAttribute("type", nil)
+    target.macro, target.spot = nil, nil
+end
+
+-- Under the plate while the arrow shows; at the arrow's own spot once it
+-- is gone (arrived, or its setting off).
+local function PlaceTarget(btn)
+    local spot = (frame and frame:IsShown()) and "plate" or "home"
+    if target.spot == spot then return end
+    target.spot = spot
+    btn:ClearAllPoints()
+    if spot == "plate" then
+        btn:SetPoint("TOP", plate, "BOTTOM", 0, -4)
+        return
+    end
+    local db = DB()
+    local pos = db and db.gpsArrowPos
+    if pos and pos.x and pos.y then
+        btn:SetPoint("TOP", UIParent, "BOTTOMLEFT", pos.x, pos.y)
+    else
+        btn:SetPoint("TOP", UIParent, "CENTER", 0, HOME_Y)
+    end
+end
+
+local function TargetTick()
+    if InCombatLockdown() then return end
+    local npc = TargetNpc()
+    local ci, px, py
+    if npc then ci, px, py = ns.GPS.PlayerWorldPos() end
+    local near = npc and ci == npc.ci and px and (px - npc.wx) ^ 2 + (py - npc.wy) ^ 2 <= TARGET_YARDS * TARGET_YARDS
+    if not near then
+        HideTarget()
+        if npc and not Route() then target.npc = nil end
+        if not target.npc and target.ticker then
+            target.ticker:Cancel()
+            target.ticker = nil
+        end
+        return
+    end
+    local btn = TargetButton()
+    local mark = Arrow.TargetMark()
+    -- Cleared first: a name not found leaves no other unit to mark.
+    local macro = "/cleartarget\n/targetexact " .. npc.name
+    if mark > 0 then macro = macro .. "\n/tm [@target,exists] !" .. mark end
+    if target.macro ~= macro then
+        target.macro = macro
+        btn:SetAttribute("type", "macro")
+        btn:SetAttribute("macrotext", macro)
+        local icon = mark > 0 and ("|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. mark .. ":14|t ") or ""
+        btn.look.text:SetText(icon .. (_G["TARGET"] or "Target"))
+        btn:SetSize(btn.look.text:GetStringWidth() + 20, 24)
+    end
+    PlaceTarget(btn)
+    btn:Show()
+end
+
+local function TargetSync()
+    if TargetNpc() and not target.ticker then target.ticker = C_Timer.NewTicker(TARGET_EVERY, TargetTick) end
+    target.macro = nil
+    TargetTick()
+end
+
+-- A secure button hanging from the plate protects it in a fight: unpinned
+-- and hidden as one begins, put back by the next tick after it.
+target.events = CreateFrame("Frame")
+target.events:RegisterEvent("PLAYER_REGEN_DISABLED")
+target.events:SetScript("OnEvent", HideTarget)
+
+_G["BINDING_HEADER_EASYFIND_GPS"] = "EasyFind GPS"
+_G["BINDING_NAME_CLICK EasyFindGPSTarget:LeftButton"] = ns.L["GPS_TARGET_BIND"]
+
 -- A route change or the option flipped: runs only while there is a way to point.
 function Arrow:Refresh()
     local route = Route()
@@ -229,6 +351,7 @@ function Arrow:Refresh()
         driver:SetScript("OnUpdate", nil)
         if frame then frame:Hide() end
     end
+    TargetSync()
 end
 
 driver = CreateFrame("Frame")

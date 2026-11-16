@@ -52,5 +52,17 @@ function tests.zoneRowAtASpot_isASpot()
     H.assertNil(Destination({ name = "Ashenvale", category = "zone", isZone = true, mapID = 1414, x = 0.4, y = 0.3 }).zone)
 end
 
+-- The name a Target press finds at the end: a place's own NPC, a catalog
+-- creature's name; a plain place has none.
+function tests.anNpcsEnd_carriesTheNameToTarget()
+    local Destination = Load()
+    H.assertEq(Destination({ name = "Weapon Master", category = "trainer", npcName = "Woo Ping", mapID = 1453,
+        x = 0.6, y = 0.7 }).npc, "Woo Ping")
+    H.assertEq(Destination({ name = "Kelm Hargunth", category = "npc", npcID = 3370, mapID = 1413, x = 0.5,
+        y = 0.6 }).npc, "Kelm Hargunth")
+    H.assertNil(Destination({ name = "Ashenvale", category = "zone", isZone = true, mapID = 1440 }).npc)
+    H.assertNil(Destination({ name = "Mailbox", category = "mailbox", mapID = 1453, x = 0.6, y = 0.7 }).npc)
+end
+
 local pass, fail, failures = H.runSuite("GPSDestination", tests)
 return { pass = pass, fail = fail, failures = failures }

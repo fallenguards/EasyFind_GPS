@@ -296,10 +296,16 @@ local INSTANCE_CATEGORIES = { dungeon = true, raid = true, delve = true }
 local function Destination(data)
     -- questMark: "offer" or "turnin", the quest button its end wears;
     -- questID: a log quest's, tracked itself on the last step; followGUID:
-    -- a group member followed (UnitDirections.lua).
+    -- a group member followed (UnitDirections.lua); npc: the name a Target
+    -- press finds near the end (Arrow.lua).
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
                    step = type(data.step) == "string" and data.step or nil, questMark = data.questMark,
                    questID = data.questID, followGUID = data.followGUID }
+    if data.npcName then
+        dest.npc = data.npcName
+    elseif data.npcID or data.category == "npc" then
+        dest.npc = data.name
+    end
     local em, ex, ey
     if data.isDungeonEntrance and not (data.x and data.y) then em, ex, ey = EntranceOf(data) end
     if em then
@@ -6775,6 +6781,19 @@ do
                 end)
         end
         Switch("gpsArrow", L["GPS_ARROW"], L["GPS_ARROW_TT"], Refresh)
+        local marks = { { label = _G["NONE"] or "None", value = 0 } }
+        for i = 1, 8 do
+            marks[#marks + 1] = { label = "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. i .. ":14|t "
+                .. (_G["RAID_TARGET_" .. i] or tostring(i)), value = i }
+        end
+        Choice("gpsTargetMark", L["GPS_TARGET_MARK"], L["GPS_TARGET_MARK_TT"], marks, 8,
+            function() return ns.GPSArrow and ns.GPSArrow.TargetMark() or 8 end,
+            function(v)
+                local d = DB()
+                if not d then return end
+                if v == 8 then d.gpsTargetMark = nil else d.gpsTargetMark = v end
+                Refresh()
+            end)
         Switch("gpsMinimap", L["GPS_MINIMAP_LINE"], L["GPS_MINIMAP_LINE_TT"], Refresh)
         Switch("gpsClickPulse", L["GPS_CLICK_PULSE"], L["GPS_CLICK_PULSE_TT"], function() end)
         -- Danger is known only where the creature catalog says it.
@@ -6899,7 +6918,7 @@ do
             if rows[key] then Place(key, 0, -4) end
         end
         Place("plateBorder", 0, -6)
-        for _, key in ipairs({ "gpsArrow", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
+        for _, key in ipairs({ "gpsArrow", "gpsTargetMark", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
                                "gpsDangerRed", "gpsRowButton", "hideDone", "autoClose" }) do
             if rows[key] then Place(key) end
         end
