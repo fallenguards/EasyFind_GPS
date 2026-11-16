@@ -1193,6 +1193,55 @@ function GPS.StepReached(route, ci, px, py)
     return nil
 end
 
+-- Any lift ridden, not only the route's: boarded from one door's side,
+-- then out past the other door. The route's lift step ahead it stands
+-- for, and true when it was another lift up or down to the same level
+-- (Undercity's three). A field, not a local: the file is at 200 locals.
+function GPS.LiftRidden(route, ci, px, py)
+    local w = GPS.liftWatch
+    if not w then w = {} GPS.liftWatch = w end
+    local now = GetTime()
+    local fresh = w.at and now - w.at <= 3 and w.ci == ci
+    local lx, ly = w.px, w.py
+    w.ci, w.px, w.py, w.at = ci, px, py, now
+    local function Through(e, x, y)
+        local dx, dy = e.to.wx - e.from.wx, e.to.wy - e.from.wy
+        return ((x - e.from.wx) * dx + (y - e.from.wy) * dy) / (dx * dx + dy * dy)
+    end
+    local e = w.e
+    if e and (not fresh or e.from.ci ~= ci) then e, w.e = nil, nil end
+    if not e then
+        for _, edge in ipairs(ns.GPSData and ns.GPSData.edges or {}) do
+            local a, b = edge.from, edge.to
+            if edge.kind == "elevator" and a.ci == ci and b.ci == ci and a.wx and b.wx
+                and (px - (a.wx + b.wx) / 2) ^ 2 + (py - (a.wy + b.wy) / 2) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD then
+                -- Where it was boarded from: the tick before, beside one door.
+                local t = fresh and Through(edge, lx, ly)
+                w.e, w.enter = edge, t and (t < 0.25 or t > 0.75) and t or nil
+                break
+            end
+        end
+        return nil
+    end
+    local t = Through(e, px, py)
+    local out
+    if w.enter and w.enter < 0.5 and t >= 1 then out = e.to
+    elseif w.enter and w.enter > 0.5 and t <= 0 then out = e.from end
+    local mx, my = (e.from.wx + e.to.wx) / 2, (e.from.wy + e.to.wy) / 2
+    if out or (px - mx) ^ 2 + (py - my) ^ 2 > LIFT_YARDS * LIFT_YARDS then w.e = nil end
+    if not out then return nil end
+    for k = route.active or 1, #route.steps do
+        local s = route.steps[k]
+        if s.kind == "elevator" then
+            local aci, ax, ay = PointWorld(s.arrive)
+            if aci == ci and ax and (ax - out.wx) ^ 2 + (ay - out.wy) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD then return k, false end
+            if s.arrive and s.arrive.area and s.arrive.area == out.area then return k, true end
+            return nil
+        end
+    end
+    return nil
+end
+
 -- A plan of the same trip taken up: its steps and times, and its start
 -- where the plan set out from (BuildStops), so the drawn way begins there.
 function GPS.Replanned(route, steps, total, advice)
@@ -1344,6 +1393,18 @@ local function Tick()
         end
     else
         offRoute.ticks = 0
+    end
+    -- A lift ridden while the route still had it ahead (the walk to it not
+    -- counted, or another of the city's lifts taken): on from its far door.
+    if not planned and not (UnitOnTaxi and UnitOnTaxi("player")) then
+        local k, other = GPS.LiftRidden(route, ci, px, py)
+        if other and not GPS:IsPlanning() then
+            Reroute(route)
+            return
+        elseif k then
+            if route.steps[k + 1] then TrackStep(k + 1) else Arrive(route) end
+            return
+        end
     end
     if not planned and GPS.StepPassed(route, ci, px, py) then
         TrackStep((route.active or 1) + 1)
