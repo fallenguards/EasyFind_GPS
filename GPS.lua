@@ -7046,6 +7046,10 @@ loginFrame:SetScript("OnEvent", function(self, event, unit, _, spellID)
         return
     end
     StartTicker()
+    -- The arrow, beacon and minimap line start for it now: the plan below
+    -- refreshes them only if the planner is free, and at login it may not
+    -- be (the arrow stayed away after a reload, /efd arrowgone, 2026-11-16).
+    Refresh()
     -- Its walks and other ways as the last session found them: only what
     -- is missing is worked out now.
     local Engine = ns.GPSRoute
