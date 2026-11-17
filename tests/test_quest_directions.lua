@@ -7,7 +7,7 @@ local H = require("Harness")
 
 local function Load(opts)
     opts = opts or {}
-    local menus, provider, navigated = {}, nil, {}
+    local menus, provider, navigated, actions = {}, nil, {}, {}
     local log = opts.log or {
         { questID = 101, title = "Wanted: Hogger", level = 10 },
         { questID = 102, title = "Far Away", level = 12 },
@@ -33,6 +33,7 @@ local function Load(opts)
         IsAltKeyDown = function() return false end,
         QUESTS_LABEL = "Quests", QUEST_LOG = "Quest Log",
         EasyFind = { API = {
+            RegisterAction = function(_, name, fn) actions[name] = fn end,
             CallAction = function(_, _, dest) navigated[#navigated + 1] = dest return true end,
             RegisterSearchProvider = function(def) provider = def end,
             RefreshSearchProvider = function() end,
@@ -48,7 +49,7 @@ local function Load(opts)
     f:close()
     env.EasyFind._ns = ns
     assert(load(src, "=QuestDirections.lua", "t", env))("EasyFind_GPS", {})
-    return ns, menus, provider, navigated
+    return ns, menus, provider, navigated, actions
 end
 
 -- A menu's root, recording what is added.
@@ -73,6 +74,17 @@ function tests.spot_isTheQuestsMarkOnItsMap_elseTheNextWaypoint()
 end
 
 local function NotForbidden() return false end
+
+-- Another tracker's quest menu asks the GPS for a quest's way (2026-11-17).
+function tests.questDestination_isTheWayToALogQuest()
+    local _, _, _, _, actions = Load()
+    local dest = actions.questDestination(101)
+    H.assertEq(dest.mapID, 1429)
+    H.assertEq(dest.questID, 101)
+    H.assertEq(dest.name, "Wanted: Hogger")
+    H.assertNil(actions.questDestination(999), "not in the log")
+    H.assertNil(actions.questDestination("101"))
+end
 
 function tests.trackerMenu_addsDirectionsForTheQuestUnderTheCursor()
     local block = { id = 101, IsForbidden = NotForbidden }

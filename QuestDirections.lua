@@ -77,6 +77,15 @@ local function Navigate(dest, opts)
     EasyFind.API.CallAction("gps", "navigate", dest, opts or { popout = true })
 end
 
+-- A log quest's way for a quest menu of another tracker: what "navigate"
+-- takes, nil off the log or where the game places it nowhere.
+if EasyFind.API.RegisterAction then
+    EasyFind.API.RegisterAction("gps", "questDestination", function(questID)
+        if type(questID) ~= "number" or not (QL.IsOnQuest and QL.IsOnQuest(questID)) then return nil end
+        return Destination(questID)
+    end)
+end
+
 -- ==== the client's quest menus ===============================================
 
 local function AddDirections(root, questID)
