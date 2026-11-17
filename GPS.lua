@@ -1071,6 +1071,17 @@ local function EtaText(sec)
 end
 GPS.EtaText = EtaText
 
+-- A distance in the unit picked in options. A banana is 7 inches, a
+-- football field 100 yards.
+function GPS.DistanceText(yards)
+    local db = DB()
+    local unit = db and db.gpsUnits
+    if unit == "m" then return sformat(L["GPS_UNIT_M"], mfloor(yards * 0.9144 + 0.5)) end
+    if unit == "banana" then return sformat(L["GPS_UNIT_BANANA"], mfloor(yards * 36 / 7 + 0.5)) end
+    if unit == "field" then return sformat(L["GPS_UNIT_FIELD"], yards / 100) end
+    return sformat(L["GPS_UNIT_YD"], mfloor(yards))
+end
+
 -- The destination line: the name, with the time still to go after it.
 local function DestText(route)
     local name = route.dest.name or "?"
@@ -6793,6 +6804,16 @@ do
                 if db then db.gpsArrowText = (v ~= "full") and v or nil end
                 Refresh()
             end)
+        Choice("units", L["GPS_UNITS"], nil, {
+                { label = L["GPS_UNITS_YARDS"], value = "yd" }, { label = L["GPS_UNITS_METERS"], value = "m" },
+                { label = L["GPS_UNITS_BANANAS"], value = "banana" }, { label = L["GPS_UNITS_FIELDS"], value = "field" },
+            }, "yd",
+            function() local db = DB() return db and db.gpsUnits or "yd" end,
+            function(v)
+                local db = DB()
+                if db then db.gpsUnits = (v ~= "yd") and v or nil end
+                Refresh()
+            end)
         local sizes = {}
         for i, c in ipairs(TEXT_SIZES) do sizes[i] = { label = L[c[2]], value = c[1] } end
         Choice("textSize", L["GPS_POPOUT_TEXT"], L["GPS_POPOUT_TEXT_TT"], sizes, 1,
@@ -6956,7 +6977,7 @@ do
             prev = control
         end
         Place("beacon", -8, gap)
-        for _, key in ipairs({ "line", "miniLine", "miniDot", "click", "arrowText", "textSize" }) do
+        for _, key in ipairs({ "line", "miniLine", "miniDot", "click", "arrowText", "units", "textSize" }) do
             if rows[key] then Place(key, 0, -4) end
         end
         Place("plateBorder", 0, -6)

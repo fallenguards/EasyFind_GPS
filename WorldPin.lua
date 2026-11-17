@@ -21,7 +21,7 @@ if not ns or select(2, ...).tooOld then return end
 local WorldPin = {}
 ns.GPSWorldPin = WorldPin
 
-local mfloor, mmax, mmin, mabs, matan2, mpi = math.floor, math.max, math.min, math.abs, math.atan2, math.pi
+local mmax, mmin, mabs, matan2, mpi = math.max, math.min, math.abs, math.atan2, math.pi
 local sformat = string.format
 
 local MEDIA = "Interface\\AddOns\\EasyFind_GPS\\textures\\"
@@ -367,9 +367,7 @@ function WorldPin.PlateLines(route, yards)
     local step = route.steps and route.steps[active]
     local text = (ns.GPS and ns.GPS.StepText) and ns.GPS.StepText(step, true) or (step and step.text or "")
     if mode == "step" then return text, "", "" end
-    -- Our own yard word: the game's carries a grammar token that cuts the
-    -- rest of the line.
-    local range = yards and yards > 0 and sformat(L["GPS_UNIT_YD"], mfloor(yards)) or nil
+    local range = yards and yards > 0 and ns.GPS and ns.GPS.DistanceText(yards) or nil
     local Eta = ns.GPS and ns.GPS.EtaText
     local left = mode == "full" and Eta and (route.stepEta or (step and step.sec))
     local time = left and left > 0 and Eta(left) or nil
