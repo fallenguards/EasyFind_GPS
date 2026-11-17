@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.8.1] - 2026-11-17
+
+### Fixed
+- **The Target button leaves when you arrive**: it stayed up after the route ended with no way to close it. It now goes at the arrival message, and a right-click closes it any time
+
+---
+
 ## [1.8.0] - 2026-11-17
 
 ### Added
