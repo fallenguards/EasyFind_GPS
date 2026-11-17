@@ -1499,6 +1499,12 @@ local function Tick()
         if (dx * dx + dy * dy) > radius * radius then return end
         -- Over the spot on another floor (the ring above an auction house).
         if ns.GPSFloors and not ns.GPSFloors.SameLevel(ci, sx, sy) then return end
+        -- Upstairs or below in a room nothing tells the floors apart: the
+        -- route stays until ended, unless set to end there anyway.
+        if spot and (step.floor == "upper" or step.floor == "lower") then
+            local db = DB()
+            if not (db and db.gpsArriveAnyFloor) then return end
+        end
         -- A cave under its hill, or the hill over one: the game says which.
         local Nav = ns.GPSNav
         if spot and Nav and Nav.InsideAt and IsIndoors then
@@ -6897,6 +6903,12 @@ do
                 local d = DB()
                 if d then d.gpsAutoClose = on or nil end
             end)
+        Check("arriveAnyFloor", L["GPS_ARRIVE_ANY_FLOOR"], L["GPS_ARRIVE_ANY_FLOOR_TT"],
+            function() local d = DB() return d ~= nil and d.gpsArriveAnyFloor == true end,
+            function(on)
+                local d = DB()
+                if d then d.gpsArriveAnyFloor = on or nil end
+            end)
         for _, kind in ipairs(GPS.AvoidKinds()) do
             local d = GPS.AvoidRow(kind)
             Check("avoid_" .. kind, d.label, d.tooltip, d.get, d.set, Under(L["GPS_AVOID"], d.label))
@@ -6982,7 +6994,7 @@ do
         end
         Place("plateBorder", 0, -6)
         for _, key in ipairs({ "gpsArrow", "gpsTargetMark", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
-                               "gpsDangerRed", "gpsRowButton", "hideDone", "autoClose" }) do
+                               "gpsDangerRed", "gpsRowButton", "hideDone", "autoClose", "arriveAnyFloor" }) do
             if rows[key] then Place(key) end
         end
         -- Ways of travel a route leaves out unless nothing else gets there.
