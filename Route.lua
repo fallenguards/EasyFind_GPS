@@ -1806,26 +1806,29 @@ end
 -- A drawn walk as a route keeps it (GPS.lua), nil when not drawn; KeepWalk
 -- puts one back, so a way an earlier session found is not searched again.
 -- KEPT_WALK_VER: kept in another layout, a walk is drawn again.
-local KEPT_WALK_VER = 2
+local KEPT_WALK_VER = 3
 function Route.SaveWalk(ci, sx, sy, tx, ty, near)
     local path = walkPaths[WalkKey(ci, sx, sy, tx, ty, near)]
     if path == nil then return nil end
     local w = { ver = KEPT_WALK_VER, ci = ci, sx = sx, sy = sy, tx = tx, ty = ty, near = near, none = not path or nil }
-    if path then w.pts, w.len, w.time, w.jumps = path.pts, path.len, path.time, path.jumps end
+    if path then w.pts, w.len, w.time, w.jumps, w.through = path.pts, path.len, path.time, path.jumps, path.through end
     return w
 end
 
 function Route.KeepWalk(w)
     if w.ver ~= KEPT_WALK_VER then return end
     local path = false
-    if not w.none then path = { pts = w.pts, cum = Cum(w.pts), len = w.len, time = w.time, jumps = w.jumps } end
+    if not w.none then
+        path = { pts = w.pts, cum = Cum(w.pts), len = w.len, time = w.time, jumps = w.jumps, through = w.through }
+    end
     KeepPath(WalkKey(w.ci, w.sx, w.sy, w.tx, w.ty, w.near), path)
 end
 
 -- A walk's way on foot: { pts (world yards, x y pairs), cum[vertex] (yards
 -- so far), len (yards walked), time (running yards: swimming takes longer),
 -- jumps (each drop that costs health: at, yards along it to its ledge, the
--- ledge x, y and its height h) },
+-- ledge x, y and its height h), through (each named floor it enters: at,
+-- x, y, en its English name, name the client's) },
 -- false when no way leads there, nil without walking data for ci. lazy:
 -- nil too when it is not drawn yet; the planner draws, everything else
 -- asks lazily and is told when it is there. near: it ends within that many
@@ -1836,16 +1839,23 @@ function Route.WalkPath(ci, sx, sy, tx, ty, lazy, near)
     local key = WalkKey(ci, sx, sy, tx, ty, near)
     local path = walkPaths[key]
     if path == nil and not lazy then
-        local pts, _, time, jumps = Nav.Path(ci, sx, sy, tx, ty, near and { near = near } or nil)
+        local pts, _, time, jumps, levels = Nav.Path(ci, sx, sy, tx, ty, near and { near = near } or nil)
         if pts then
             local cum = Cum(pts)
-            local list
+            local list, through
             for k = 1, jumps and #jumps or 0 do
                 local v = mmax(1, jumps[k].v - 1)
                 list = list or {}
                 list[#list + 1] = { at = cum[v], x = pts[2 * v - 1], y = pts[2 * v], h = jumps[k].h }
             end
-            path = { pts = pts, cum = cum, len = cum[#cum], time = time or cum[#cum], jumps = list }
+            for k = 1, levels and #levels or 0 do
+                local v, l = levels[k].v, levels[k]
+                if v then
+                    through = through or {}
+                    through[#through + 1] = { at = cum[v], x = pts[2 * v - 1], y = pts[2 * v], en = l.en, name = l.name }
+                end
+            end
+            path = { pts = pts, cum = cum, len = cum[#cum], time = time or cum[#cum], jumps = list, through = through }
         else
             path = false
         end
@@ -1876,8 +1886,16 @@ local function KeepStretch(ci, path, from, stop, sx, sy, ex, ey, near)
             jumps[#jumps + 1] = { at = j.at - from, x = j.x, y = j.y, h = j.h }
         end
     end
+    local through
+    for _, l in ipairs(path.through or {}) do
+        if l.at >= from and l.at < stop then
+            through = through or {}
+            through[#through + 1] = { at = l.at - from, x = l.x, y = l.y, en = l.en, name = l.name }
+        end
+    end
     KeepPath(WalkKey(ci, sx, sy, ex, ey, near), { pts = out, cum = ocum, len = stop - from,
-                                             time = path.time * (stop - from) / mmax(1, path.len), jumps = jumps })
+                                             time = path.time * (stop - from) / mmax(1, path.len), jumps = jumps,
+                                             through = through })
 end
 
 -- Walks, zone by zone
@@ -2056,6 +2074,57 @@ local function WalkPieces(step, from, data, env, first)
     return out
 end
 
+local SEWERS = "Sewers"   -- Undercity's way in under the ruins, by its English name
+local INTO_MIN = 30       -- yards: a walk starting at the sewers' mouth is not split there
+
+-- A walk through a city's sewers says so: a step to their mouth, done when
+-- the game names the place (the player saw no way in and took the route
+-- for broken, 2026-11-17), then the rest of the walk.
+local function SewerPieces(step, from, env)
+    if step.enterSub or step.viaSewers then return nil end
+    local target = step.go or step.arrive
+    local ci, fx, fy = PointWorld(from)
+    local ci2, tx, ty = PointWorld(target)
+    if not (ci and ci == ci2) then return nil end
+    local path = Route.WalkPath(ci, fx, fy, tx, ty, true, step.near)
+    local into
+    for _, l in ipairs(path and path.through or {}) do
+        if l.en == SEWERS then
+            into = l
+            break
+        end
+    end
+    if not into then return nil end
+    local L = ns.L
+    local rest = {}
+    for key, value in pairs(step) do rest[key] = value end
+    rest.viaSewers = into.name
+    rest.text = sformat(L["GPS_STEP_VIA_FMT"], step.text or "", into.name)
+    if into.at < INTO_MIN then return { rest } end
+    local map = env.zoneAt and env.zoneAt(ci, into.x, into.y)
+    local mx, my
+    if map and env.mapPos then mx, my = env.mapPos(ci, into.x, into.y, map) end
+    if not mx then return { rest } end
+    local first = {}
+    for key, value in pairs(step) do first[key] = value end
+    local spot = { ci = ci, wx = into.x, wy = into.y, m = map, x = mx, y = my }
+    first.mapID, first.x, first.y, first.go, first.arrive = map, mx, my, spot, spot
+    first.text, first.enterSub, first.near, first.floor = sformat(L["GPS_STEP_INTO_FMT"], into.name), into.name, nil, nil
+    first.jumps, rest.jumps = nil, nil
+    for _, j in ipairs(path.jumps or {}) do
+        local piece = j.at < into.at and first or rest
+        piece.jumps = piece.jumps or {}
+        piece.jumps[#piece.jumps + 1] = j
+    end
+    if step.sec then
+        first.sec = step.sec * into.at / mmax(1, path.len)
+        rest.sec = step.sec - first.sec
+    end
+    KeepStretch(ci, path, 0, into.at, fx, fy, into.x, into.y, nil)
+    KeepStretch(ci, path, into.at, path.len, into.x, into.y, tx, ty, step.near)
+    return { first, rest }
+end
+
 -- Each long walk as a step per zone crossed. env: zoneAt(ci, wx, wy) -> map, name;
 -- mapPos(ci, wx, wy, mapID); isCity(mapID); startCity { map, name }; goalCity
 -- { map, name }; goalZone; wholeWalks: a walk stays one step.
@@ -2063,15 +2132,14 @@ function Route.SplitWalks(steps, start, data, env)
     local out = {}
     for i = 1, #steps do
         local step = steps[i]
+        local from = i == 1 and start or steps[i - 1].arrive
         local pieces
         -- A ghost's walk to its corpse stays one step, from where it released.
-        if Walked(step) and not step.corpse then
-            pieces = WalkPieces(step, i == 1 and start or steps[i - 1].arrive, data, env, i == 1)
-        end
-        if pieces then
-            for k = 1, #pieces do out[#out + 1] = pieces[k] end
-        else
-            out[#out + 1] = step
+        if Walked(step) and not step.corpse then pieces = WalkPieces(step, from, data, env, i == 1) end
+        for _, piece in ipairs(pieces or { step }) do
+            local sewer = Walked(piece) and not piece.corpse and SewerPieces(piece, from, env)
+            for _, p in ipairs(sewer or { piece }) do out[#out + 1] = p end
+            from = piece.arrive
         end
     end
     return out

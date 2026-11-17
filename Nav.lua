@@ -1641,8 +1641,24 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
     -- Pulled straight across the tiles too: a walk crosses a tile's edge
     -- at one of its few entrances, a way round where the line is clear.
     local n = #out / 2
+    -- Each named floor it enters (a city's sewers), read at its bends.
+    local levels, was = {}, nil
+    for v = 2, Floors and Floors.LevelName and n or 0 do
+        local tv, x, y = ft[v], out[2 * v - 1], out[2 * v]
+        local en, name
+        local key, sx, sy = TileOf(x, y)
+        if tv and key == tv.key then
+            local cc = mfloor((x - sx) / w.cell) * w.N + mfloor((y - sy) / w.cell)
+            en, name = Floors.LevelName(w.ci, key, cc, fg[v] - U16(tv.cf, cc + 1), x, y)
+        end
+        if en ~= was then
+            if en then levels[#levels + 1] = { v = v, en = en, name = name } end
+            was = en
+        end
+    end
     local landing = {}
     for j = 1, #jumps do landing[jumps[j].v] = true end
+    for j = 1, #levels do landing[levels[j].v] = true end
     local keep, checks = { 1 }, 0
     local i = 2
     while i <= n do
@@ -1662,10 +1678,11 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
             pulled[2 * v - 1], pulled[2 * v], at[o] = out[2 * o - 1], out[2 * o], v
         end
         for j = 1, #jumps do jumps[j].v = at[jumps[j].v] end
+        for j = 1, #levels do levels[j].v = at[levels[j].v] end
         out = pulled
     end
     out[#out + 1], out[#out + 2] = bx, by
-    return out, cost, walk[7], jumps
+    return out, cost, walk[7], jumps, levels
 end
 
 -- Probe (dev tools, tests): the tile and floor under a point (exact: its

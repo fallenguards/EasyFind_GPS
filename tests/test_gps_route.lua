@@ -1025,6 +1025,38 @@ function tests.walk_splitAgain_eachPieceKeepsItsJumps()
     H.assertNil(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true), "a walk kept in an older layout is drawn again")
 end
 
+-- Forever, 2026-11-17: a walk into Undercity through its sewers read only
+-- "Walk to A Recipe For Death", and the way into a pipe looked broken. A
+-- walk entering a floor named Sewers (the walking grid's floor names, at
+-- the junction here) is a step into them, done when the game names the
+-- place, then the rest, saying it goes through them; split once only.
+function tests.walk_throughTheSewers_saysSo()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local path = ns.GPSNav.Path
+    ns.GPSNav.Path = function(...)
+        local pts, len = path(...)
+        return pts, len, nil, nil, { { v = 3, en = "Sewers", name = "Abwasser" } }
+    end
+    ns.L.GPS_STEP_INTO_FMT, ns.L.GPS_STEP_VIA_FMT = "Walk into the %s", "%s, through the %s"
+    local steps, start, target = walk(Route)
+    local env = { zoneAt = function() return 12, "Charlie" end, mapPos = function() return 0.4, 0.6 end }
+    local out = Route.SplitWalks(steps, start, data(), env)
+    H.assertEq(#out, 2, "into the sewers, then on")
+    H.assertEq(out[1].text, "Walk into the Abwasser", "in the client's language")
+    H.assertEq(out[1].enterSub, "Abwasser", "done when the game names the place")
+    H.assertEq(out[1].arrive.wx, 0)
+    H.assertEq(out[1].arrive.wy, 1000, "at the junction, where the sewers start")
+    H.assertEq(out[2].text, "Travel to Spot, through the Abwasser")
+    H.assertEq(out[2].arrive, target)
+    H.assertTrue(math.abs(out[1].sec + out[2].sec - 210) < 0.01, "the time is shared out")
+    local again = Route.SplitWalks(out, start, data(), env)
+    H.assertEq(#again, 2, "split once, split no further")
+    H.assertEq(again[2].text, "Travel to Spot, through the Abwasser", "said once")
+    local stretch = Route.WalkPath(1, 0, 1000, target.wx, target.wy, true)
+    H.assertNotNil(stretch, "the rest's way is kept, followed without a search")
+end
+
 -- A route keeps its drawn walks: put back in a later session they are
 -- found without a search (a route in progress at login drew every walk
 -- again, about a second of the GPS at 6 to 10 ms a frame).

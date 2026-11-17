@@ -1487,7 +1487,9 @@ local function Tick()
     -- The walk to a dock reached by a tight ring: carried off, it is done.
     local Boats = ns.GPSBoats
     local carried = step.arriveYards and Boats and Boats.Carried and Boats.Carried()
-    if not carried and not (crossing and step.go and step.go.ci ~= sci) then
+    -- Into a place the game names (Undercity's sewers): done on entering it.
+    local named = step.enterSub ~= nil and GetSubZoneText ~= nil and GetSubZoneText() == step.enterSub
+    if not named and not carried and not (crossing and step.go and step.go.ci ~= sci) then
         local radius = crossing and ARRIVE.cross or step.arriveYards or ARRIVE.yards
         -- The marks stay on a creature until the player stands beside it
         -- (several stand in a town); an entrance keeps the wider ring.

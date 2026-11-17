@@ -277,6 +277,20 @@ function Floors.OnLevel(ci, key, cell, rank, w)
     return mabs(flat[at + 1 + 2 * rank] - w.z) <= LEVEL_YARDS
 end
 
+-- The city's name for the rank-th floor of a stacked cell at (x, y), in
+-- English and in the client's language (Undercity's "Sewers"), or nil.
+function Floors.LevelName(ci, key, cell, rank, x, y)
+    local flat, at = Cell(ci, key, cell)
+    if not (flat and rank >= 0 and rank < flat[at]) then return nil end
+    local k = flat[at + 2 + 2 * rank]
+    if k == 0 or k == ZONE_NAME then return nil end
+    local data = Data(ci)
+    local city = data and City(data, x, y)
+    if not city then return nil end
+    local locale = GetLocale and GetLocale() or "enUS"
+    return city.names.enUS[k], (city.names[locale] or city.names.enUS)[k]
+end
+
 -- A walk's ends as a cache key's tail: walks between the same spots on
 -- other floors are other walks.
 function Floors.Tag(ci, x, y)
