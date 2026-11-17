@@ -4,6 +4,24 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.8.0] - 2026-11-17
+
+### Added
+- **Target the NPC you came for**: near an NPC a route leads to, a Target button under the arrow targets it and puts a raid mark on it (a skull by default, set in options). It has a key binding too
+- **Distances in yards, meters, bananas or football fields**: pick the unit in the GPS options
+- **Close the window on arrival**: an option closes the GPS window a few seconds after you arrive
+- **Arrive on any floor**: a route to an inn's upper floor or a cellar now stays until you end it, as the game cannot tell its floors apart; this option ends it over or under the spot as before
+- **Boats, zeppelins and trams in the search**: find one by its name or by where it leaves from ("zeppelin orgrimmar", "boat auberdine")
+- **The sewers on the way**: a walk into Undercity through its sewers says so, with a step into the Sewers that is done as you enter them
+
+### Fixed
+- **Upstairs or in a cellar**: a destination on an inn's upper floor or below says so, and the walk ends on its floor
+- **Lifts**: riding any lift counts, not only the one the route picked
+- **Caves**: a spot inside a cave is walked to through its mouth, not over the hill above
+- **A route picked up at login** draws its arrow at once
+
+---
+
 ## [1.7.1] - 2026-11-15
 
 ### Fixed
