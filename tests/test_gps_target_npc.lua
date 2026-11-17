@@ -118,21 +118,49 @@ function tests.inAFight_theButtonIsNeverTouched()
     H.assertFalse(btn:IsShown())
 end
 
--- Arrived, the route lingers then clears: the button stays while the
--- player stands there, and goes once they leave.
-function tests.afterArrival_itStaysUntilThePlayerLeaves()
+local function live(w)
+    local n = 0
+    for _, t in ipairs(w.ticks) do if not t.cancelled then n = n + 1 end end
+    return n
+end
+
+-- Shown on the walk in, gone at the arrival message, the player still
+-- standing there (it stayed through the arrival's linger, and before that
+-- for good with no way to close it, 2026-11-17).
+function tests.arrival_takesTheButton_standingThere()
     local w = fresh()
     w.near()
     w.Arrow:Refresh()
+    H.assertTrue(w.button():IsShown(), "near, on the way")
+    w.state.route.arrived = true
+    w.Arrow:Refresh()
+    H.assertFalse(w.button():IsShown(), "arrived: gone")
+    w.tick()
+    H.assertFalse(w.button():IsShown(), "and stays gone")
+    H.assertEq(live(w), 0, "nothing left to watch: the ticker stops")
     w.state.route = nil
     w.Arrow:Refresh()
-    H.assertTrue(w.button():IsShown(), "the route cleared, the NPC still there")
-    w.far()
+    H.assertFalse(w.button():IsShown(), "nor back when the route clears")
+end
+
+-- A right-click closes it for this route; the left click still targets.
+function tests.aRightClick_closesItForThisRoute()
+    local w = fresh()
+    w.near()
+    w.Arrow:Refresh()
+    local btn = w.button()
+    H.assertEq(btn:GetAttribute("type2"), "dismiss", "the right button's own action")
+    H.assertTrue(type(rawget(btn, "dismiss")) == "function", "found by the template on the button itself")
+    H.assertEq(btn:GetAttribute("type"), "macro", "the left still targets")
+    btn.dismiss(btn)
+    H.assertFalse(btn:IsShown(), "closed")
     w.tick()
-    H.assertFalse(w.button():IsShown())
-    local live = 0
-    for _, t in ipairs(w.ticks) do if not t.cancelled then live = live + 1 end end
-    H.assertEq(live, 0, "nothing left to watch: the ticker stops")
+    H.assertFalse(btn:IsShown(), "stays closed while near")
+    H.assertEq(live(w), 0)
+    w.state.route = { dest = { name = "Kelm Hargunth", npc = "Kelm Hargunth", mapID = 1413, x = 0.5, y = 0.6 },
+                      steps = {}, active = 1 }
+    w.Arrow:Refresh()
+    H.assertTrue(btn:IsShown(), "a new route brings it back")
 end
 
 function tests.aRouteToAPlace_hasNoButton()

@@ -229,19 +229,35 @@ function Arrow.TargetMark()
     return mark
 end
 
--- The route's NPC, kept past arrival until another route or the player leaves.
+-- The route's NPC on the walk in (40 yd) until arrival (8 yd beside it),
+-- unless closed with a right-click.
 local function TargetNpc()
     local route = Route()
-    local dest = route and route.dest
-    if dest and dest.npc and dest.mapID and dest.x and ns.GPS.WorldPos then
+    local dest = route and not route.arrived and route.dest
+    if dest and dest.npc and dest ~= target.closed and dest.mapID and dest.x and ns.GPS.WorldPos then
         if not (target.npc and target.npc.dest == dest) then
             local ci, wx, wy = ns.GPS.WorldPos(dest.mapID, dest.x, dest.y)
             target.npc = ci and { dest = dest, name = dest.npc, ci = ci, wx = wx, wy = wy } or nil
         end
-    elseif route then
+    else
         target.npc = nil
     end
     return target.npc
+end
+
+local function HideTarget()
+    local btn = target.btn
+    if not btn or InCombatLockdown() then return end
+    btn:Hide()
+    btn:ClearAllPoints()
+    btn:SetAttribute("type", nil)
+    target.macro, target.spot = nil, nil
+end
+
+local function CloseTarget()
+    target.closed = target.npc and target.npc.dest
+    target.npc = nil
+    HideTarget()
 end
 
 local function TargetButton()
@@ -251,6 +267,15 @@ local function TargetButton()
     btn:SetFrameStrata("LOW")
     btn:RegisterForClicks("AnyUp", "AnyDown")
     btn:SetAttribute("useOnKeyDown", false)
+    -- Right-click runs btn.dismiss (the template's own-function action).
+    btn:SetAttribute("type2", "dismiss")
+    btn.dismiss = CloseTarget
+    btn:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+        GameTooltip:SetText(ns.L["GPS_TARGET_CLOSE_TT"], 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btn:SetScript("OnLeave", GameTooltip_Hide)
     local look = ns.GPSWorldPin.NewPlate(btn)
     look:SetAllPoints(btn)
     look:EnableMouse(false)
@@ -261,15 +286,6 @@ local function TargetButton()
     btn:Hide()
     target.btn = btn
     return btn
-end
-
-local function HideTarget()
-    local btn = target.btn
-    if not btn or InCombatLockdown() then return end
-    btn:Hide()
-    btn:ClearAllPoints()
-    btn:SetAttribute("type", nil)
-    target.macro, target.spot = nil, nil
 end
 
 -- Under the plate while the arrow shows; at the arrow's own spot once it
@@ -300,7 +316,6 @@ local function TargetTick()
     local near = npc and ci == npc.ci and px and (px - npc.wx) ^ 2 + (py - npc.wy) ^ 2 <= TARGET_YARDS * TARGET_YARDS
     if not near then
         HideTarget()
-        if npc and not Route() then target.npc = nil end
         if not target.npc and target.ticker then
             target.ticker:Cancel()
             target.ticker = nil
