@@ -1954,6 +1954,6 @@ ns.GPSData = {
     -- A city whose map's middle is no way in: its gate, by the city's map.
     gates = {
         [998] = { m = 998, x = 0.6566, y = 0.4367, ci = 0, wx = 1598, wy = 243 },
-        [88] = { { m = 88, x = 0.3163, y = 0.6601, ci = 1, wx = -1309, wy = 186 }, { m = 88, x = 0.5238, y = 0.2567, ci = 1, wx = -1029, wy = -30 } },
+        [88] = { m = 88, x = 0.4665, y = 0.499, ci = 1, wx = -1197, wy = 30, up = true },
     },
 }

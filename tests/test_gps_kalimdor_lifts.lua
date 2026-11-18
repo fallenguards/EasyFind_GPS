@@ -58,9 +58,9 @@ local function Route(client)
         end,
         GetMapInfo = function(m) return { name = "Map " .. m } end,
     }
-    return function(dest)
+    return function(dest, start)
         return ns.GPSRoute:Build(dest,
-            { data = ns.GPSData, start = { ci = 1, wx = 1630, wy = -4420, m = 1454, x = 0.5, y = 0.5 },
+            { data = ns.GPSData, start = start or { ci = 1, wx = 1630, wy = -4420, m = 1454, x = 0.5, y = 0.5 },
               faction = "Horde", canFly = false, groundSpeed = 7, known = {},
               owns = function() return false end, cooldown = function() return 0 end })
     end
@@ -70,16 +70,36 @@ local function Lift(steps)
     for _, s in ipairs(steps or {}) do if s.kind == "elevator" then return s end end
 end
 
--- The city is reached at a lift's foot: the game puts you on its map there.
-function tests.orgrimmarToThunderBluff_noFlightKnown_endsAtALiftsFoot()
+local THUNDER_BLUFF = { name = "Thunder Bluff", mapID = 1456, x = 0.5, y = 0.5, zone = true }
+
+-- The city is up top, though its map reaches the lifts' feet: a route
+-- ended in the canyon below it (2026-11-17).
+function tests.orgrimmarToThunderBluff_noFlightKnown_ridesALiftUp()
     for _, c in ipairs({ CLIENTS[1], CLIENTS[2] }) do
-        local steps = Route(c)({ name = "Thunder Bluff", mapID = 1456, x = 0.5, y = 0.5, zone = true })
+        local steps = Route(c)(THUNDER_BLUFF)
         H.assertTrue(steps ~= nil and #steps > 0, c.data .. ": a way there")
-        H.assertNil(Lift(steps), c.data .. ": no lift up after arriving")
+        H.assertNotNil(Lift(steps), c.data .. ": up a lift")
         local last = steps and steps[#steps].arrive
-        H.assertTrue(last ~= nil and (last.wx + 1029) ^ 2 + (last.wy + 30) ^ 2 < 15 * 15,
-            c.data .. ": at the east lift's foot, the nearer from Orgrimmar")
+        H.assertTrue(last ~= nil and (last.wx + 1197) ^ 2 + (last.wy - 30) ^ 2 < 15 * 15, c.data .. ": ends up top")
     end
+end
+
+-- Standing at a lift's foot, already on the city's map: still up the lift.
+function tests.atALiftsFoot_onTheCitysMap_stillRidesUp()
+    for _, c in ipairs({ CLIENTS[1], CLIENTS[2] }) do
+        local foot = { ci = 1, wx = -1029, wy = -30, m = 1456, x = 0.5238, y = 0.2567 }
+        H.assertNotNil(Lift(Route(c)(THUNDER_BLUFF, foot)), c.data .. ": up the lift")
+    end
+end
+
+-- Arrival on the city's map waits while a lift is still ahead.
+function tests.zoneArrival_waitsForALiftAhead()
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    local s = assert(src:find("A zone is reached when you are in it", 1, true))
+    local block = src:sub(s, (src:find("Arrive(route)", s, true)))
+    H.assertTrue(block:find('StepAhead(route, "elevator")', 1, true) ~= nil)
 end
 
 -- A spot up on the mesa: the walk rides a lift.

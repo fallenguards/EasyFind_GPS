@@ -485,7 +485,7 @@ ns.GPSData = {
     -- A city whose map's middle is no way in: its gate, by the city's map.
     gates = {
         [1458] = { m = 1458, x = 0.6566, y = 0.4367, ci = 0, wx = 1598, wy = 243 },
-        [1456] = { { m = 1456, x = 0.3163, y = 0.6601, ci = 1, wx = -1309, wy = 186 }, { m = 1456, x = 0.5238, y = 0.2567, ci = 1, wx = -1029, wy = -30 } },
+        [1456] = { m = 1456, x = 0.4665, y = 0.499, ci = 1, wx = -1197, wy = 30, up = true },
     },
     -- Subzones by zone map, flat triples: area id, x, y (C_Map.GetAreaInfo names them).
     areas = {

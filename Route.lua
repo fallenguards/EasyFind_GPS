@@ -1672,7 +1672,7 @@ function Route:Build(dest, opts)
     end
     if not start then return nil end
     local gate = dest.zone and data.gates and data.gates[dest.mapID]
-    -- A city with several ways in (Thunder Bluff's lifts): the nearest.
+    -- A city with several ways in: the nearest.
     if gate and gate[1] then
         local best, bestD = gate[1], mhuge
         for _, p in ipairs(gate) do
@@ -1738,7 +1738,8 @@ function Route:Build(dest, opts)
         ctx.groundSpeed = ctx.groundSpeed or ground
     end
     local g = BuildGraph(ctx)
-    if dest.zone then ZoneGoal(g, dest.mapID) end
+    -- A city on high is its gate up top, not any step onto its map.
+    if dest.zone and not (gate and gate.up) then ZoneGoal(g, dest.mapID) end
     local path = Solve(g)
     if not path then return nil end
     local cost = PathSeconds(g, path)

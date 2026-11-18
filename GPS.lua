@@ -725,9 +725,9 @@ local function LiftPin(route)
 end
 
 -- A flight path to learn at or after the active step.
-function GPS.LearnAhead(route)
+function GPS.StepAhead(route, kind)
     for i = route.active or 1, #route.steps do
-        if route.steps[i].kind == "learn" then return true end
+        if route.steps[i].kind == kind then return true end
     end
     return false
 end
@@ -1381,9 +1381,10 @@ local function Tick()
         Refresh()
     end
     -- A zone is reached when you are in it, wherever its map's middle is;
-    -- a flight path to learn on the way there still comes first.
+    -- a flight path to learn on the way there still comes first, and so
+    -- does a lift up (Thunder Bluff's map reaches its lifts' feet).
     if route.dest and route.dest.zone and not INSTANCE_CATEGORIES[route.dest.category] and OnMap(route.dest.mapID)
-        and not GPS.LearnAhead(route) then
+        and not GPS.StepAhead(route, "learn") and not GPS.StepAhead(route, "elevator") then
         Arrive(route)
         return
     end
