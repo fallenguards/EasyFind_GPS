@@ -171,9 +171,9 @@ function Jumps.HasCast(step)
     return (spellID or itemID) ~= nil
 end
 
--- A walk that jumps down a ledge says how and where: at full health, or
--- with what lands the character safely when the drop is past what a fall
--- leaves; near the place the highest one is (the map marks each).
+-- A walk that jumps down a ledge says where, and with what lands the
+-- character safely when the drop is past what a fall leaves; near the
+-- place the highest one is (the map marks each).
 function Jumps.StepText(step)
     local top, high, survive, ci = Drop(step)
     if not top then return nil end
@@ -192,8 +192,8 @@ function Jumps.StepText(step)
         if place then return sformat(L[key .. "_AT_FMT"], helper.name, place, yd) end
         return sformat(L[key .. "_FMT"], helper.name, yd)
     end
-    if place then return sformat(L["GPS_JUMP_FULL_AT_FMT"], place, yd) end
-    return sformat(L["GPS_JUMP_FULL_FMT"], yd)
+    if place then return sformat(L["GPS_JUMP_AT_FMT"], place, yd) end
+    return sformat(L["GPS_JUMP_FMT"], yd)
 end
 
 -- With nothing to land safely from any height: what the shop item would

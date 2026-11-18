@@ -22,10 +22,10 @@ local function Load(opts)
     env.EasyFind._ns = ns
     ns.Caps = { forever = opts.forever }
     ns.GPSNav = { DropHeights = function() if opts.noData then return nil end return 12.4, 20 end }
-    ns.L.GPS_JUMP_FULL_FMT = "full %d"
+    ns.L.GPS_JUMP_FMT = "full %d"
     ns.L.GPS_JUMP_HELPER_FMT = "use %s %d"
     ns.L.GPS_JUMP_WEAR_FMT = "wear %s %d"
-    ns.L.GPS_JUMP_FULL_AT_FMT = "full at %s %d"
+    ns.L.GPS_JUMP_AT_FMT = "full at %s %d"
     ns.L.GPS_JUMP_HELPER_AT_FMT = "use %s at %s %d"
     ns.L.GPS_JUMP_WEAR_AT_FMT = "wear %s at %s %d"
     H.loadModule("Jumps.lua", env, ns)
