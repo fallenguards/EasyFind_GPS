@@ -146,7 +146,7 @@ function tests.danger_weighsTheChoiceNotTheTime()
     local _, waryCost, waryTime = Nav.Path(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
     H.assertTrue(wary > cost * 1.2, "the dangerous tile weighs: " .. wary .. " vs " .. cost)
     H.assertTrue(math.abs(waryCost - wary) < 1, "the drawn walk is the one chosen")
-    H.assertTrue(waryTime >= time - 1 and waryTime < wary / 2,
+    H.assertTrue(waryTime >= time - 1 and waryTime < wary * 0.75,
         "the time is the walk's own, not its weight: " .. waryTime .. " (was " .. time .. ", weight " .. wary .. ")")
     Nav.SetDanger(nil)
     H.assertTrue(math.abs(Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2]) - cost) < 0.01, "and back")
@@ -187,7 +187,7 @@ function tests.roads_noTable_costsAtTheStrictWeight()
     for p, c in pairs(plain.cost) do
         if c then
             compared = compared + 1
-            H.assertTrue(math.abs(made.cost[p] - 2.4 * c) < 1e-6, "pair " .. p .. ": " .. tostring(made.cost[p]) .. " vs " .. c)
+            H.assertTrue(math.abs(made.cost[p] - 3.0 * c) < 1e-6, "pair " .. p .. ": " .. tostring(made.cost[p]) .. " vs " .. c)   -- strict over plain: 3.0 / 1.0
             H.assertEq(made.time[p], plain.time[p], "pair " .. p .. "'s time")
         else
             H.assertEq(made.cost[p], false)

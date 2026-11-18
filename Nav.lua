@@ -23,14 +23,14 @@ local REACH_KEPT = 256             -- end points whose tile search is kept
 local LANDMARKS_USED = 3           -- of the data's landmarks, the most telling for a walk
 local WALKS_KEPT = 512             -- walk costs kept
 -- Walking weights, the same in dev/tools/navmesh/grid.py: swimming at the
--- game's swim speed against running, and off the road a quarter more, so a
--- walk leaves a road only to save over a fifth.
+-- game's swim speed against running; off the road costs what the road does.
 local SWIM_WEIGHT = 7.0 / 4.72
-local OFF_ROAD_WEIGHT = 1.25
+local OFF_ROAD_WEIGHT = 1.0
 -- Staying on roads (Nav.SetRoads): a road up to this many times longer than
 -- the way off it is still the way; the data carries tile costs for it.
 local OFF_ROAD_STRICT = 3.0
 local DIAG = 1.41421356
+local LINE_CELLS = 8    -- a drawn walk's longest straight step (32 yd), kept cheap to check
 local RELAX_YARDS, RELAX_TRIES = 40, 48   -- how far a bend at a tile's edge may move, how many points it tries
 local function CandLess(a, b) return a[1] < b[1] end
 local offRoad, roadsOnly = OFF_ROAD_WEIGHT, false
@@ -552,6 +552,7 @@ end
 -- where both ways round the corner are open; the drops off it no higher
 -- than limit, or with rev the drops onto it (a search from the end back).
 local nbScratch, nbLen = {}, {}
+local Clear   -- defined with the drawing below
 local function TileNeighbours(t, g, bg, rev, limit)
     local cf, fb, N, NN = t.cf, t.fb, t.N, t.NN
     local h, l = sbyte(t.fc, 2 * g - 1, 2 * g)
@@ -637,24 +638,18 @@ local function TileNeighbours(t, g, bg, rev, limit)
     return n
 end
 
--- Inside one tile from floor g0 (or from each floor of a table, at its
--- starting cost): each floor's cost and the floor before. With a goal the
--- search stops there (A* on the straight line, on a heap); with want (a
--- set of floors, left of them) once all are reached, in buckets a cell
--- wide: no step costs less than a cell, so a bucket's floors are at their
--- final cost when it is opened, in any order.
--- Each floor's time too: yards walked, swimming slower, as its way was
--- chosen by cost (a seed's cost counts as time).
--- A search's tables are wiped and used again, not made anew, so a plan
--- leaves no garbage behind: one set inside the planner, one outside it,
--- as a search the planner left waiting keeps its own. keep: the cost
--- and time tables are fresh, the caller's to hold on to. rev: what each
--- floor costs to reach g0 (drops go one way).
-local function NewScratch() return { prev = {}, closed = {}, cost = {}, time = {}, buckets = {}, lists = {}, heap = NewHeap() } end
+-- Reused search tables, no garbage: one set inside the planner, one outside
+local function NewScratch()
+    return { prev = {}, closed = {}, cost = {}, time = {}, buckets = {}, lists = {}, heap = NewHeap(),
+             line = {}, via = {}, viaCost = {}, viaTime = {} }
+end
 local scratchMain, scratchPlan = NewScratch(), NewScratch()
 -- A wiped table keeps its grown size; fresh ones let it go.
 function Nav.FreshScratch() scratchMain, scratchPlan = NewScratch(), NewScratch() end
-local function TileSearch(w, t, g0, goal, want, left, keep, rev)
+-- One tile's cost, prev and time per floor from g0 (a floor or seed costs).
+-- goal: A* to it; want: cell-wide buckets until `left` of them are reached.
+-- keep: fresh tables for the caller; rev: costs to reach g0; any: lines.
+local function TileSearch(w, t, g0, goal, want, left, keep, rev, any)
     local s = (Nav.yieldCo and corunning() == Nav.yieldCo) and scratchPlan or scratchMain
     local limit = Limit(w)
     local prev, closed = s.prev, s.closed
@@ -687,6 +682,15 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev)
             heap:Push(0, g0)
         end
         local gx, gy = FloorXY(w, t, goal)
+        -- Lazy Theta*, for drawing only: eight-way steps price every staircase
+        -- alike, so a hill was gone round on its longer side.
+        local line, via, viaCost, viaTime = s.line, s.via, s.viaCost, s.viaTime
+        if any then
+            wipe(line)
+            wipe(via)
+            wipe(viaCost)
+            wipe(viaTime)
+        end
         while true do
             -- At the loop's top: nbScratch is refilled after, so a search run
             -- while this one waits cannot spoil it.
@@ -696,9 +700,21 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev)
             if not g then break end
             if not closed[g] then
                 closed[g] = true
+                if any and line[g] then
+                    if not Clear(w, t, prev[g], g) then
+                        cost[g], prev[g], time[g] = viaCost[g], via[g], viaTime[g]
+                    end
+                    line[g] = nil
+                end
                 if g == goal then break end
                 local base, bg, tbase = cost[g], sbyte(fb, g), time[g]
                 local sg, wg = SW[bg], WT[bg]
+                local p = any and prev[g]
+                local bp, px, py
+                if p then
+                    bp = sbyte(fb, p)
+                    px, py = FloorXY(w, t, p)
+                end
                 local n = TileNeighbours(t, g, bg, rev, limit)
                 for k = 1, n do
                     local o = nbScratch[k]
@@ -706,11 +722,26 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev)
                         local bo = sbyte(fb, o)
                         local so = SW[bo]
                         local nc = base + nbLen[k] * cell * (wg + WT[bo])
-                        if not cost[o] or nc < cost[o] then
-                            cost[o], prev[o] = nc, g
-                            time[o] = tbase + nbLen[k] * half * (sg + so)
-                            local ox, oy = FloorXY(w, t, o)
-                            heap:Push(nc + msqrt((gx - ox) ^ 2 + (gy - oy) ^ 2), o)
+                        local nt = tbase + nbLen[k] * half * (sg + so)
+                        local ox, oy = FloorXY(w, t, o)
+                        local lc, lt
+                        if p and WT[bp] == WT[bo] and SW[bp] == so then
+                            local d = msqrt((px - ox) ^ 2 + (py - oy) ^ 2) / w.cell
+                            if d <= LINE_CELLS then
+                                lc = cost[p] + d * cell * (WT[bp] + WT[bo])
+                                if lc < nc then lt = time[p] + d * half * (SW[bp] + so) else lc = nil end
+                            end
+                        end
+                        local c = lc or nc
+                        if not cost[o] or c < cost[o] then
+                            if lc then
+                                cost[o], prev[o], time[o], line[o] = lc, p, lt, true
+                                via[o], viaCost[o], viaTime[o] = g, nc, nt
+                            else
+                                cost[o], prev[o], time[o] = nc, g, nt
+                                if any then line[o] = nil end
+                            end
+                            heap:Push(c + msqrt((gx - ox) ^ 2 + (gy - oy) ^ 2), o)
                         end
                     end
                 end
@@ -1459,7 +1490,7 @@ end
 
 -- Whether one walks straight from floor a to floor b of tile t: the cells
 -- along the line, each reached from the one before by a link.
-local function Clear(w, t, a, b)
+Clear = function(w, t, a, b)
     local N = w.N
     local ca, cb = U16(t.fc, a), U16(t.fc, b)
     local r, c, r1, c1 = mfloor(ca / N), ca % N, mfloor(cb / N), cb % N
@@ -1559,7 +1590,7 @@ end
 -- lands on, h = its height }). A straight pull never crosses a drop (no
 -- link joins its ends), so its landing is a vertex.
 local function TilePath(w, t, a, b, out, jumps, ft, fg)
-    local _, prev = TileSearch(w, t, a, b)
+    local _, prev = TileSearch(w, t, a, b, nil, nil, nil, nil, true)
     if a ~= b and not prev[b] then return false end
     local cells = {}
     local g = b
