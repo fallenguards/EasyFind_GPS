@@ -278,12 +278,15 @@ end
 
 -- Where a row points: a POI's coordinates, a zone's marker on the parent map, else
 -- the zone's middle. A dungeon row names its continent: the door is in the entrance list.
+-- An instance's portal under its map label (a cave's far end): the 4th
+-- return true, the 5th its instance map.
 local function EntranceOf(data)
     local list = ns.GetDungeonEntrancesForMap and ns.GetDungeonEntrancesForMap(data.entranceMapID or data.mapID)
     for i = 1, list and #list or 0 do
         local e = list[i]
         if e.name == data.name then
-            if e.zoneMapID and e.zoneX then return e.zoneMapID, e.zoneX, e.zoneY end
+            if e.zoneMapID and e.doorX then return e.zoneMapID, e.doorX, e.doorY, true, e.instanceMapID end
+            if e.zoneMapID and e.zoneX then return e.zoneMapID, e.zoneX, e.zoneY, false, e.instanceMapID end
             if e.position then return data.entranceMapID or data.mapID, e.position.x, e.position.y end
         end
     end
@@ -307,12 +310,15 @@ local function Destination(data)
     elseif data.npcID or data.category == "npc" then
         dest.npc = data.name
     end
-    local em, ex, ey
-    if data.isDungeonEntrance and not (data.x and data.y) then em, ex, ey = EntranceOf(data) end
-    if em then
-        dest.mapID, dest.x, dest.y = em, ex, ey
+    -- An instance: its portal, past the map label (Wailing Caverns' cave);
+    -- reached there or once inside.
+    local em, ex, ey, door, instance
+    if data.isDungeonEntrance then em, ex, ey, door, instance = EntranceOf(data) end
+    dest.instance = instance or data.instanceID
+    if em and (door or not (data.x and data.y)) then
+        dest.mapID, dest.x, dest.y, dest.door = em, ex, ey, door or nil
     elseif data.x and data.y and data.mapID then
-        dest.mapID, dest.x, dest.y = data.mapID, data.x, data.y
+        dest.mapID, dest.x, dest.y, dest.door = data.mapID, data.x, data.y, data.door or nil
     else
         -- A zone or a continent itself, not a spot on it: reached on entering it.
         dest.mapID, dest.x, dest.y = data.zoneMapID or data.mapID, 0.5, 0.5
@@ -1354,6 +1360,12 @@ local function Tick()
     if not route or route.arrived then StopTicker() return end
     local step = route.steps[route.active or 1]
     if not step then StopTicker() return end
+    -- Through an instance's portal before its last yards: there all the same.
+    local into = route.dest and route.dest.instance
+    if into and IsInInstance and IsInInstance() and select(8, GetInstanceInfo()) == into then
+        Arrive(route)
+        return
+    end
     -- Planned from elsewhere: no countdown and no starting over until the
     -- player reaches the start.
     local planned = route.origin and not route.joined
@@ -1497,7 +1509,7 @@ local function Tick()
         -- (several stand in a town); an entrance keeps the wider ring.
         local dest = route.dest
         local spot = not crossing and not route.steps[(route.active or 1) + 1] and dest and not dest.zone
-           and not INSTANCE_CATEGORIES[dest.category]
+           and (dest.door or not INSTANCE_CATEGORIES[dest.category])
         if spot then radius = ARRIVE.spot end
         local dx, dy = px - sx, py - sy
         if (dx * dx + dy * dy) > radius * radius then return end
@@ -1998,7 +2010,7 @@ function GPS:SetStart(data, quiet)
         else
             GPS:NavigateTo({ name = dest.name, icon = dest.icon, category = dest.category, isZone = dest.zone,
                              displayID = dest.displayID, questMark = dest.questMark, questID = dest.questID,
-                             followGUID = dest.followGUID,
+                             followGUID = dest.followGUID, door = dest.door, instanceID = dest.instance,
                              mapID = dest.mapID, x = not dest.zone and dest.x or nil, y = not dest.zone and dest.y or nil },
                            { quiet = true })
         end
