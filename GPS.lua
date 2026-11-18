@@ -301,10 +301,12 @@ local function Destination(data)
     -- questID: a log quest's, tracked itself on the last step; followGUID:
     -- a group member followed (UnitDirections.lua); npc: the name a Target
     -- press finds near the end (Arrow.lua); quietArrival: no arrival sound
-    -- (a guide followed moves straight on).
+    -- (a guide followed moves straight on); hold: a trip's stop the route
+    -- never moves past on its own (a guide's, till the guide moves on).
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
                    step = type(data.step) == "string" and data.step or nil, questMark = data.questMark,
-                   questID = data.questID, followGUID = data.followGUID, quietArrival = data.quietArrival or nil }
+                   questID = data.questID, followGUID = data.followGUID, quietArrival = data.quietArrival or nil,
+                   hold = data.hold or nil }
     if data.npcName then
         dest.npc = data.npcName
     elseif data.npcID or data.category == "npc" then
@@ -1355,6 +1357,21 @@ local function GhostOrRisen()
 end
 GPS.LeadToCorpse, GPS.Risen = LeadToCorpse, Risen   -- dev tools
 
+-- The route moves on to step target ("arrive": its end), unless a stop
+-- that holds comes first (a guide's): it never goes past one on its own;
+-- the next trip comes from whoever sent this one. A field: 200 locals.
+function GPS.MoveOn(route, target)
+    local steps, active = route.steps, route.active or 1
+    for i = active, target == "arrive" and #steps or target - 1 do
+        local stop = steps[i] and steps[i].tripStop
+        if stop and stop.hold and steps[i + 1] then
+            if i ~= active then TrackStep(i) end
+            return
+        end
+    end
+    if target == "arrive" then Arrive(route) else TrackStep(target) end
+end
+
 local function Tick()
     local route = Route()
     if not route or route.arrived then StopTicker() return end
@@ -1404,11 +1421,7 @@ local function Tick()
     -- A walk through a zone ends on entering the next one, wherever the
     -- border is crossed; leaving a city ends its step the same way.
     if step.enter and OnMap(step.enter) then
-        if route.steps[(route.active or 1) + 1] then
-            TrackStep((route.active or 1) + 1)
-        else
-            Arrive(route)
-        end
+        GPS.MoveOn(route, route.steps[(route.active or 1) + 1] and (route.active or 1) + 1 or "arrive")
         return
     end
     local ci, px, py = PlayerWorldPos()
@@ -1433,21 +1446,18 @@ local function Tick()
             Reroute(route)
             return
         elseif k then
-            if route.steps[k + 1] then TrackStep(k + 1) else Arrive(route) end
+            GPS.MoveOn(route, route.steps[k + 1] and k + 1 or "arrive")
             return
         end
     end
     if not planned and GPS.StepPassed(route, ci, px, py) then
-        TrackStep((route.active or 1) + 1)
+        GPS.MoveOn(route, (route.active or 1) + 1)
         return
     end
     if not planned and not (UnitOnTaxi and UnitOnTaxi("player")) then
         local reached = GPS.StepReached(route, ci, px, py)
-        if reached == "arrive" then
-            Arrive(route)
-            return
-        elseif reached then
-            TrackStep(reached)
+        if reached then
+            GPS.MoveOn(route, reached)
             return
         end
     end
@@ -1472,11 +1482,7 @@ local function Tick()
         local inHall = indoors and Engine and Engine.InHall and Engine.InHall(step.area, ci, px, py)
         if step.kind == "enter" and not inHall then return end
         if step.kind == "leave" and indoors then return end
-        if route.steps[(route.active or 1) + 1] then
-            TrackStep((route.active or 1) + 1)
-        else
-            Arrive(route)
-        end
+        GPS.MoveOn(route, route.steps[(route.active or 1) + 1] and (route.active or 1) + 1 or "arrive")
         return
     end
     -- A lift's far door is a few yards from its near one: ridden once the
@@ -1528,11 +1534,7 @@ local function Tick()
             if inside ~= nil and inside ~= (IsIndoors() and true or false) then return end
         end
     end
-    if route.steps[(route.active or 1) + 1] then
-        TrackStep((route.active or 1) + 1)
-    else
-        Arrive(route)
-    end
+    GPS.MoveOn(route, route.steps[(route.active or 1) + 1] and (route.active or 1) + 1 or "arrive")
 end
 
 local function StartTicker()
