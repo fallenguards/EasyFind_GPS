@@ -297,10 +297,11 @@ local function Destination(data)
     -- questMark: "offer" or "turnin", the quest button its end wears;
     -- questID: a log quest's, tracked itself on the last step; followGUID:
     -- a group member followed (UnitDirections.lua); npc: the name a Target
-    -- press finds near the end (Arrow.lua).
+    -- press finds near the end (Arrow.lua); quietArrival: no arrival sound
+    -- (a guide followed moves straight on).
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
                    step = type(data.step) == "string" and data.step or nil, questMark = data.questMark,
-                   questID = data.questID, followGUID = data.followGUID }
+                   questID = data.questID, followGUID = data.followGUID, quietArrival = data.quietArrival or nil }
     if data.npcName then
         dest.npc = data.npcName
     elseif data.npcID or data.category == "npc" then
@@ -955,7 +956,7 @@ local function Arrive(route)
         ns.MapSearch:ClearPinAt(dest.mapID, dest.x, dest.y)
     end
     Refresh()
-    if PlaySound and SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE then
+    if not (dest and dest.quietArrival) and PlaySound and SOUNDKIT and SOUNDKIT.IG_QUEST_LIST_COMPLETE then
         pcall(PlaySound, SOUNDKIT.IG_QUEST_LIST_COMPLETE)
     end
     Utils.SafeAfter(ARRIVED_LINGER, function()
@@ -1555,6 +1556,30 @@ function GPS:NavigateTo(data, opts)
     self:Plan(dest.name, function() return self:BuildRoute(dest, nil, nil, true, "first") end,
         function(steps, total, advice)
             GPS.Navigated(dest, steps, total, advice)
+        end)
+    return true
+end
+
+-- A trip through several places in order, as the trip editor plans one;
+-- places the GPS cannot reach are left out.
+function GPS:NavigateTrip(list, opts)
+    local Trip = ns.GPSTrip
+    if not (Trip and DB() and type(list) == "table") then return false end
+    local stops = {}
+    for i = 1, #list do
+        local data = list[i] and GPS.LeadsTo(list[i])
+        if data and self:CanNavigate(data) then stops[#stops + 1] = Destination(data) end
+    end
+    if #stops == 0 then return false end
+    if opts and opts.popout then
+        self:ShowWindow()
+    elseif not (opts and opts.quiet) then
+        self:Open()
+    end
+    local dest = stops[#stops]
+    self:Plan(dest.name, function() return Trip.Build(stops, nil, nil, true, "first") end,
+        function(steps, total, advice)
+            if steps then GPS.Navigated(dest, steps, total, advice, stops) end
         end)
     return true
 end
@@ -7030,6 +7055,7 @@ EasyFind.API.RegisterExtension({
 -- What other extensions ask of it. dest: { name, mapID, x, y } (map
 -- coordinates 0..1). Events: routeStarted(dest), arrived(dest), routeCleared.
 EasyFind.API.RegisterAction("gps", "navigate", function(dest, opts) return GPS:NavigateTo(dest, opts) end)
+EasyFind.API.RegisterAction("gps", "navigateTrip", function(list, opts) return GPS:NavigateTrip(list, opts) end)
 EasyFind.API.RegisterAction("gps", "canNavigate", function(dest) return GPS:CanNavigate(dest) end)
 EasyFind.API.RegisterAction("gps", "setStart", function(dest) return GPS:SetStart(dest) end)
 EasyFind.API.RegisterAction("gps", "clear", function() GPS:Clear() end)

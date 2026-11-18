@@ -163,6 +163,21 @@ function tests.aRightClick_closesItForThisRoute()
     H.assertTrue(btn:IsShown(), "a new route brings it back")
 end
 
+-- On a trip the NPC is the leg's stop, not the trip's last.
+function tests.aTrip_targetsTheStopOfTheLegWalked()
+    local w = fresh()
+    local first = { name = "Farmer Furlbrow", npc = "Farmer Furlbrow", mapID = 1436, x = 0.6, y = 0.19 }
+    local last = { name = "Gryan Stoutmantle", npc = "Gryan Stoutmantle", mapID = 1436, x = 0.56, y = 0.47 }
+    w.state.route = { dest = last, steps = { { kind = "travel", tripStop = first }, { kind = "travel", tripStop = last } },
+                      active = 1 }
+    w.near()
+    w.Arrow:Refresh()
+    H.assertTrue(w.button():GetAttribute("macrotext"):find("Farmer Furlbrow", 1, true) ~= nil, "the first leg's")
+    w.state.route.active = 2
+    w.Arrow:Refresh()
+    H.assertTrue(w.button():GetAttribute("macrotext"):find("Gryan Stoutmantle", 1, true) ~= nil, "then the next")
+end
+
 function tests.aRouteToAPlace_hasNoButton()
     local w = fresh()
     w.state.route = { dest = { name = "Orgrimmar", mapID = 1454, x = 0.5, y = 0.5 }, steps = {}, active = 1 }

@@ -231,9 +231,18 @@ end
 
 -- The route's NPC on the walk in (40 yd) until arrival (8 yd beside it),
 -- unless closed with a right-click.
+-- The end of the leg being walked: a trip's next stop, else the route's.
+local function LegEnd(route)
+    for i = route.active or 1, #(route.steps or {}) do
+        local stop = route.steps[i].tripStop
+        if stop then return stop end
+    end
+    return route.dest
+end
+
 local function TargetNpc()
     local route = Route()
-    local dest = route and not route.arrived and route.dest
+    local dest = route and not route.arrived and LegEnd(route)
     if dest and dest.npc and dest ~= target.closed and dest.mapID and dest.x and ns.GPS.WorldPos then
         if not (target.npc and target.npc.dest == dest) then
             local ci, wx, wy = ns.GPS.WorldPos(dest.mapID, dest.x, dest.y)
