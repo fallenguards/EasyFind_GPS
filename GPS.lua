@@ -7069,6 +7069,8 @@ EasyFind.API.RegisterExtension({
 EasyFind.API.RegisterAction("gps", "navigate", function(dest, opts) return GPS:NavigateTo(dest, opts) end)
 EasyFind.API.RegisterAction("gps", "navigateTrip", function(list, opts) return GPS:NavigateTrip(list, opts) end)
 EasyFind.API.RegisterAction("gps", "canNavigate", function(dest) return GPS:CanNavigate(dest) end)
+-- A guide's creatures under the arrow, a Target button each: { name, kind }.
+EasyFind.API.RegisterAction("gps", "setTargets", function(list) if ns.GPSArrow then ns.GPSArrow.SetTargets(list) end end)
 EasyFind.API.RegisterAction("gps", "setStart", function(dest) return GPS:SetStart(dest) end)
 EasyFind.API.RegisterAction("gps", "clear", function() GPS:Clear() end)
 EasyFind.API.RegisterAction("gps", "mapClickNavigates", function() return GPS.MapClickNavigates() end)

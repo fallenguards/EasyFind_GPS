@@ -217,10 +217,16 @@ end
 -- away while it does.
 function Arrow:Guiding() return frame ~= nil and frame:IsShown() end
 
--- The NPC a route leads to: near its spot, a Target button under the plate.
--- The game targets and marks only on the player's press: a secure macro.
-local TARGET_YARDS, TARGET_EVERY = 40, 0.5
-local target = {}   -- btn, npc { dest, name, ci, wx, wy }, ticker, shown macro and spot
+-- Target buttons under the plate: a guide's creatures while it sets them
+-- (setTargets), and the NPC a route leads to near its spot. The game
+-- targets and marks only on the player's press: a secure macro each. They
+-- hang from UIParent at the plate's foot, so a fight locks nothing of the
+-- arrow; in one they stay as they were.
+local TARGET_YARDS, TARGET_EVERY, TARGET_MAX, ROW_H, ROW_GAP = 40, 0.5, 6, 24, 2
+local KIND_ICON = { kill = "Interface\\Cursor\\Attack", talk = "Interface\\GossipFrame\\GossipGossipIcon" }
+-- btns, rows, guide (set from outside), npc { dest, name, ci, wx, wy },
+-- closed (a route's dest), closedNames (a guide's), ticker
+local target = { btns = {}, rows = {}, closedNames = {} }
 
 function Arrow.TargetMark()
     local db = DB()
@@ -254,25 +260,34 @@ local function TargetNpc()
     return target.npc
 end
 
-local function HideTarget()
-    local btn = target.btn
-    if not btn or InCombatLockdown() then return end
+local function HideButton(btn)
     btn:Hide()
     btn:ClearAllPoints()
     btn:SetAttribute("type", nil)
-    target.macro, target.spot = nil, nil
+    btn.macro, btn.label, btn.x, btn.y, btn.row = nil, nil, nil, nil, nil
 end
 
-local function CloseTarget()
-    target.closed = target.npc and target.npc.dest
-    target.npc = nil
-    HideTarget()
+local TargetTick
+
+-- A right-click closes its row: a route's NPC for that route, a guide's
+-- creature until the guide's list changes.
+local function CloseTarget(btn)
+    local row = btn and btn.row
+    if row and row.route then
+        target.closed = target.npc and target.npc.dest
+        target.npc = nil
+    elseif row then
+        target.closedNames[row.name] = true
+    end
+    TargetTick()
 end
 
-local function TargetButton()
-    if target.btn then return target.btn end
+local function TargetButton(i)
+    local btn = target.btns[i]
+    if btn then return btn end
     -- starts shown: hidden at the end of its setup
-    local btn = CreateFrame("Button", "EasyFindGPSTarget", UIParent, "SecureActionButtonTemplate")
+    btn = CreateFrame("Button", i == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i), UIParent,
+        "SecureActionButtonTemplate")
     btn:SetFrameStrata("LOW")
     btn:RegisterForClicks("AnyUp", "AnyDown")
     btn:SetAttribute("useOnKeyDown", false)
@@ -293,72 +308,105 @@ local function TargetButton()
     btn.look = look
     btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
     btn:Hide()
-    target.btn = btn
+    target.btns[i] = btn
     return btn
 end
 
--- Under the plate while the arrow shows; at the arrow's own spot once it
--- is gone (arrived, or its setting off).
-local function PlaceTarget(btn)
-    local spot = (frame and frame:IsShown()) and "plate" or "home"
-    if target.spot == spot then return end
-    target.spot = spot
-    btn:ClearAllPoints()
-    if spot == "plate" then
-        btn:SetPoint("TOP", plate, "BOTTOM", 0, -4)
-        return
+-- The stack's top on UIParent: under the plate while the arrow shows; at
+-- the arrow's own spot once it is gone (arrived, or its setting off).
+local function TargetPlace()
+    local under = frame and frame:IsShown() and (plate:IsShown() and plate or frame)
+    local cx, bottom = under and under:GetCenter(), under and under:GetBottom()
+    if cx and bottom then
+        local s = under:GetEffectiveScale() / UIParent:GetEffectiveScale()
+        return math.floor(cx * s + 0.5), math.floor(bottom * s + 0.5) - 4
     end
     local db = DB()
     local pos = db and db.gpsArrowPos
-    if pos and pos.x and pos.y then
-        btn:SetPoint("TOP", UIParent, "BOTTOMLEFT", pos.x, pos.y)
-    else
-        btn:SetPoint("TOP", UIParent, "CENTER", 0, HOME_Y)
-    end
+    if pos and pos.x and pos.y then return pos.x, pos.y end
+    local w, h = UIParent:GetSize()
+    return w / 2, h / 2 + HOME_Y
 end
 
-local function TargetTick()
-    if InCombatLockdown() then return end
-    local npc = TargetNpc()
-    local ci, px, py
-    if npc then ci, px, py = ns.GPS.PlayerWorldPos() end
-    local near = npc and ci == npc.ci and px and (px - npc.wx) ^ 2 + (py - npc.wy) ^ 2 <= TARGET_YARDS * TARGET_YARDS
-    if not near then
-        HideTarget()
-        if not target.npc and target.ticker then
-            target.ticker:Cancel()
-            target.ticker = nil
+-- The rows: the guide's creatures, then the route's NPC when near and not
+-- one of them.
+local function TargetRows()
+    local rows = target.rows
+    for i = #rows, 1, -1 do rows[i] = nil end
+    local named = {}
+    for _, t in ipairs(target.guide or {}) do
+        if #rows < TARGET_MAX and not named[t.name] and not target.closedNames[t.name] then
+            named[t.name] = true
+            rows[#rows + 1] = t
         end
-        return
     end
-    local btn = TargetButton()
+    local npc = TargetNpc()
+    if npc and not named[npc.name] and #rows < TARGET_MAX then
+        local ci, px, py = ns.GPS.PlayerWorldPos()
+        if ci == npc.ci and px and (px - npc.wx) ^ 2 + (py - npc.wy) ^ 2 <= TARGET_YARDS * TARGET_YARDS then
+            rows[#rows + 1] = { name = npc.name, route = true }
+        end
+    end
+    return rows
+end
+
+TargetTick = function()
+    if InCombatLockdown() then return end
+    local rows = TargetRows()
     local mark = Arrow.TargetMark()
-    -- Cleared first: a name not found leaves no other unit to mark.
-    local macro = "/cleartarget\n/targetexact " .. npc.name
-    if mark > 0 then macro = macro .. "\n/tm [@target,exists] !" .. mark end
-    if target.macro ~= macro then
-        target.macro = macro
-        btn:SetAttribute("type", "macro")
-        btn:SetAttribute("macrotext", macro)
-        local icon = mark > 0 and ("|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. mark .. ":14|t ") or ""
-        btn.look.text:SetText(icon .. (_G["TARGET"] or "Target"))
-        btn:SetSize(btn.look.text:GetStringWidth() + 20, 24)
+    local markIcon = mark > 0 and ("|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. mark .. ":14|t ") or ""
+    local x, y = TargetPlace()
+    for i, row in ipairs(rows) do
+        local btn = TargetButton(i)
+        btn.row = row
+        -- Cleared first: a name not found leaves no other unit to mark.
+        local macro = "/cleartarget\n/targetexact " .. row.name
+        if mark > 0 then macro = macro .. "\n/tm [@target,exists] !" .. mark end
+        if btn.macro ~= macro then
+            btn.macro = macro
+            btn:SetAttribute("type", "macro")
+            btn:SetAttribute("macrotext", macro)
+        end
+        -- The route's NPC alone keeps the plain word; among others, names.
+        local kind = KIND_ICON[row.kind]
+        local label = markIcon .. (kind and ("|T" .. kind .. ":14|t ") or "")
+            .. ((row.route and #rows == 1) and (_G["TARGET"] or "Target") or row.name)
+        if btn.label ~= label then
+            btn.label = label
+            btn.look.text:SetText(label)
+            btn:SetSize(btn.look.text:GetStringWidth() + 20, ROW_H)
+        end
+        local top = y - (i - 1) * (ROW_H + ROW_GAP)
+        if btn.x ~= x or btn.y ~= top then
+            btn.x, btn.y = x, top
+            btn:ClearAllPoints()
+            btn:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, top)
+        end
+        btn:Show()
     end
-    PlaceTarget(btn)
-    btn:Show()
+    for i = #rows + 1, #target.btns do
+        if target.btns[i]:IsShown() then HideButton(target.btns[i]) end
+    end
+    if not (target.guide or target.npc) and target.ticker then
+        target.ticker:Cancel()
+        target.ticker = nil
+    end
 end
 
 local function TargetSync()
-    if TargetNpc() and not target.ticker then target.ticker = C_Timer.NewTicker(TARGET_EVERY, TargetTick) end
-    target.macro = nil
+    if (TargetNpc() or target.guide) and not target.ticker then
+        target.ticker = C_Timer.NewTicker(TARGET_EVERY, TargetTick)
+    end
     TargetTick()
 end
 
--- A secure button hanging from the plate protects it in a fight: unpinned
--- and hidden as one begins, put back by the next tick after it.
-target.events = CreateFrame("Frame")
-target.events:RegisterEvent("PLAYER_REGEN_DISABLED")
-target.events:SetScript("OnEvent", HideTarget)
+-- A guide's creatures, { name, kind = "kill" | "talk" } each, shown while
+-- set; nil or none takes them away. A new list opens rows closed before.
+function Arrow.SetTargets(list)
+    target.guide = type(list) == "table" and #list > 0 and list or nil
+    wipe(target.closedNames)
+    TargetSync()
+end
 
 _G["BINDING_HEADER_EASYFIND_GPS"] = "EasyFind GPS"
 _G["BINDING_NAME_CLICK EasyFindGPSTarget:LeftButton"] = ns.L["GPS_TARGET_BIND"]

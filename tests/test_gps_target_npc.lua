@@ -27,6 +27,7 @@ local function fresh(opts)
         return f
     end
     env.UIParent = H.newFrame()
+    env.UIParent.GetSize = function() return 1920, 1080 end
     local ticks = {}
     env.C_Timer = {
         After = function() end,
@@ -63,8 +64,18 @@ local function fresh(opts)
     ns.GPSFollow = { Now = function() return nil end }
     H.loadModule("Arrow.lua", env, ns)
     local w = { Arrow = ns.GPSArrow, player = player, state = state, combat = combat, ticks = ticks, db = db }
-    function w.button()
-        for _, f in ipairs(frames) do if f.name == "EasyFindGPSTarget" then return f end end
+    function w.button(i)
+        local name = (i or 1) == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i)
+        for _, f in ipairs(frames) do if f.name == name then return f end end
+    end
+    -- The buttons shown, top first: each one's macro.
+    function w.shown()
+        local out, i = {}, 1
+        while w.button(i) do
+            if w.button(i):IsShown() then out[#out + 1] = w.button(i):GetAttribute("macrotext") end
+            i = i + 1
+        end
+        return out
     end
     function w.tick()
         for _, t in ipairs(ticks) do if not t.cancelled then t.fn() end end
@@ -185,6 +196,64 @@ function tests.aRouteToAPlace_hasNoButton()
     w.Arrow:Refresh()
     H.assertNil(w.button())
     H.assertEq(#w.ticks, 0, "no ticker without an NPC")
+end
+
+-- A guide's creatures (setTargets): a button each under the arrow while
+-- set, far from any spot, the route's NPC under them when near and not one
+-- of them (RestedXP's Active Targets, 2026-11-18).
+function tests.aGuidesTargets_aButtonEach_whileSet()
+    local w = fresh()
+    w.state.route = nil
+    w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" }, { name = "Bareth Dawnstone", kind = "talk" } })
+    local shown = w.shown()
+    H.assertEq(#shown, 2, "far from any spot, both")
+    H.assertTrue(shown[1]:find("/targetexact Scarlet Warrior", 1, true) ~= nil)
+    H.assertTrue(shown[2]:find("/targetexact Bareth Dawnstone", 1, true) ~= nil)
+    H.assertTrue(w.button(1).look.text:GetText():find("Interface\\Cursor\\Attack", 1, true) ~= nil, "a kill icon")
+    H.assertTrue(w.button(1).look.text:GetText():find("Scarlet Warrior", 1, true) ~= nil, "and its name")
+    H.assertTrue(w.button(2).look.text:GetText():find("GossipGossipIcon", 1, true) ~= nil, "a talk icon")
+    w.Arrow.SetTargets(nil)
+    H.assertEq(#w.shown(), 0, "taken away")
+    H.assertEq(live(w), 0, "nothing left to watch")
+end
+
+function tests.aGuidesTargets_andTheRoutesNpc_once()
+    local w = fresh()
+    w.near()
+    w.Arrow.SetTargets({ { name = "Kelm Hargunth", kind = "talk" } })
+    H.assertEq(#w.shown(), 1, "the route's NPC is the guide's: one button")
+    w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" } })
+    local shown = w.shown()
+    H.assertEq(#shown, 2)
+    H.assertTrue(shown[2]:find("Kelm Hargunth", 1, true) ~= nil, "the route's NPC under the guide's")
+    H.assertTrue(w.button(2).look.text:GetText():find("Kelm Hargunth", 1, true) ~= nil, "named among others")
+end
+
+function tests.aGuidesTarget_rightClicked_staysClosedUntilTheListChanges()
+    local w = fresh()
+    w.state.route = nil
+    local list = { { name = "Scarlet Warrior", kind = "kill" }, { name = "Tirisfal Farmhand", kind = "kill" } }
+    w.Arrow.SetTargets(list)
+    w.button(1).dismiss(w.button(1))
+    local shown = w.shown()
+    H.assertEq(#shown, 1)
+    H.assertTrue(shown[1]:find("Tirisfal Farmhand", 1, true) ~= nil)
+    w.tick()
+    H.assertEq(#w.shown(), 1, "stays closed")
+    w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" } })
+    H.assertEq(#w.shown(), 1, "a new list opens it")
+end
+
+function tests.aGuidesTargets_inAFight_stayAsTheyWere()
+    local w = fresh()
+    w.state.route = nil
+    w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" } })
+    w.combat.v = true
+    w.Arrow.SetTargets({ { name = "Bareth Dawnstone", kind = "talk" } })
+    H.assertTrue(w.shown()[1]:find("Scarlet Warrior", 1, true) ~= nil, "no secure change in a fight")
+    w.combat.v = false
+    w.tick()
+    H.assertTrue(w.shown()[1]:find("Bareth Dawnstone", 1, true) ~= nil, "the new list after it")
 end
 
 local pass, fail, failures = H.runSuite("GPSTargetNpc", tests)
