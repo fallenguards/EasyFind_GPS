@@ -1670,7 +1670,7 @@ end
 -- What the navigation is doing right now, for the dev command.
 function GPS:Status()
     local out = {}
-    out[#out + 1] = ns.GPSWorldPin and ns.GPSWorldPin:Status() or "world pin: file not loaded (the companion's file list changed: restart the client)"
+    out[#out + 1] = ns.GPSWorldPin and ns.GPSWorldPin:Status() or "world pin: file not loaded"
     if popoutFrame then
         local f = popoutFrame
         local b = f.border
