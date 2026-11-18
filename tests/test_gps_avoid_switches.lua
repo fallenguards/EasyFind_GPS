@@ -70,6 +70,20 @@ function tests.noSave_avoidsNothing()
     H.assertFalse(GPS.AvoidRow("hearth").get())
 end
 
+-- Dangerous areas are avoided until turned off: only the off is saved.
+function tests.dangerousAreas_onUntilTurnedOff()
+    local db = {}
+    local danger = Load(db, true).AvoidRow("danger")
+    H.assertTrue(danger.get(), "on with nothing saved")
+    danger.set(false)
+    H.assertFalse(danger.get())
+    H.assertEq(db.gpsAvoid.danger, false, "the off is saved")
+    danger.set(true)
+    H.assertTrue(danger.get())
+    H.assertNil(db.gpsAvoid.danger, "on again: nothing saved")
+    H.assertTrue(Load({ gpsAvoid = { danger = true } }, true).AvoidRow("danger").get(), "a save from before: on")
+end
+
 function tests.theTeleportsSwitch_isForACharacterWithOne()
     local with = Load({}, true).AvoidKinds()
     H.assertTrue(Has(with, "hearth") and Has(with, "teleports"))

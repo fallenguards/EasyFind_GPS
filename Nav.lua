@@ -34,10 +34,11 @@ local LINE_CELLS = 8    -- a drawn walk's longest straight step (32 yd), kept ch
 local RELAX_YARDS, RELAX_TRIES = 40, 48   -- how far a bend at a tile's edge may move, how many points it tries
 local function CandLess(a, b) return a[1] < b[1] end
 local offRoad, roadsOnly = OFF_ROAD_WEIGHT, false
--- A tile to go around (Nav.SetDanger) costs this many times as much to
--- choose; the time a walk through it takes stays the same.
-local DANGER_WEIGHT = 2
-local dangerSet          -- { [continent] = { [tile] = true } }
+-- Ground to go around (Nav.SetDanger): a yard there costs its weight to
+-- choose, its time the same. { [continent] = { [danger cell] = weight } }
+local dangerSet
+local DANGER_SAMPLE = 16   -- yards between the points a crossing pair's line is weighed at
+local quartersOf = {}      -- per cells a side: each row's quarter of the tile
 -- The highest drop walks take, in yards: nil the safe height each
 -- continent's data was built with, else a character's own (Nav.SetDropLimit),
 -- math.huge for one who lands safely from any height.
@@ -139,7 +140,7 @@ local function World(ci)
     local data = ns.GPSNavData and ns.GPSNavData[ci]
     if not data then return nil end
     w = { ci = ci, data = data, N = data.cells, cell = data.cell, tiles = {}, order = {}, costs = {},
-          reach = {}, reachN = 0, walks = {}, walksN = 0, marks = {} }
+          reach = {}, reachN = 0, walks = {}, walksN = 0, marks = {}, danger = {} }
     worlds[ci] = w
     return w
 end
@@ -400,11 +401,51 @@ local function Step(w, t, g, d)
     return nil
 end
 
--- How much more a yard in tile key costs to choose: DANGER_WEIGHT in a
--- tile to go around, else 1.
-local function Danger(w, key)
+-- A tile's danger weights by quarter (x quarter * 4 + y quarter + 1, from
+-- its low corner), the danger map's cells; nil where it has none.
+local function TileDanger(w, key)
     local set = dangerSet and dangerSet[w.ci]
-    return set and set[key] and DANGER_WEIGHT or 1
+    if not set then return nil end
+    local dw = w.danger[key]
+    if dw == nil then
+        local tx, ty = mfloor(key / 64), key % 64
+        dw = false
+        for qx = 0, 3 do
+            for qy = 0, 3 do
+                local weight = set[(tx * 4 + 3 - qy) * 256 + ty * 4 + 3 - qx]
+                if weight then
+                    dw = dw or { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 }
+                    dw[qx * 4 + qy + 1] = weight
+                end
+            end
+        end
+        w.danger[key] = dw
+    end
+    return dw or nil
+end
+
+-- Each row's (and column's) quarter of a tile N cells a side.
+local function Quarters(N)
+    local q = quartersOf[N]
+    if not q then
+        q = {}
+        for i = 0, N - 1 do q[i] = mfloor((i + 0.5) * 4 / N) end
+        quartersOf[N] = q
+    end
+    return q
+end
+
+-- Floor g's danger weight in tile t (dw its weights, q its quarters).
+local function FloorDanger(t, dw, q, N, g)
+    local hi, lo = sbyte(t.fc, 2 * g - 1, 2 * g)
+    local c = hi * 256 + lo
+    return dw[q[mfloor(c / N)] * 4 + q[c % N] + 1]
+end
+
+-- Floor g's danger weight in tile t, 1 where the tile has none.
+local function DangerAt(w, t, g)
+    local dw = TileDanger(w, t.key)
+    return dw and FloorDanger(t, dw, Quarters(w.N), w.N, g) or 1
 end
 
 -- Walks come out differently from now on: the ones kept are dropped, and
@@ -413,11 +454,12 @@ local function Reset()
     Nav.epoch = Epoch()
     for _, w in pairs(worlds) do
         w.walks, w.walksN, w.reach, w.reachN, w.costs = {}, 0, {}, 0, {}
-        w.tiles, w.order, w.marks = {}, {}, {}
+        w.tiles, w.order, w.marks, w.danger = {}, {}, {}, {}
     end
 end
 
--- The tiles walks go around, or nil for none.
+-- The ground walks go around, { [continent] = { [danger cell] = weight } },
+-- or nil for none.
 function Nav.SetDanger(set)
     if set == dangerSet then return end
     dangerSet = set
@@ -663,8 +705,11 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev, any)
         wipe(cost)
         wipe(time)
     end
-    local cell = w.cell * Danger(w, t.key) / 2
+    local cell = w.cell / 2
     local half = w.cell / 2
+    local N = w.N
+    local dw = TileDanger(w, t.key)
+    local q = dw and Quarters(N)
     local fb = t.fb
     local pops = 0
     if goal then
@@ -708,12 +753,14 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev, any)
                 end
                 if g == goal then break end
                 local base, bg, tbase = cost[g], sbyte(fb, g), time[g]
-                local sg, wg = SW[bg], WT[bg]
+                local sg = SW[bg]
+                local wg = WT[bg] * (dw and FloorDanger(t, dw, q, N, g) or 1)
                 local p = any and prev[g]
-                local bp, px, py
+                local bp, px, py, wp
                 if p then
                     bp = sbyte(fb, p)
                     px, py = FloorXY(w, t, p)
+                    wp = WT[bp] * (dw and FloorDanger(t, dw, q, N, p) or 1)
                 end
                 local n = TileNeighbours(t, g, bg, rev, limit)
                 for k = 1, n do
@@ -721,14 +768,15 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev, any)
                     if not closed[o] then
                         local bo = sbyte(fb, o)
                         local so = SW[bo]
-                        local nc = base + nbLen[k] * cell * (wg + WT[bo])
+                        local wo = WT[bo] * (dw and FloorDanger(t, dw, q, N, o) or 1)
+                        local nc = base + nbLen[k] * cell * (wg + wo)
                         local nt = tbase + nbLen[k] * half * (sg + so)
                         local ox, oy = FloorXY(w, t, o)
                         local lc, lt
-                        if p and WT[bp] == WT[bo] and SW[bp] == so then
+                        if p and wp == wo and SW[bp] == so then
                             local d = msqrt((px - ox) ^ 2 + (py - oy) ^ 2) / w.cell
                             if d <= LINE_CELLS then
-                                lc = cost[p] + d * cell * (WT[bp] + WT[bo])
+                                lc = cost[p] + d * cell * (wp + wo)
                                 if lc < nc then lt = time[p] + d * half * (SW[bp] + so) else lc = nil end
                             end
                         end
@@ -794,14 +842,15 @@ local function TileSearch(w, t, g0, goal, want, left, keep, rev, any)
                     if left == 0 then return cost, prev, time end
                 end
                 local base, bg, tbase = cost[g], sbyte(fb, g), time[g]
-                local sg, wg = SW[bg], WT[bg]
+                local sg = SW[bg]
+                local wg = WT[bg] * (dw and FloorDanger(t, dw, q, N, g) or 1)
                 local n = TileNeighbours(t, g, bg, rev, limit)
                 for k = 1, n do
                     local o = nbScratch[k]
                     if not closed[o] then
                         local bo = sbyte(fb, o)
                         local so = SW[bo]
-                        local nc = base + nbLen[k] * cell * (wg + WT[bo])
+                        local nc = base + nbLen[k] * cell * (wg + WT[bo] * (dw and FloorDanger(t, dw, q, N, o) or 1))
                         if not cost[o] or nc < cost[o] then
                             cost[o], prev[o] = nc, g
                             time[o] = tbase + nbLen[k] * half * (sg + so)
@@ -859,6 +908,26 @@ local function TileCosts(w, key)
     end
     local sx, sy = {}, {}
     for k = 1, n do sx[k], sy[k] = SideXY(w, SideV(sides, side[k])) end
+    -- Danger: a pair's cost at the mean weight along its line.
+    local dw = TileDanger(w, key)
+    local qx0, qy0
+    if dw then
+        local tx, ty = mfloor(key / 64), key % 64
+        qx0, qy0 = ORIGIN - ty * TILE - TILE, ORIGIN - tx * TILE - TILE
+    end
+    local function Along(a, b)
+        if not dw then return 1 end
+        local dx, dy = sx[b] - sx[a], sy[b] - sy[a]
+        local k = mmax(1, mfloor(msqrt(dx * dx + dy * dy) / DANGER_SAMPLE))
+        local sum = 0
+        for j = 0, k - 1 do
+            local f = (j + 0.5) / k
+            local qx = mmin(3, mmax(0, mfloor((sx[a] + dx * f - qx0) * 4 / TILE)))
+            local qy = mmin(3, mmax(0, mfloor((sy[a] + dy * f - qy0) * 4 / TILE)))
+            sum = sum + dw[qx * 4 + qy + 1]
+        end
+        return sum / k
+    end
     -- Each pair's cost by its index in the upper triangle: the straight
     -- line plus the way around, false where no way joins them; and that
     -- way's time, the cost less what leaving roads added, as 127ths of
@@ -886,7 +955,7 @@ local function TileCosts(w, key)
             local off = u()
             local around = (code - 1) / 2
             local c = msqrt((sx[a] - sx[b]) ^ 2 + (sy[a] - sy[b]) ^ 2) + around
-            cost[p], time[p] = c * scale, c - off / 127 * around
+            cost[p], time[p] = c * scale * Along(a, b), c - off / 127 * around
             if q then cost[q], time[q] = cost[p], time[p] end
         end
     end
@@ -922,7 +991,7 @@ local function TileCosts(w, key)
                 cost[idx] = false
             else
                 local c = msqrt((sx[a] - sx[b]) ^ 2 + (sy[a] - sy[b]) ^ 2) + (code - 1) / 2
-                cost[idx], time[idx] = c, c
+                cost[idx], time[idx] = c * Along(a, b), c
             end
         end
     end
@@ -1014,9 +1083,12 @@ local function End(w, x, y, indoors, rev)
     if s then
         local u = Reader(Unpack(s))
         local key, g = u(), u()
-        local rk = (key * 131072 + g) * 2 + (rev and 1 or 0)
-        local kept = Reach(w, rk) or KeepReach(w, rk, { Baked(u) })
-        return key, g, kept[1], kept[2]
+        -- Baked without danger: searched where its tile holds some.
+        if not TileDanger(w, key) then
+            local rk = (key * 131072 + g) * 2 + (rev and 1 or 0)
+            local kept = Reach(w, rk) or KeepReach(w, rk, { Baked(u) })
+            return key, g, kept[1], kept[2]
+        end
     end
     local t, g = Locate(w, x, y, indoors)
     if not g then return nil end
@@ -1043,7 +1115,8 @@ local function NearEnd(w, x, y, r, fromKey, rev)
         local touches = false
         for _, cx in ipairs({ x - r, x + r }) do
             for _, cy in ipairs({ y - r, y + r }) do
-                if TileOf(cx, cy) == fromKey then touches = true end
+                local key = TileOf(cx, cy)
+                if key == fromKey or TileDanger(w, key) then touches = true end
             end
         end
         -- Not kept: only the full search below serves every walk.
@@ -1204,7 +1277,6 @@ local function Search(w, fromA, toB, bx, by, best, limit, circle, rev)
             local key = SideKey(SideV(sides, node))
             local tc = TileCosts(w, key)
             if tc then
-                local df = Danger(w, key)
                 local n, side, cost, ordered = tc.n, tc.side, tc.cost, tc.ordered
                 local i = tc.at[node]
                 local row = (i - 1) * n - (i - 1) * i / 2 - i
@@ -1219,7 +1291,7 @@ local function Search(w, fromA, toB, bx, by, best, limit, circle, rev)
                         end
                         if c then
                             o = side[j]
-                            c = here + c * df
+                            c = here + c
                             if not g[o] or c < g[o] then
                                 g[o], prev[o] = c, node
                                 heap:Push(c + H(o), o)
@@ -1489,9 +1561,11 @@ end
 -- Drawing ---------------------------------------------------------------------
 
 -- Whether one walks straight from floor a to floor b of tile t: the cells
--- along the line, each reached from the one before by a link.
+-- along the line, each reached from the one before by a link, none more
+-- dangerous than both ends.
 Clear = function(w, t, a, b)
     local N = w.N
+    local top = dangerSet and mmax(DangerAt(w, t, a), DangerAt(w, t, b))
     local ca, cb = U16(t.fc, a), U16(t.fc, b)
     local r, c, r1, c1 = mfloor(ca / N), ca % N, mfloor(cb / N), cb % N
     local dr, dc = r1 - r, c1 - c
@@ -1511,6 +1585,7 @@ Clear = function(w, t, a, b)
         if not o or u ~= t then return false end
         g = o
         if dry and (ir < nr or ic < ncl) and sbyte(t.fb, g) % 2 == 1 then return false end
+        if top and DangerAt(w, t, g) > top then return false end
     end
     return g == b
 end
@@ -1519,6 +1594,7 @@ end
 -- t2, across tiles, as Clear within one.
 local function Sees(w, t, g, t2, g2)
     local cell = w.cell
+    local top = dangerSet and mmax(DangerAt(w, t, g), DangerAt(w, t2, g2))
     local x0, y0 = FloorXY(w, t, g)
     local x1, y1 = FloorXY(w, t2, g2)
     local nr, ncl = mfloor(mabs(x1 - x0) / cell + 0.5), mfloor(mabs(y1 - y0) / cell + 0.5)
@@ -1532,6 +1608,7 @@ local function Sees(w, t, g, t2, g2)
         if stepRow then d, ir = alongRow, ir + 1 else d, ic = alongCol, ic + 1 end
         t, g = Step(w, t, g, d)
         if not g or (dry and sbyte(t.fb, g) % 2 == 1 and (ir < nr or ic < ncl)) then return false end
+        if top and DangerAt(w, t, g) > top then return false end
     end
     return t == t2 and g == g2
 end

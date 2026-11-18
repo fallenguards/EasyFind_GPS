@@ -1565,6 +1565,33 @@ local function Owns(a)
 end
 Route.Owns = Owns
 
+-- The danger map weighed for a character, by how far each cell's creatures
+-- are above it: { [continent] = { [cell] = weight } }, the same table while
+-- level and map hold, so walks kept under it stay good.
+local DANGER_GRADES = { { 8, 5 }, { 5, 2.5 }, { 3, 1.5 } }   -- levels above, weight
+local dangerMemo = {}
+local function DangerWeights(Npcs, level, faction)
+    local threats = level and Npcs and Npcs.Threats and Npcs.Threats(faction)
+    if not threats then return nil end
+    if dangerMemo.threats == threats and dangerMemo.level == level then return dangerMemo.set end
+    local set = {}
+    for ci, cells in pairs(threats) do
+        local out = {}
+        for cell, at in pairs(cells) do
+            for _, grade in ipairs(DANGER_GRADES) do
+                if at - level >= grade[1] then
+                    out[cell] = grade[2]
+                    break
+                end
+            end
+        end
+        set[ci] = out
+    end
+    dangerMemo.threats, dangerMemo.level, dangerMemo.set = threats, level, set
+    return set
+end
+Route.DangerWeights = DangerWeights
+
 -- The flight masters this character knows: known, listed, names.
 local function KnownSet(data)
     local known, listed, names = KnownFlightNodes(data)
@@ -1695,11 +1722,12 @@ function Route:Build(dest, opts)
         known, listed, names = KnownSet(data)
     end
     -- Walks go around what this character should not walk through
-    -- (opts.level: the character's level, the player's by default).
+    -- (opts.level: the character's level, the player's by default); on
+    -- unless turned off.
     local Npcs = ns.Npcs
     if Nav and Nav.SetDanger then
-        local on = opts.avoid and opts.avoid.danger and Npcs and Npcs.DangerTiles
-        Nav.SetDanger(on and Npcs.DangerTiles(opts.level or (UnitLevel and UnitLevel("player")),
+        local on = not (opts.avoid and opts.avoid.danger == false)
+        Nav.SetDanger(on and DangerWeights(Npcs, opts.level or (UnitLevel and UnitLevel("player")),
             opts.faction or (UnitFactionGroup and UnitFactionGroup("player"))) or nil)
         Nav.SetRoads(opts.avoid and opts.avoid.offroad)
     end

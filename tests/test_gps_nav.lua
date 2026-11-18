@@ -134,6 +134,16 @@ function tests.walk_timeComesWithTheCost()
     Nav.SetRoads(false)
 end
 
+-- The danger map's sixteen cells over tile key at weight (SetDanger's form).
+local function TileCells(key, weight, set)
+    set = set or {}
+    local tx, ty = math.floor(key / 64), key % 64
+    for a = 0, 3 do
+        for b = 0, 3 do set[(tx * 4 + a) * 256 + ty * 4 + b] = weight end
+    end
+    return set
+end
+
 -- A tile to go around costs more to choose; the walk keeps out of it where
 -- it can, its time the walk's own, and all is as before once no tile is.
 function tests.danger_weighsTheChoiceNotTheTime()
@@ -141,7 +151,7 @@ function tests.danger_weighsTheChoiceNotTheTime()
     local cost = Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
     local _, _, time = Nav.Path(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
     local key = Nav.TileOf(EAST[1], EAST[2])
-    Nav.SetDanger({ [0] = { [key] = true } })
+    Nav.SetDanger({ [0] = TileCells(key, 2) })
     local wary = Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
     local _, waryCost, waryTime = Nav.Path(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
     H.assertTrue(wary > cost * 1.2, "the dangerous tile weighs: " .. wary .. " vs " .. cost)
@@ -150,6 +160,51 @@ function tests.danger_weighsTheChoiceNotTheTime()
         "the time is the walk's own, not its weight: " .. waryTime .. " (was " .. time .. ", weight " .. wary .. ")")
     Nav.SetDanger(nil)
     H.assertTrue(math.abs(Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2]) - cost) < 0.01, "and back")
+end
+
+-- A tile's crossing costs at the danger along each pair's line: the whole
+-- tile at 2, every pair twice its cost, its time the same.
+function tests.danger_crossingPairsAtTheirLinesWeight()
+    local Nav = fresh()
+    Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
+    local w = Nav._worlds[0]
+    local key = Nav.TileOf(EAST[1], EAST[2])
+    local plain = w.costs[key]
+    H.assertTrue(plain ~= nil and plain ~= false, "the tile's costs read")
+    Nav.SetDanger({ [0] = TileCells(key, 2) })
+    Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
+    local made = w.costs[key]
+    H.assertTrue(made ~= nil and made ~= false and made ~= plain, "read again under the danger")
+    local compared = 0
+    for p, c in pairs(plain.cost) do
+        if c then
+            compared = compared + 1
+            H.assertTrue(math.abs(made.cost[p] - 2 * c) < 1e-6, "pair " .. p .. ": " .. tostring(made.cost[p]) .. " vs " .. c)
+            H.assertEq(made.time[p], plain.time[p], "pair " .. p .. "'s time")
+        end
+    end
+    H.assertTrue(compared > 0, "pairs compared")
+    Nav.SetDanger(nil)
+end
+
+-- Danger by the quarter tile: one the walk never enters weighs nothing,
+-- the one it starts in weighs.
+function tests.danger_byTheQuarterTile()
+    local Nav = fresh()
+    local cost = Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
+    local key, sx, sy = Nav.TileOf(GOLDSHIRE[1], GOLDSHIRE[2])
+    local tx, ty = math.floor(key / 64), key % 64
+    local function Cell(qx, qy) return (tx * 4 + 3 - qy) * 256 + ty * 4 + 3 - qx end
+    local q = 1600 / 3 / 4
+    local qx, qy = math.floor((GOLDSHIRE[1] - sx) / q), math.floor((GOLDSHIRE[2] - sy) / q)
+    -- The walk heads to lower y: the quarter at the tile's far y corner is behind it.
+    Nav.SetDanger({ [0] = { [Cell(3 - qx, 3)] = 5 } })
+    H.assertTrue(math.abs(Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2]) - cost) < 0.01,
+        "a quarter behind the start changes nothing")
+    Nav.SetDanger({ [0] = { [Cell(qx, qy)] = 5 } })
+    local wary = Nav.Walk(0, GOLDSHIRE[1], GOLDSHIRE[2], EAST[1], EAST[2])
+    H.assertTrue(wary > cost + 10, "the start's own quarter weighs: " .. wary .. " vs " .. cost)
+    Nav.SetDanger(nil)
 end
 
 -- Staying on roads: its own tile costs and weights; ground off a road

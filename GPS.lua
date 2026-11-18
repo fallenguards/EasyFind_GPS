@@ -4110,16 +4110,24 @@ function GPS.AvoidKinds()
 end
 
 local AVOID_OWN_TIP = { danger = true, offroad = true, jumps = true }
+GPS.AVOID_ON = { danger = true }   -- avoided until turned off: saved only as false
 
 function GPS.AvoidRow(kind)
     local key = "GPS_AVOID_" .. kind:upper()
+    local default = GPS.AVOID_ON[kind] or false
     return { kind = "check", label = L[key], tooltip = AVOID_OWN_TIP[kind] and L[key .. "_TT"] or L["GPS_AVOID_TT"],
-        get = function() local avoid = GPS.Avoids() return avoid and avoid[kind] or false end,
+        get = function()
+            local avoid = GPS.Avoids()
+            local on = avoid and avoid[kind]
+            if on == nil then return default end
+            return on
+        end,
         set = function(on)
             local d = DB()
             if not d then return end
             d.gpsAvoid = GPS.Avoids() or {}
-            d.gpsAvoid[kind] = on or nil
+            on = on and true or false
+            if on == default then d.gpsAvoid[kind] = nil else d.gpsAvoid[kind] = on end
             local route = Route()
             if route and not route.arrived then Reroute(route) end
         end }
