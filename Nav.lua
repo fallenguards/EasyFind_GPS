@@ -31,6 +31,8 @@ local OFF_ROAD_WEIGHT = 1.25
 -- the way off it is still the way; the data carries tile costs for it.
 local OFF_ROAD_STRICT = 3.0
 local DIAG = 1.41421356
+local RELAX_YARDS, RELAX_TRIES = 40, 48   -- how far a bend at a tile's edge may move, how many points it tries
+local function CandLess(a, b) return a[1] < b[1] end
 local offRoad, roadsOnly = OFF_ROAD_WEIGHT, false
 -- A tile to go around (Nav.SetDanger) costs this many times as much to
 -- choose; the time a walk through it takes stays the same.
@@ -1680,6 +1682,41 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
         for j = 1, #jumps do jumps[j].v = at[jumps[j].v] end
         for j = 1, #levels do levels[j].v = at[levels[j].v] end
         out = pulled
+    end
+    -- A walk crosses a tile's edge at one of its few entrances: a bend
+    -- there moves to the point near it that shortens the walk most, both
+    -- legs still walked straight (it went along a road to an entrance, then
+    -- over a hill straight from the start, on Zephras Isle, 2026-11-18).
+    local vt, vg = {}, {}
+    for v = 1, #keep do vt[v], vg[v] = ft[keep[v]], fg[keep[v]] end
+    local cell, cands = w.cell, {}
+    for v = 3, #keep - 1 do
+        local t0, t1, t2 = vt[v - 1], vt[v], vt[v + 1]
+        if t0 and t1 and t2 and (t0 ~= t1 or t1 ~= t2) and not landing[keep[v]] then
+            local qx, qy, rx, ry = out[2 * v - 3], out[2 * v - 2], out[2 * v + 1], out[2 * v + 2]
+            local cx, cy = out[2 * v - 1], out[2 * v]
+            local now = msqrt((qx - cx) ^ 2 + (qy - cy) ^ 2) + msqrt((rx - cx) ^ 2 + (ry - cy) ^ 2) - cell
+            wipe(cands)
+            for dx = -RELAX_YARDS, RELAX_YARDS, cell do
+                for dy = -RELAX_YARDS, RELAX_YARDS, cell do
+                    local x, y = cx + dx, cy + dy
+                    local d = msqrt((qx - x) ^ 2 + (qy - y) ^ 2) + msqrt((rx - x) ^ 2 + (ry - y) ^ 2)
+                    if d < now then cands[#cands + 1] = { d, x, y } end
+                end
+            end
+            table.sort(cands, CandLess)
+            for j = 1, mmin(#cands, RELAX_TRIES) do
+                local tc, gc = Locate(w, cands[j][2], cands[j][3], nil, 0)
+                checks = checks + 1
+                if checks % 8 == 0 then Pause() end
+                if gc and sbyte(tc.fb, gc) % 2 == sbyte(t1.fb, vg[v]) % 2
+                    and Sees(w, t0, vg[v - 1], tc, gc) and Sees(w, tc, gc, t2, vg[v + 1]) then
+                    vt[v], vg[v] = tc, gc
+                    out[2 * v - 1], out[2 * v] = FloorXY(w, tc, gc)
+                    break
+                end
+            end
+        end
     end
     out[#out + 1], out[#out + 2] = bx, by
     return out, cost, walk[7], jumps, levels
