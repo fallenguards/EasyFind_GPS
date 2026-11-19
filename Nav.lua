@@ -945,8 +945,13 @@ local function TileCosts(w, key)
         end
     end
     local ordered = oneway or level ~= nil
-    local cost, time = {}, {}
+    local cost, time, made = {}, {}, 0
+    -- A tile's pairs run to thousands, each weighed for danger: a plan
+    -- gives the frame back among them (40 to 56 ms planner frames,
+    -- 2026-11-19).
     local function Pair(a, b, p, q)
+        made = made + 1
+        if made % 64 == 0 then Pause() end
         local code = u()
         if code == 0 then
             cost[p] = false
@@ -981,7 +986,8 @@ local function TileCosts(w, key)
     if level then
         local du = Reader(Unpack(level))
         local idx = 0
-        for _ = 1, du() do
+        for j = 1, du() do
+            if j % 64 == 0 then Pause() end
             idx = idx + du()
             local code = du()
             local a = mfloor((idx - 1) / (n - 1)) + 1
