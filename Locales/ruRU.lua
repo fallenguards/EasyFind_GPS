@@ -237,6 +237,7 @@ L["GPS_DANGER_RED"]                     = "Красный на опасных у
 L["GPS_DANGER_RED_TT"]                  = "Маршрут становится красным на карте и миникарте там, где он пересекает такую местность."
 L["GPS_MENU_DIRECTIONS"]               = "Маршрут"
 L["GPS_MENU_EASYFIND_DIRECTIONS"]      = "Маршрут EasyFind"
+L["GPS_MENU_SHOW_ON_MAP"]               = "Показать на карте"
 L["GPS_QUEST_LEVEL_FMT"]               = "Уровень %d"
 L["EXT_NEEDS_EASYFIND_FMT"]             = "Нужен EasyFind %s или новее: обновите EasyFind."
 L["GPS_MINIMAP_WIDTH"]                  = "Линия на миникарте"

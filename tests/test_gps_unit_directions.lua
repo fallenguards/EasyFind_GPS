@@ -40,7 +40,12 @@ local function Load()
     env.CreateVector2D = vec
     env.C_Map = {
         GetBestMapForUnit = function(u) return U(u) and U(u).map end,
-        GetPlayerMapPosition = function(_, u) return U(u) and U(u).pos and vec(U(u).pos[1], U(u).pos[2]) end,
+        -- On every map unless the unit names the maps that hold it.
+        GetPlayerMapPosition = function(m, u)
+            local d = U(u)
+            if not (d and d.pos) or (d.onMaps and not d.onMaps[m]) then return nil end
+            return vec(d.pos[1], d.pos[2])
+        end,
         -- A map 1000 yards across.
         GetWorldPosFromMapPos = function(_, v) return 0, vec(v.x * 1000, v.y * 1000) end,
     }
@@ -50,6 +55,47 @@ local function Load()
         return tk
     end }
     env.C_QuestLog, env.GetQuestUiMapID = {}, nil   -- no quest placing: the search rows part returns early
+    -- The world map, its canvas 1000 by 600, opened through EasyFind's
+    -- OpenMap (refused in a fight); the map search's highlight frames.
+    local canvas = { GetWidth = function() return 1000 end, GetHeight = function() return 600 end }
+    local map = { shown = false, ScrollContainer = { Child = canvas } }
+    function map:IsShown() return self.shown end
+    function map:GetMapID() return self.map end
+    env.WorldMapFrame, t.map = map, map
+    env.EasyFind.API.OpenMap = function(m)
+        t.opened = m
+        if t.inFight then return false end
+        map.shown, map.map = true, m
+        return true
+    end
+    env.EasyFind.db = {}
+    local function Mark(parent)
+        local f = { shown = true }
+        function f:Show() self.shown = true end
+        function f:Hide() self.shown = false end
+        function f:IsShown() return self.shown end
+        function f:SetSize(w) self.size = w end
+        function f:ClearAllPoints() self.at = nil end
+        function f:SetPoint(_, rel, _, x, y) self.at = { rel = rel, x = x, y = y } end
+        function f:GetParent() return parent end
+        return f
+    end
+    ns.MapSearchFrames = {
+        CreateHighlightBox = function(_, parent, opts)
+            t.box = Mark(parent)
+            if opts.hidden then t.box:Hide() end
+            return t.box
+        end,
+        CreateIndicatorFrame = function(_, parent)
+            t.ind = Mark(parent)
+            t.ind.glow = { SetSize = function() end }
+            return t.ind
+        end,
+    }
+    ns.MapSearch = { ResizeHighlightBorders = function() end,
+                     ApplyHighlightStyle = function() t.styled = (t.styled or 0) + 1 end }
+    ns.UIToCanvas = function(v) return v end
+    ns.HIGHLIGHT_SIZE, ns.ICON_SIZE, ns.ICON_GLOW_SIZE, ns.YELLOW_HIGHLIGHT = 30, 48, 68, { 1, 0.82, 0 }
     H.loadModule("QuestDirections.lua", env, ns)
     t.ns = ns
     return t
@@ -125,6 +171,64 @@ function tests.everyUnitMenuThatShowsANpcOrAMember_getsIt()
     for _, which in ipairs({ "TARGET", "FOCUS", "BOSS", "PARTY", "RAID_PLAYER", "RAID" }) do
         H.assertTrue(t.mods["MENU_UNIT_" .. which] ~= nil, which)
     end
+end
+
+-- Show on map beside Directions (2026-11-19): the member's zone on the
+-- world map, EasyFind's highlight and indicator on them, moving with them
+-- while the map stays open.
+local function Member(t)
+    local friend = { guid = "Player-1-0FED", name = "Friend", player = true, party = true, map = 1429, pos = { 0.5, 0.5 } }
+    t.units.party1 = friend
+    return friend
+end
+
+function tests.aMember_hasShowOnMap_besideDirections()
+    local t = Load()
+    Member(t)
+    local rows = Menu(t, "PARTY", "party1")
+    H.assertEq(#rows, 3)
+    H.assertEq(rows[2].label, "GPS_MENU_EASYFIND_DIRECTIONS")
+    H.assertEq(rows[3].label, "GPS_MENU_SHOW_ON_MAP")
+end
+
+function tests.showOnMap_opensTheirZone_andMarksThem_movingWithThem()
+    local t = Load()
+    local friend = Member(t)
+    Menu(t, "PARTY", "party1")[3].fn()
+    H.assertEq(t.opened, 1429, "their zone")
+    H.assertTrue(t.box.shown and t.ind.shown, "marked")
+    H.assertEq(t.box.at.x, 500)
+    H.assertEq(t.box.at.y, -300)
+    H.assertTrue(t.ind.at.rel == t.box, "the indicator over the box")
+    H.assertEq(t.styled, 1, "in the player's highlight style")
+    local ticker = t.tickers[#t.tickers]
+    H.assertEq(ticker.sec, 0.1)
+    friend.pos = { 0.6, 0.5 }
+    ticker.fn()
+    H.assertEq(t.box.at.x, 600, "moved with them")
+    friend.onMaps = { [1429] = true }
+    t.map.map = 1453   -- turned to a map that does not hold them
+    ticker.fn()
+    H.assertFalse(t.box.shown or t.ind.shown, "hidden there")
+    H.assertFalse(ticker.cancelled == true, "still watching")
+    t.map.map = 1429
+    ticker.fn()
+    H.assertTrue(t.box.shown, "back on theirs")
+    H.assertEq(t.styled, 2, "styled again as it shows")
+    t.map.shown = false
+    ticker.fn()
+    H.assertTrue(ticker.cancelled, "the map closed: done")
+    H.assertFalse(t.box.shown or t.ind.shown)
+end
+
+function tests.showOnMap_inAFight_marksNothing()
+    local t = Load()
+    Member(t)
+    t.inFight = true
+    Menu(t, "PARTY", "party1")[3].fn()
+    H.assertEq(t.opened, 1429, "asked")
+    H.assertNil(t.box, "the map refused: no mark")
+    H.assertEq(#t.tickers, 0)
 end
 
 local pass, fail, failures = H.runSuite("GPSUnitDirections", tests)

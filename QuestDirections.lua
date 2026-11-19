@@ -212,6 +212,74 @@ if Menu and Menu.ModifyMenu then
         follow.ticker = C_Timer.NewTicker(FOLLOW_SECONDS, Tick)
     end
 
+    -- Show on map: the member's zone on the world map, EasyFind's highlight
+    -- and indicator on them, moving with them till the map closes.
+    local SHOW_EVERY = 0.1
+    local shown = {}   -- guid, box, ind, ticker
+
+    local function Unshow()
+        if shown.ticker then shown.ticker:Cancel() end
+        shown.ticker, shown.guid = nil, nil
+        if shown.box then
+            shown.box:Hide()
+            shown.ind:Hide()
+        end
+    end
+
+    -- On whatever map the world map shows that holds them (their zone, its
+    -- continent); hidden on one that does not.
+    local function PlaceShown()
+        local map = WorldMapFrame:IsShown() and WorldMapFrame:GetMapID()
+        local unit = map and UnitOfGUID(shown.guid)
+        if not unit then return Unshow() end
+        local pos = C_Map.GetPlayerMapPosition(map, unit)
+        local x, y
+        if pos then x, y = pos:GetXY() end
+        local box, ind = shown.box, shown.ind
+        if not (Plain(x) and Plain(y)) then
+            box:Hide()
+            ind:Hide()
+            return
+        end
+        local canvas = box:GetParent()
+        local scale = EasyFind.db and EasyFind.db.iconScale or 0.8
+        local size, arrow = ns.UIToCanvas(ns.HIGHLIGHT_SIZE) * scale, ns.UIToCanvas(ns.ICON_SIZE) * scale
+        box:SetSize(size, size)
+        box:ClearAllPoints()
+        box:SetPoint("CENTER", canvas, "TOPLEFT", x * canvas:GetWidth(), -y * canvas:GetHeight())
+        ns.MapSearch:ResizeHighlightBorders(box)
+        ind:SetSize(arrow, arrow)
+        if ind.glow then
+            local glow = ns.UIToCanvas(ns.ICON_GLOW_SIZE) * scale
+            ind.glow:SetSize(glow, glow)
+        end
+        ind:ClearAllPoints()
+        ind:SetPoint("BOTTOM", box, "TOP", 0, 2)
+        if not box:IsShown() then
+            ns.MapSearch:ApplyHighlightStyle(box)
+            box:Show()
+            ind:Show()
+        end
+    end
+
+    local function ShowOnMap(guid)
+        Unshow()
+        local unit = UnitOfGUID(guid)
+        local m = unit and MemberSpot(unit)
+        if not (m and EasyFind.API.OpenMap and EasyFind.API.OpenMap(m)) then return end
+        if not shown.box then
+            local canvas, Frames = WorldMapFrame.ScrollContainer.Child, ns.MapSearchFrames
+            shown.box = Frames.CreateHighlightBox(nil, canvas, { strata = "TOOLTIP", level = 1998, hidden = true,
+                                                                 color = ns.YELLOW_HIGHLIGHT })
+            shown.ind = Frames.CreateIndicatorFrame(nil, canvas, { strata = "TOOLTIP", level = 2001, size = ns.ICON_SIZE })
+            shown.ind:Hide()
+        end
+        shown.guid = guid
+        PlaceShown()
+        shown.ticker = C_Timer.NewTicker(SHOW_EVERY, PlaceShown)
+    end
+    UnitDirections._PlaceShown = PlaceShown   -- tests
+
     local function AddUnitDirections(root, contextData)
         local unit = contextData and contextData.unit
         if not (unit and UnitExists(unit)) then return end
@@ -221,6 +289,7 @@ if Menu and Menu.ModifyMenu then
             if not (Plain(guid) and Plain(name) and MemberSpot(unit)) then return end
             root:CreateDivider()
             root:CreateButton(L["GPS_MENU_EASYFIND_DIRECTIONS"], function() Follow(guid, name) end)
+            root:CreateButton(L["GPS_MENU_SHOW_ON_MAP"], function() ShowOnMap(guid) end)
             return
         end
         local id = NpcID(unit)
