@@ -236,7 +236,7 @@ function Arrow:Guiding() return frame ~= nil and frame:IsShown() end
 local TARGET_YARDS, TARGET_EVERY, TARGET_MAX, ROW_H, ROW_GAP = 40, 0.5, 6, 24, 2
 local KIND_ICON = { kill = "Interface\\Cursor\\Attack", talk = "Interface\\GossipFrame\\GossipGossipIcon" }
 -- btns, rows, guide (set from outside), npc { dest, name, ci, wx, wy },
--- closed (a route's dest), closedNames (a guide's), ticker
+-- closed (a route's dest), closedNames (a guide's), ticker, menuAnchor
 local target = { btns = {}, rows = {}, closedNames = {} }
 
 function Arrow.TargetMark()
@@ -247,7 +247,7 @@ function Arrow.TargetMark()
 end
 
 -- The route's NPC on the walk in (40 yd) until arrival (8 yd beside it),
--- unless closed with a right-click.
+-- unless closed from its right-click menu.
 -- The end of the leg being walked: a trip's next stop, else the route's.
 local function LegEnd(route)
     for i = route.active or 1, #(route.steps or {}) do
@@ -282,17 +282,33 @@ end
 
 local TargetTick
 
--- A right-click closes its row: a route's NPC for that route, a guide's
--- creature until the guide's list changes.
-local function CloseTarget(btn)
-    local row = btn and btn.row
-    if row and row.route then
-        target.closed = target.npc and target.npc.dest
-        target.npc = nil
-    elseif row then
-        target.closedNames[row.name] = true
+-- A right-click: a menu at the cursor, as the plate's. Close takes the row
+-- it opened on, though the rows moved since: a route's NPC for that route,
+-- a guide's creature until the guide's list changes.
+local function TargetMenu(btn)
+    local row = btn.row
+    if not (row and ns.ShowTogglePopup) then return end
+    local dest = row.route and target.npc and target.npc.dest
+    local anchor = target.menuAnchor
+    if not anchor then
+        anchor = CreateFrame("Frame", nil, UIParent)
+        anchor:SetSize(1, 1)
+        target.menuAnchor = anchor
     end
-    TargetTick()
+    local cx, cy = GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    anchor:ClearAllPoints()
+    anchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / scale, cy / scale)
+    ns.ShowTogglePopup("EasyFindGPSTargetMenu", anchor, {
+        { kind = "action", label = _G["CLOSE"] or "Close", onClick = function()
+            if row.route then
+                target.closed = dest
+            else
+                target.closedNames[row.name] = true
+            end
+            TargetTick()
+        end },
+    }, {})
 end
 
 local function TargetButton(i)
@@ -304,15 +320,10 @@ local function TargetButton(i)
     btn:SetFrameStrata("LOW")
     btn:RegisterForClicks("AnyUp", "AnyDown")
     btn:SetAttribute("useOnKeyDown", false)
-    -- Right-click runs btn.dismiss (the template's own-function action).
-    btn:SetAttribute("type2", "dismiss")
-    btn.dismiss = CloseTarget
-    btn:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-        GameTooltip:SetText(ns.L["GPS_TARGET_CLOSE_TT"], 1, 1, 1, 1, true)
-        GameTooltip:Show()
-    end)
-    btn:SetScript("OnLeave", GameTooltip_Hide)
+    -- Right-click runs btn.rowMenu (the template's own-function action;
+    -- "menu" is the template's unit menu).
+    btn:SetAttribute("type2", "rowMenu")
+    btn.rowMenu = TargetMenu
     local look = ns.GPSWorldPin.NewPlate(btn)
     look:SetAllPoints(btn)
     look:EnableMouse(false)

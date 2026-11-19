@@ -28,6 +28,8 @@ local function fresh(opts)
     end
     env.UIParent = H.newFrame()
     env.UIParent.GetSize = function() return 1920, 1080 end
+    env.UIParent.GetEffectiveScale = function() return 1 end
+    env.GetCursorPosition = function() return 640, 360 end
     local ticks = {}
     env.C_Timer = {
         After = function() end,
@@ -62,8 +64,11 @@ local function fresh(opts)
         end,
     }
     ns.GPSFollow = { Now = function() return nil end }
+    local menu = {}
+    ns.ShowTogglePopup = function(name, anchor, defs) menu.name, menu.anchor, menu.defs = name, anchor, defs end
     H.loadModule("Arrow.lua", env, ns)
-    local w = { Arrow = ns.GPSArrow, player = player, state = state, combat = combat, ticks = ticks, db = db }
+    local w = { Arrow = ns.GPSArrow, player = player, state = state, combat = combat, ticks = ticks, db = db,
+                menu = menu }
     function w.button(i)
         local name = (i or 1) == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i)
         for _, f in ipairs(frames) do if f.name == name then return f end end
@@ -154,16 +159,24 @@ function tests.arrival_takesTheButton_standingThere()
     H.assertFalse(w.button():IsShown(), "nor back when the route clears")
 end
 
--- A right-click closes it for this route; the left click still targets.
-function tests.aRightClick_closesItForThisRoute()
+-- A right-click opens a menu at the cursor, as the plate's, and its Close
+-- closes the NPC for this route; the left click still targets. No hover
+-- tooltip (2026-11-19: "get rid of right click to close").
+function tests.aRightClick_opensAMenu_whoseCloseClosesItForThisRoute()
     local w = fresh()
     w.near()
     w.Arrow:Refresh()
     local btn = w.button()
-    H.assertEq(btn:GetAttribute("type2"), "dismiss", "the right button's own action")
-    H.assertTrue(type(rawget(btn, "dismiss")) == "function", "found by the template on the button itself")
+    H.assertNil(btn:GetScript("OnEnter"), "no tooltip on hover")
+    H.assertEq(btn:GetAttribute("type2"), "rowMenu", "the right button's own action, not the template's unit menu")
+    H.assertTrue(type(rawget(btn, "rowMenu")) == "function", "found by the template on the button itself")
     H.assertEq(btn:GetAttribute("type"), "macro", "the left still targets")
-    btn.dismiss(btn)
+    btn.rowMenu(btn)
+    H.assertEq(w.menu.name, "EasyFindGPSTargetMenu")
+    H.assertEq(#w.menu.defs, 1, "Close alone")
+    H.assertEq(w.menu.defs[1].label, "Close")
+    H.assertTrue(btn:IsShown(), "open, nothing closed yet")
+    w.menu.defs[1].onClick()
     H.assertFalse(btn:IsShown(), "closed")
     w.tick()
     H.assertFalse(btn:IsShown(), "stays closed while near")
@@ -229,12 +242,13 @@ function tests.aGuidesTargets_andTheRoutesNpc_once()
     H.assertTrue(w.button(2).look.text:GetText():find("Kelm Hargunth", 1, true) ~= nil, "named among others")
 end
 
-function tests.aGuidesTarget_rightClicked_staysClosedUntilTheListChanges()
+function tests.aGuidesTarget_closed_staysClosedUntilTheListChanges()
     local w = fresh()
     w.state.route = nil
     local list = { { name = "Scarlet Warrior", kind = "kill" }, { name = "Tirisfal Farmhand", kind = "kill" } }
     w.Arrow.SetTargets(list)
-    w.button(1).dismiss(w.button(1))
+    w.button(1).rowMenu(w.button(1))
+    w.menu.defs[1].onClick()
     local shown = w.shown()
     H.assertEq(#shown, 1)
     H.assertTrue(shown[1]:find("Tirisfal Farmhand", 1, true) ~= nil)
@@ -242,6 +256,24 @@ function tests.aGuidesTarget_rightClicked_staysClosedUntilTheListChanges()
     H.assertEq(#w.shown(), 1, "stays closed")
     w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" } })
     H.assertEq(#w.shown(), 1, "a new list opens it")
+end
+
+-- The rows move while a menu is up (another closed, one walked off): its
+-- Close takes the row it opened on, not the one now on that button.
+function tests.aMenusClose_takesItsOwnRow_thoughTheRowsMoved()
+    local w = fresh()
+    w.state.route = nil
+    w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" }, { name = "Tirisfal Farmhand", kind = "kill" },
+                         { name = "Bleeding Horror", kind = "kill" } })
+    w.button(2).rowMenu(w.button(2))
+    local farmhand = w.menu.defs[1]
+    w.button(1).rowMenu(w.button(1))
+    w.menu.defs[1].onClick()
+    H.assertTrue(w.shown()[2]:find("Bleeding Horror", 1, true) ~= nil, "the rows moved up")
+    farmhand.onClick()
+    local shown = w.shown()
+    H.assertEq(#shown, 1)
+    H.assertTrue(shown[1]:find("Bleeding Horror", 1, true) ~= nil, "the farmhand closed, the horror kept")
 end
 
 function tests.aGuidesTargets_inAFight_stayAsTheyWere()
