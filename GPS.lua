@@ -689,6 +689,7 @@ function GPS:Plan(name, build, done, quiet)
 end
 
 function GPS:IsPlanning() return Planner.co ~= nil end
+GPS._planner = Planner   -- dev tools
 
 -- The map point for a step's waypoint. A map that refuses user waypoints
 -- (dungeon-type cities, underground continents), or a point past its map's
