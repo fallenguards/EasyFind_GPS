@@ -311,19 +311,28 @@ function WorldPin.NewPlate(parent)
         end
         defs[#defs + 1] = { kind = "action", label = L["GPS_CLEAR"], onClick = function() ns.GPS:Clear() end }
         defs[#defs + 1] = { kind = "separator" }
-        defs[#defs + 1] = { kind = "check", label = L["GPS_PLATE_BORDER_MENU"], tooltip = L["GPS_PLATE_BORDER_TT"],
-            get = function() local d = DB() return d ~= nil and d.gpsPlateBorder == true end,
-            set = function(on)
-                local d = DB()
-                if not d then return end
-                d.gpsPlateBorder = on or nil
-                WorldPin.ApplyPlateBorders()
-            end }
-        -- Off, the arrow's own right-click opens this menu to bring it back.
+        -- The box's switch on its row (off, the arrow's own right-click opens
+        -- this menu to bring it back); its border and lines in the flyout.
         defs[#defs + 1] = { kind = "check", label = L["GPS_PLATE_SHOWN"],
-            tooltip = L["GPS_PLATE_SHOWN_TT_FMT"]:format(L["GPS_ARROW_TEXT"]),
             get = function() return ns.GPS.ArrowBoxShown() end,
-            set = function(on) ns.GPS.SetArrowBox(on) end }
+            set = function(on) ns.GPS.SetArrowBox(on) end,
+            rows = function()
+                local GPS = ns.GPS
+                local rows = { GPS.CheckFlyoutRow({ label = L["GPS_PLATE_BORDER_MENU"], tooltip = L["GPS_PLATE_BORDER_TT"],
+                    get = function() local d = DB() return d ~= nil and d.gpsPlateBorder == true end,
+                    set = function(on)
+                        local d = DB()
+                        if not d then return end
+                        d.gpsPlateBorder = on or nil
+                        WorldPin.ApplyPlateBorders()
+                    end }), { isSeparator = true } }
+                for _, line in ipairs(GPS.BOX_LINES) do
+                    rows[#rows + 1] = GPS.CheckFlyoutRow({ label = line.label,
+                        get = function() return GPS.BoxLineShown(line.key) end,
+                        set = function(on) GPS.SetBoxLine(line.key, on) end })
+                end
+                return rows
+            end }
         -- The arrow's plate: unlocked, the arrow takes a plain drag.
         local Arrow = p.isArrow and ns.GPSArrow
         if Arrow and Arrow.SetUnlocked then
@@ -340,10 +349,25 @@ function WorldPin.NewPlate(parent)
     return p
 end
 
--- New lines on a plate, sized to them, an empty line taking no room; the
--- same again does nothing.
+-- One line of a plate under the shown one above it (none: at the top);
+-- an empty line hides and takes no room. The plate's height so far back.
+local function StackLine(p, fs, s, above, h)
+    fs:SetShown(s ~= "")
+    if s == "" then return above, h end
+    fs:ClearAllPoints()
+    if above then
+        fs:SetPoint("TOP", above, "BOTTOM", 0, -2)
+        h = h + 2
+    else
+        fs:SetPoint("TOP", p, "TOP", 0, -6)
+    end
+    return fs, h + (fs:GetStringHeight() or 10)
+end
+
+-- New lines on a plate, sized to them, the shown ones stacked from the
+-- top; the same again does nothing.
 function WorldPin.FillPlate(p, text, sub, sub2, note)
-    sub, sub2, note = sub or "", sub2 or "", note or ""
+    text, sub, sub2, note = text or "", sub or "", sub2 or "", note or ""
     if text == p.shownText and sub == p.shownSub and sub2 == p.shownSub2 and note == p.shownNote then return end
     p.shownText, p.shownSub, p.shownSub2, p.shownNote = text, sub, sub2, note
     p.text:SetText(text)
@@ -357,43 +381,39 @@ function WorldPin.FillPlate(p, text, sub, sub2, note)
     p.note:SetWidth(inner)
     p.sub:SetWidth(inner)
     p.sub2:SetWidth(inner)
-    -- The distance line hangs under the extension's line while it shows.
-    p.sub:ClearAllPoints()
-    p.sub:SetPoint("TOP", note ~= "" and p.note or p.text, "BOTTOM", 0, -2)
-    local h = 6 + (p.text:GetStringHeight() or 12) + 6
-    if note ~= "" then h = h + 2 + (p.note:GetStringHeight() or 10) end
-    if sub ~= "" then h = h + 2 + (p.sub:GetStringHeight() or 10) end
-    if sub2 ~= "" then h = h + 2 + (p.sub2:GetStringHeight() or 10) end
-    p.note:SetShown(note ~= "")
-    p.sub:SetShown(sub ~= "")
-    p.sub2:SetShown(sub2 ~= "")
-    p:SetSize(inner + 20, h)
+    local above, h = StackLine(p, p.text, text, nil, 6)
+    above, h = StackLine(p, p.note, note, above, h)
+    above, h = StackLine(p, p.sub, sub, above, h)
+    h = select(2, StackLine(p, p.sub2, sub2, above, h))
+    p:SetSize(inner + 20, h + 6)
 end
 
--- What the plate says, by the Arrow text setting: the step; under it
--- "This step: 119 yds, 1 min"; under those the time for the whole trip,
--- when more steps follow. Nothing with the plate off.
+-- What the plate says, each line by its switch: the step; "This step: 119
+-- yds, 1 min"; the time for the whole trip, when more steps follow; and an
+-- extension's line. Nothing with the box off or every line empty.
 function WorldPin.PlateLines(route, yards)
-    local db = DB()
-    local mode = db and db.gpsArrowText or "full"
-    if mode == "off" then return nil end
+    local GPS = ns.GPS
+    if not (GPS and GPS.ArrowBoxShown()) then return nil end
     local L = ns.L
     local active = route.active or 1
     local step = route.steps and route.steps[active]
-    local text = (ns.GPS and ns.GPS.StepText) and ns.GPS.StepText(step, true) or (step and step.text or "")
-    local note = ns.GPS and ns.GPS.status or ""
-    if mode == "step" then return text, "", "", note end
-    local range = yards and yards > 0 and ns.GPS and ns.GPS.DistanceText(yards) or nil
-    local Eta = ns.GPS and ns.GPS.EtaText
-    local left = mode == "full" and Eta and (route.stepEta or (step and step.sec))
-    local time = left and left > 0 and Eta(left) or nil
-    local line = ""
-    if range and time then line = sformat(L["GPS_PLATE_STEP_BOTH_FMT"], range, time)
-    elseif range or time then line = sformat(L["GPS_PLATE_STEP_FMT"], range or time) end
-    local trip = ""
-    if mode == "full" and Eta and route.eta and route.eta > 0 and route.steps and #route.steps > active then
+    local text, line, trip = "", "", ""
+    if GPS.BoxLineShown("gpsBoxStep") then
+        text = GPS.StepText and GPS.StepText(step, true) or (step and step.text or "")
+    end
+    local note = GPS.status or ""
+    local Eta = GPS.EtaText
+    if GPS.BoxLineShown("gpsBoxThisStep") then
+        local range = yards and yards > 0 and GPS.DistanceText(yards) or nil
+        local left = Eta and (route.stepEta or (step and step.sec))
+        local time = left and left > 0 and Eta(left) or nil
+        if range and time then line = sformat(L["GPS_PLATE_STEP_BOTH_FMT"], range, time)
+        elseif range or time then line = sformat(L["GPS_PLATE_STEP_FMT"], range or time) end
+    end
+    if GPS.BoxLineShown("gpsBoxTotal") and Eta and route.eta and route.eta > 0 and route.steps and #route.steps > active then
         trip = sformat(L["GPS_PLATE_TRIP_FMT"], Eta(route.eta))
     end
+    if text == "" and line == "" and trip == "" and note == "" then return nil end
     return text, line, trip, note
 end
 

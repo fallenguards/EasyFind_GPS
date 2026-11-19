@@ -4200,22 +4200,50 @@ function GPS.AvoidRow(kind)
         end }
 end
 
--- The box under the arrow and the beacon, the Arrow text setting: shown
--- unless off; shown again, it says what it said before.
+-- The box under the arrow and the beacon: shown unless switched off, its
+-- lines each a switch of their own (2026-11-19: "as much/little as ppl
+-- want"), all stored only when off.
+GPS.BOX_LINES = {
+    { key = "gpsBoxStep", label = _G["QUEST_DESCRIPTION"] or "Description" },
+    { key = "gpsBoxThisStep", label = L["GPS_BOX_THIS_STEP"] },
+    { key = "gpsBoxTotal", label = L["GPS_BOX_TOTAL"] },
+}
+
 function GPS.ArrowBoxShown()
     local db = DB()
-    return not (db and db.gpsArrowText == "off")
+    return not (db and db.gpsArrowBox == false)
 end
 
 function GPS.SetArrowBox(on)
     local db = DB()
     if not db or on == GPS.ArrowBoxShown() then return end
-    if on then
-        db.gpsArrowText, db.gpsArrowTextWas = db.gpsArrowTextWas, nil
-    else
-        db.gpsArrowTextWas, db.gpsArrowText = db.gpsArrowText, "off"
-    end
+    db.gpsArrowBox = Utils.OffOrNil(on)
     Refresh()
+end
+
+function GPS.BoxLineShown(key)
+    local db = DB()
+    return not (db and db[key] == false)
+end
+
+function GPS.SetBoxLine(key, on)
+    local db = DB()
+    if not db or on == GPS.BoxLineShown(key) then return end
+    db[key] = Utils.OffOrNil(on)
+    Refresh()
+end
+
+-- The Arrow text choice the switches replaced: full, step and distance
+-- (no trip time), step only, or off (the box hidden, its choice kept).
+function GPS.MigrateArrowText(db)
+    local mode = db.gpsArrowText
+    if mode == "off" then
+        db.gpsArrowBox = false
+        mode = db.gpsArrowTextWas
+    end
+    if mode == "step" then db.gpsBoxThisStep = false end
+    if mode == "step" or mode == "range" then db.gpsBoxTotal = false end
+    db.gpsArrowText, db.gpsArrowTextWas = nil, nil
 end
 
 -- A line an extension puts under the step in that box (the gps setStatus
@@ -5978,6 +6006,7 @@ local function CheckFlyoutRow(d)
     return { text = d.label, tooltip = d.tooltip, keepOpen = true, check = d,
              icon = d.get() and MENU_CHECK or nil, onClick = function() d.set(not d.get()) end }
 end
+GPS.CheckFlyoutRow = CheckFlyoutRow   -- the arrow box's flyout (WorldPin)
 
 -- Learning flight paths on the way and the advice lines under the route;
 -- under a line, which steps the list shows (the next alone: the window's).
@@ -6963,16 +6992,6 @@ do
                 local db = DB()
                 if db then db.gpsMapClick = (v ~= "gps") and v or nil end
             end)
-        Choice("arrowText", L["GPS_ARROW_TEXT"], L["GPS_ARROW_TEXT_TT"], {
-                { label = L["GPS_ARROW_TEXT_FULL"], value = "full" }, { label = L["GPS_ARROW_TEXT_RANGE"], value = "range" },
-                { label = L["GPS_ARROW_TEXT_STEP"], value = "step" }, { label = _G["OFF"] or "Off", value = "off" },
-            }, "full",
-            function() local db = DB() return db and db.gpsArrowText or "full" end,
-            function(v)
-                local db = DB()
-                if db then db.gpsArrowText = (v ~= "full") and v or nil end
-                Refresh()
-            end)
         Choice("units", L["GPS_UNITS"], nil, {
                 { label = L["GPS_UNITS_YARDS"], value = "yd" }, { label = L["GPS_UNITS_METERS"], value = "m" },
                 { label = L["GPS_UNITS_BANANAS"], value = "banana" }, { label = L["GPS_UNITS_FIELDS"], value = "field" },
@@ -7013,6 +7032,11 @@ do
                 end)
         end
         Switch("gpsArrow", L["GPS_ARROW"], L["GPS_ARROW_TT"], Refresh)
+        Check("gpsArrowBox", L["GPS_PLATE_SHOWN"], L["GPS_PLATE_SHOWN_TT"], GPS.ArrowBoxShown, GPS.SetArrowBox)
+        for _, line in ipairs(GPS.BOX_LINES) do
+            Check(line.key, line.label, nil, function() return GPS.BoxLineShown(line.key) end,
+                function(on) GPS.SetBoxLine(line.key, on) end, Under(L["GPS_PLATE_SHOWN"], line.label))
+        end
         local marks = { { label = _G["NONE"] or "None", value = 0 } }
         for i = 1, 8 do
             marks[#marks + 1] = { label = "|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. i .. ":14|t "
@@ -7152,13 +7176,21 @@ do
             prev = control
         end
         Place("beacon", -8, gap)
-        for _, key in ipairs({ "line", "miniLine", "miniDot", "click", "arrowText", "units", "textSize" }) do
+        for _, key in ipairs({ "line", "miniLine", "miniDot", "click", "units", "textSize" }) do
             if rows[key] then Place(key, 0, -4) end
         end
         Place("plateBorder", 0, -6)
-        for _, key in ipairs({ "gpsArrow", "gpsTargetMark", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
+        Place("gpsArrow")
+        Place("gpsArrowBox")
+        -- The box's lines stand in under its switch.
+        for i, line in ipairs(GPS.BOX_LINES) do Place(line.key, i == 1 and 16 or 0) end
+        local back = -16
+        for _, key in ipairs({ "gpsTargetMark", "gpsMinimap", "gpsClickPulse", "gpsZoneSteps", "gpsDangerWarn",
                                "gpsDangerRed", "gpsRowButton", "hideDone", "autoClose", "arriveAnyFloor" }) do
-            if rows[key] then Place(key) end
+            if rows[key] then
+                Place(key, back)
+                back = 0
+            end
         end
         -- Ways of travel a route leaves out unless nothing else gets there.
         local head = page:CreateFontString(nil, "ARTWORK", kit.Font and kit.Font("GameFontNormal") or "GameFontNormal")
@@ -7282,6 +7314,7 @@ loginFrame:SetScript("OnEvent", function(self, event, unit, _, spellID)
     -- Routes once lived on the account; one left there is dropped, not
     -- handed to whichever character logs in next.
     if db then db.gpsRoute, db.gpsPopoutOpen = nil, nil end
+    if db and db.gpsArrowText then GPS.MigrateArrowText(db) end
     local c = CharDB()
     -- Open as it was left; nil while snapped in is a save from before
     -- closing it was remembered.

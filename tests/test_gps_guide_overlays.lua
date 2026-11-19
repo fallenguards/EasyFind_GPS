@@ -36,11 +36,14 @@ end
 
 -- WorldPin.PlateLines and FillPlate, from WorldPin.lua, over db and GPS.
 local function Plate(db, gps)
-    local chunk = Cut(Source("WorldPin.lua"), "function WorldPin.FillPlate(p, text, sub, sub2, note)", "\nend\n")
-        .. "\n" .. Cut(Source("WorldPin.lua"), "function WorldPin.PlateLines(route, yards)", "\nend\n")
+    gps.ArrowBoxShown = function() return db.gpsArrowBox ~= false end
+    gps.BoxLineShown = function(key) return db[key] ~= false end
+    local src = Source("WorldPin.lua")
+    local chunk = Cut(src, "local function StackLine(p, fs, s, above, h)", "\nend\n")
+        .. "\n" .. Cut(src, "function WorldPin.FillPlate(p, text, sub, sub2, note)", "\nend\n")
+        .. "\n" .. Cut(src, "function WorldPin.PlateLines(route, yards)", "\nend\n")
     local env = setmetatable({
         WorldPin = {}, mmax = math.max, mmin = math.min, PLATE_MAX_W = 240, sformat = string.format,
-        DB = function() return db end,
         ns = { L = setmetatable({}, { __index = function(_, k) return k .. " %s" end }), GPS = gps },
     }, { __index = _G })
     assert(load(chunk, "=WorldPin.lua plate", "t", env))()
@@ -71,18 +74,19 @@ function tests.aStatusLine_isTextOrNothing()
     H.assertNil(GPS.status, "not text: none")
 end
 
--- The box says it under the step in every mode but off.
+-- The box says it under the step whatever lines are on, and nothing with
+-- the box off.
 function tests.theBox_saysTheStatusUnderTheStep()
     local gps = { status = "XP 642 / 895 (72%)", StepText = function(step) return step.text end }
     local route = { steps = { { text = "Grind to 895+/1400xp" } }, active = 1 }
-    local db = { gpsArrowText = "step" }
+    local db = { gpsBoxThisStep = false, gpsBoxTotal = false }
     local Pin = Plate(db, gps)
     local text, sub, sub2, note = Pin.PlateLines(route, 50)
     H.assertEq(text, "Grind to 895+/1400xp")
-    H.assertEq(note, "XP 642 / 895 (72%)", "step only: the status too")
+    H.assertEq(note, "XP 642 / 895 (72%)", "the description alone: the status too")
     H.assertEq(sub .. sub2, "")
-    db.gpsArrowText = "off"
-    H.assertNil(Pin.PlateLines(route, 50), "off: no box")
+    db.gpsArrowBox = false
+    H.assertNil(Pin.PlateLines(route, 50), "the box off: none")
     local p = { text = Line(), note = Line(), sub = Line(), sub2 = Line() }
     function p:SetSize(w, h) self.w, self.h = w, h end
     Pin.FillPlate(p, text, "This step: 50 yd", "", note)

@@ -33,11 +33,11 @@ function tests.theOption_isOfferedAndPlaced()
     local src = f:read("*a")
     f:close()
     H.assertTrue(src:find('Choice("units", L["GPS_UNITS"]', 1, true) ~= nil, "the choice row")
-    H.assertTrue(src:find('"arrowText", "units", "textSize"', 1, true) ~= nil, "placed on the page")
+    H.assertTrue(src:find('"click", "units", "textSize"', 1, true) ~= nil, "placed on the page")
     local pin = assert(io.open(H.Path("WorldPin.lua"), "rb"))
     local plate = pin:read("*a")
     pin:close()
-    H.assertTrue(plate:find("ns.GPS.DistanceText(yards)", 1, true) ~= nil, "the arrow's plate uses it")
+    H.assertTrue(plate:find("GPS.DistanceText(yards)", 1, true) ~= nil, "the arrow's plate uses it")
 end
 
 local pass, fail, failures = H.runSuite("GPSUnits", tests)
