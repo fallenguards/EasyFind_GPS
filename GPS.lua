@@ -3446,13 +3446,24 @@ local function ToggleRouteTracking()
     Refresh()
 end
 
--- A quest super-tracked while the route is (its POI clicked, the quest
--- map) is the player's pick: the game picks one itself only with nothing
--- tracked. The route lets go, as its own toggle does, so one is lit.
+-- A quest super-tracked while the route is: the player's pick comes with
+-- a click on a frame (its POI, the quest map, a tracker) in that frame,
+-- and the route lets go, as its own toggle does, so one is lit. One with
+-- no click is an addon's or the game's (a guide tracking its step's
+-- quest, 2026-11-19): the route takes the super-track back.
 do
     local watch = CreateFrame("Frame")
+    local clickAt
     Utils.RegisterEventIfValid(watch, "SUPER_TRACKING_CHANGED")
-    watch:SetScript("OnEvent", function()
+    Utils.RegisterEventIfValid(watch, "GLOBAL_MOUSE_DOWN")
+    Utils.RegisterEventIfValid(watch, "GLOBAL_MOUSE_UP")
+    watch:SetScript("OnEvent", function(_, event)
+        local at = GetTime()
+        if event ~= "SUPER_TRACKING_CHANGED" then
+            local foci = GetMouseFoci and GetMouseFoci() or { GetMouseFocus and GetMouseFocus() }
+            if foci[1] and foci[1] ~= WorldFrame then clickAt = at end
+            return
+        end
         Utils.SafeAfter(0, function()
             local route = Route()
             local ST = C_SuperTrack
@@ -3462,6 +3473,10 @@ do
             end
             -- The route's own last step tracking its quest: no pick of the player's.
             if route.questTracked and ST.GetSuperTrackedQuestID and ST.GetSuperTrackedQuestID() == route.questTracked then
+                return
+            end
+            if clickAt ~= at then
+                TrackStep(route.active or 1)
                 return
             end
             GPS.ReleaseTracking(route)
