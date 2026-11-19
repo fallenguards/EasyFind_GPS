@@ -946,9 +946,26 @@ local function TileCosts(w, key)
     end
     local ordered = oneway or level ~= nil
     local cost, time, made = {}, {}, 0
-    -- A tile's pairs run to thousands, each weighed for danger: a plan
-    -- gives the frame back among them (40 to 56 ms planner frames,
-    -- 2026-11-19).
+    -- In a tile with danger a pair is weighed along its line when a search
+    -- first reads its cost; most pairs never are (59,609 weighed for one
+    -- plan, 2026-11-19). Its cost before the weight and its ends wait.
+    local base, ends
+    if dw then
+        base, ends = {}, {}
+        setmetatable(cost, { __index = function(t, p)
+            local c = base[p]
+            if not c then return nil end
+            local e = ends[p]
+            c = c * Along(mfloor(e / 4096), e % 4096)
+            rawset(t, p, c)
+            return c
+        end })
+    end
+    local function Weigh(p, c, a, b)
+        if base then base[p], ends[p] = c, a * 4096 + b else cost[p] = c end
+    end
+    -- A tile's pairs run to thousands: a plan gives the frame back among
+    -- them (40 to 56 ms planner frames, 2026-11-19).
     local function Pair(a, b, p, q)
         made = made + 1
         if made % 64 == 0 then Pause() end
@@ -960,8 +977,12 @@ local function TileCosts(w, key)
             local off = u()
             local around = (code - 1) / 2
             local c = msqrt((sx[a] - sx[b]) ^ 2 + (sy[a] - sy[b]) ^ 2) + around
-            cost[p], time[p] = c * scale * Along(a, b), c - off / 127 * around
-            if q then cost[q], time[q] = cost[p], time[p] end
+            Weigh(p, c * scale, a, b)
+            time[p] = c - off / 127 * around
+            if q then
+                Weigh(q, c * scale, a, b)
+                time[q] = time[p]
+            end
         end
     end
     if oneway then
@@ -994,10 +1015,13 @@ local function TileCosts(w, key)
             local r = idx - (a - 1) * (n - 1)
             local b = r < a and r or r + 1
             if code == 0 then
+                if base then base[idx] = nil end
                 cost[idx] = false
             else
                 local c = msqrt((sx[a] - sx[b]) ^ 2 + (sy[a] - sy[b]) ^ 2) + (code - 1) / 2
-                cost[idx], time[idx] = c * Along(a, b), c
+                rawset(cost, idx, nil)
+                Weigh(idx, c, a, b)
+                time[idx] = c
             end
         end
     end
@@ -1258,8 +1282,10 @@ local function Search(w, fromA, toB, bx, by, best, limit, circle, rev)
     local cell = w.cell
     local pops = 0
     while true do
+        -- A pop reads a tile's pairs from its side, each weighed for danger
+        -- on its first read (TileCosts), where no pause can come.
         pops = pops + 1
-        if pops % 64 == 0 then Pause() end
+        if pops % 8 == 0 then Pause() end
         local node, f = heap:Pop()
         if not node or f >= best then break end
         if limit and f > limit then
