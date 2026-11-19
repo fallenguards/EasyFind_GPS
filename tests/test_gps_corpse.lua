@@ -20,7 +20,9 @@ local function Load()
     local state = { ghost = false, px = 0.5, py = 0.5, corpse = { 0.3, 0.4 } }
     local GPS = {}
     local env = setmetatable({
-        GPS = GPS, ns = {}, L = { GPS_STEP_CORPSE = "Return to your corpse" },
+        GPS = GPS, L = { GPS_STEP_CORPSE = "Return to your corpse", GPS_STEP_SPIRIT_HEALER_FMT = "Talk to %s to come back to life" },
+        -- The catalog's Spirit Healer nearest the ghost, as SpotOfID gives it (on map 10).
+        ns = { Npcs = { SpotOfID = function(id) state.askedID = id return state.healer end } },
         UnitIsGhost = function() return state.ghost end,
         WorldPos = function(_, x, y) return 1, x * 1000, y * 1000 end,
         PlayerWorldPos = function() return 1, state.px * 1000, state.py * 1000 end,
@@ -104,6 +106,54 @@ function tests.risen_withNothingLeftArrives()
     Risen()
     H.assertTrue(state.arrived)
     H.assertNil(state.rerouted)
+end
+
+-- A guide's death skip (the deathSkip action): the ghost is led to the
+-- Spirit Healer beside it, named on the step (its Target button reads it),
+-- not back to its corpse; one too far off, the corpse after all.
+function tests.deathSkip_theSpiritHealer_notTheCorpse()
+    local GPS, LeadToCorpse, _, state = Load()
+    state.route = { steps = { Walk("a"), Walk("b") }, active = 2 }
+    state.ghost = true
+    state.healer = { name = "Spirit Healer", mapID = 10, x = 0.52, y = 0.5 }
+    GPS.deathSkip = true
+    LeadToCorpse()
+    local step = state.route.steps[2]
+    H.assertTrue(step.corpse and step.spirit, "a ghost's step, to the healer")
+    H.assertEq(state.askedID, 6491, "the graveyards' Spirit Healer")
+    H.assertEq(step.text, "Talk to Spirit Healer to come back to life")
+    H.assertEq(step.npc, "Spirit Healer", "for the Target button")
+    H.assertEq(step.arrive.wx, 520, "at the healer, 20 yards off")
+end
+
+function tests.deathSkip_aHealerTooFar_theCorpse()
+    local GPS, LeadToCorpse, _, state = Load()
+    state.route = { steps = { Walk("a"), Walk("b") }, active = 2 }
+    state.ghost = true
+    state.healer = { name = "Spirit Healer", mapID = 10, x = 0.9, y = 0.5 }   -- 400 yards off
+    GPS.deathSkip = true
+    LeadToCorpse()
+    H.assertNil(state.route.steps[2].spirit, "too far: not this ghost's graveyard")
+    H.assertEq(state.route.steps[2].text, "Return to your corpse")
+end
+
+-- The guide's step coming up or going while the ghost walks: the one way
+-- is swapped for the other, once.
+function tests.deathSkip_switchedWhileAGhost_swapsTheWay()
+    local GPS, LeadToCorpse, _, state = Load()
+    state.route = { steps = { Walk("a"), Walk("b") }, active = 2 }
+    state.ghost = true
+    state.healer = { name = "Spirit Healer", mapID = 10, x = 0.52, y = 0.5 }
+    LeadToCorpse()
+    H.assertNil(state.route.steps[2].spirit, "no death skip: the corpse")
+    GPS.SetDeathSkip(true)
+    H.assertEq(#state.route.steps, 3, "swapped, not added")
+    H.assertTrue(state.route.steps[2].spirit, "now the healer")
+    GPS.SetDeathSkip(true)
+    H.assertEq(#state.route.steps, 3, "the same again: nothing")
+    GPS.SetDeathSkip(false)
+    H.assertEq(#state.route.steps, 3)
+    H.assertNil(state.route.steps[2].spirit, "the corpse again")
 end
 
 local pass, fail, failures = H.runSuite("GPSCorpse", tests)

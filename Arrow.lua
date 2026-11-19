@@ -211,9 +211,9 @@ local function Update()
     -- Facing turns from north toward west too; the art points down at rest.
     art:SetRotation(bearing - facing + mpi)
     local Pin = ns.GPSWorldPin
-    local text, line, trip = Pin.PlateLines(Route(), left)
+    local text, line, trip, note = Pin.PlateLines(Route(), left)
     plate:SetShown(text ~= nil)
-    if text then Pin.FillPlate(plate, text, line, trip) end
+    if text then Pin.FillPlate(plate, text, line, trip, note) end
     frame:Show()
 end
 
@@ -259,7 +259,9 @@ end
 
 local function TargetNpc()
     local route = Route()
-    local dest = route and not route.arrived and LegEnd(route)
+    -- A ghost on a death skip: the Spirit Healer its step leads to.
+    local step = route and route.steps and route.steps[route.active or 1]
+    local dest = route and not route.arrived and (step and step.spirit and step or LegEnd(route))
     if dest and dest.npc and dest ~= target.closed and dest.mapID and dest.x and ns.GPS.WorldPos then
         if not (target.npc and target.npc.dest == dest) then
             local ci, wx, wy = ns.GPS.WorldPos(dest.mapID, dest.x, dest.y)

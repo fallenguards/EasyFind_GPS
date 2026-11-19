@@ -39,6 +39,8 @@ local KIND_COLOR = { walk = ROUTE_BLUE, taxi = { 1, 0.55, 0.1 }, boat = { 0.1, 0
 -- The part of the route already walked, faded so it does not read as the way.
 local PASSED_COLOR, PASSED_ALPHA = { 0.78, 0.8, 0.84 }, 0.45
 Preview.DANGER_COLOR = { 0.95, 0.18, 0.15 }   -- ground deadly to the player
+-- A guide's farm circuit (GPS.circuit): gold, thinner than the way, closed.
+Preview.CIRCUIT_COLOR, Preview.CIRCUIT_SPAN, Preview.CIRCUIT_ALPHA = { 0.95, 0.78, 0.25 }, 0.6, 0.85
 local CASING, CASING_COLOR = 1.5, { 0.06, 0.05, 0.08 }
 local TEX_DISC = "Interface\\AddOns\\EasyFind\\textures\\FilterButtonCircle"
 local TEX_CORE = "Interface\\AddOns\\EasyFind_GPS\\textures\\route_core"
@@ -828,6 +830,16 @@ local function Draw()
         end
     end
     PenUp(true)
+    local circuit = ns.GPS and ns.GPS.circuit
+    if circuit and affine and affine.ci == circuit.ci then
+        local pts = circuit.pts
+        pen.span = span * Preview.CIRCUIT_SPAN
+        Pen(Preview.CIRCUIT_COLOR, Preview.CIRCUIT_ALPHA, 0)
+        for v = 1, #pts, 2 do PenTo(Frac(affine, pts[v], pts[v + 1])) end
+        PenTo(Frac(affine, pts[1], pts[2]))
+        PenUp()
+        pen.span = span
+    end
     lines:Finish()
     for i = nSym + 1, #syms do syms[i]:Hide() end
     -- The hovered leg's ends: a soft mark where it starts, our pin where
@@ -1025,6 +1037,9 @@ function Preview:Reset()
     dirty = true
     if overlay then overlay:Hide() end
 end
+
+-- Something drawn over the route changed (a guide's circuit): drawn again.
+function Preview.Redraw() dirty = true end
 
 -- The theme or the line color settings changed: drawn again, here and on
 -- the minimap.

@@ -155,6 +155,7 @@ L["GPS_MINIMAP_LINE_TT"]                = "경로를 미니맵에도 그리며, 
 L["GPS_PLATE_STEP_BOTH_FMT"]            = "이번 단계: %s, %s"
 L["GPS_SIZE_NEXT_ONLY"]                 = "다음 단계만"
 L["GPS_STEP_CORPSE"]                    = "시체로 돌아가기"
+L["GPS_STEP_SPIRIT_HEALER_FMT"]         = "%s에게 말을 걸어 부활하기"
 L["GPS_TO_ETA_FMT"]                     = "%s까지: %s"
 L["GPS_ETA_WIP"]                        = "(WIP)"
 L["GPS_ETA_WIP_TT"]                     = "예상 시간은 아직 작업 중이니 참고만 해 주세요."

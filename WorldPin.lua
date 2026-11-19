@@ -218,6 +218,7 @@ local function PaintPlate(p)
     local main = ns.TEXT_PRIMARY or { 1, 1, 1 }
     local faint = (theme and theme.lightTheme and theme.textFaint) or ns.TEXT_DIM or main
     p.text:SetTextColor(main[1], main[2], main[3], 1)
+    p.note:SetTextColor(main[1], main[2], main[3], 1)
     p.sub:SetTextColor(faint[1], faint[2], faint[3], 1)
     p.sub2:SetTextColor(faint[1], faint[2], faint[3], 1)
 end
@@ -280,6 +281,7 @@ function WorldPin.NewPlate(parent)
         fs._efOwnColor = true
         return fs
     end
+    p.note = Line(text)   -- an extension's line (GPS.status), under the step
     p.sub = Line(text)
     p.sub2 = Line(p.sub)
     PaintPlate(p)
@@ -340,21 +342,29 @@ end
 
 -- New lines on a plate, sized to them, an empty line taking no room; the
 -- same again does nothing.
-function WorldPin.FillPlate(p, text, sub, sub2)
-    sub, sub2 = sub or "", sub2 or ""
-    if text == p.shownText and sub == p.shownSub and sub2 == p.shownSub2 then return end
-    p.shownText, p.shownSub, p.shownSub2 = text, sub, sub2
+function WorldPin.FillPlate(p, text, sub, sub2, note)
+    sub, sub2, note = sub or "", sub2 or "", note or ""
+    if text == p.shownText and sub == p.shownSub and sub2 == p.shownSub2 and note == p.shownNote then return end
+    p.shownText, p.shownSub, p.shownSub2, p.shownNote = text, sub, sub2, note
     p.text:SetText(text)
+    p.note:SetText(note)
     p.sub:SetText(sub)
     p.sub2:SetText(sub2)
-    local w = mmax(p.text:GetStringWidth() or 0, p.sub:GetStringWidth() or 0, p.sub2:GetStringWidth() or 0)
+    local w = mmax(p.text:GetStringWidth() or 0, p.note:GetStringWidth() or 0, p.sub:GetStringWidth() or 0,
+        p.sub2:GetStringWidth() or 0)
     local inner = mmin(PLATE_MAX_W, mmax(60, w))
     p.text:SetWidth(inner)
+    p.note:SetWidth(inner)
     p.sub:SetWidth(inner)
     p.sub2:SetWidth(inner)
+    -- The distance line hangs under the extension's line while it shows.
+    p.sub:ClearAllPoints()
+    p.sub:SetPoint("TOP", note ~= "" and p.note or p.text, "BOTTOM", 0, -2)
     local h = 6 + (p.text:GetStringHeight() or 12) + 6
+    if note ~= "" then h = h + 2 + (p.note:GetStringHeight() or 10) end
     if sub ~= "" then h = h + 2 + (p.sub:GetStringHeight() or 10) end
     if sub2 ~= "" then h = h + 2 + (p.sub2:GetStringHeight() or 10) end
+    p.note:SetShown(note ~= "")
     p.sub:SetShown(sub ~= "")
     p.sub2:SetShown(sub2 ~= "")
     p:SetSize(inner + 20, h)
@@ -371,7 +381,8 @@ function WorldPin.PlateLines(route, yards)
     local active = route.active or 1
     local step = route.steps and route.steps[active]
     local text = (ns.GPS and ns.GPS.StepText) and ns.GPS.StepText(step, true) or (step and step.text or "")
-    if mode == "step" then return text, "", "" end
+    local note = ns.GPS and ns.GPS.status or ""
+    if mode == "step" then return text, "", "", note end
     local range = yards and yards > 0 and ns.GPS and ns.GPS.DistanceText(yards) or nil
     local Eta = ns.GPS and ns.GPS.EtaText
     local left = mode == "full" and Eta and (route.stepEta or (step and step.sec))
@@ -383,7 +394,7 @@ function WorldPin.PlateLines(route, yards)
     if mode == "full" and Eta and route.eta and route.eta > 0 and route.steps and #route.steps > active then
         trip = sformat(L["GPS_PLATE_TRIP_FMT"], Eta(route.eta))
     end
-    return text, line, trip
+    return text, line, trip, note
 end
 
 -- ---------------------------------------------------------------------------
@@ -825,10 +836,10 @@ local function Update(dt)
     end
     -- The arrow carries the plate while it shows.
     local d = C_Navigation and C_Navigation.GetDistance and C_Navigation.GetDistance() or 0
-    local text, line, trip
-    if not led then text, line, trip = WorldPin.PlateLines(route, d) end
+    local text, line, trip, note
+    if not led then text, line, trip, note = WorldPin.PlateLines(route, d) end
     plate:SetShown(text ~= nil)
-    if text then WorldPin.FillPlate(plate, text, line, trip) end
+    if text then WorldPin.FillPlate(plate, text, line, trip, note) end
     Resize(d, dt or THROTTLE)
 end
 

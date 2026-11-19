@@ -155,6 +155,7 @@ L["GPS_MINIMAP_LINE_TT"]                = "也在小地图上绘制路线，已�
 L["GPS_PLATE_STEP_BOTH_FMT"]            = "本步：%s，%s"
 L["GPS_SIZE_NEXT_ONLY"]                 = "仅显示下一步"
 L["GPS_STEP_CORPSE"]                    = "返回你的尸体"
+L["GPS_STEP_SPIRIT_HEALER_FMT"]         = "与%s对话以复活"
 L["GPS_TO_ETA_FMT"]                     = "前往%s：%s"
 L["GPS_ETA_WIP"]                        = "(WIP)"
 L["GPS_ETA_WIP_TT"]                     = "预计时间仍在完善中，请仅作参考。"

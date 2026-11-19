@@ -155,6 +155,7 @@ L["GPS_MINIMAP_LINE_TT"]                = "Desenha a rota também no minimapa, c
 L["GPS_PLATE_STEP_BOTH_FMT"]            = "Esta etapa: %s, %s"
 L["GPS_SIZE_NEXT_ONLY"]                 = "Somente a próxima etapa"
 L["GPS_STEP_CORPSE"]                    = "Volte ao seu cadáver"
+L["GPS_STEP_SPIRIT_HEALER_FMT"]         = "Fale com %s para ressuscitar"
 L["GPS_TO_ETA_FMT"]                     = "Até %s: %s"
 L["GPS_ETA_WIP"]                        = "(WIP)"
 L["GPS_ETA_WIP_TT"]                     = "Leve os tempos estimados com cautela: ainda estão em desenvolvimento."

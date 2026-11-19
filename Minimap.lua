@@ -286,6 +286,16 @@ local function Draw()
         if step.kind == "elevator" then break end
     end
     Flush()
+    local circuit = ns.GPS.circuit
+    if circuit and circuit.ci == ci then
+        local pts = circuit.pts
+        view.span = span * Preview.CIRCUIT_SPAN
+        Pen(Preview.CIRCUIT_COLOR, Preview.CIRCUIT_ALPHA)
+        for v = 1, #pts, 2 do To(pts[v], pts[v + 1]) end
+        To(pts[1], pts[2])
+        Flush()
+        view.span = span
+    end
     lines:Finish()
     if mark then PlaceMark(route, ci) end
 end
@@ -324,6 +334,12 @@ local function SizeMark()
     mark:SetHeight(size + 2 * CASING)
     mark.disc:SetWidth(size)
     mark.disc:SetHeight(size)
+end
+
+-- Something drawn over the route changed (a guide's circuit): drawn again.
+function Mini.Redraw()
+    version = version + 1
+    drawn.at = nil
 end
 
 -- A route change, the option flipped or a size picked: drawn only while a

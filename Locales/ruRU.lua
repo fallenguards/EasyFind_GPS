@@ -155,6 +155,7 @@ L["GPS_MINIMAP_LINE_TT"]                = "Рисует маршрут и на �
 L["GPS_PLATE_STEP_BOTH_FMT"]            = "Этот шаг: %s, %s"
 L["GPS_SIZE_NEXT_ONLY"]                 = "Только следующий шаг"
 L["GPS_STEP_CORPSE"]                    = "Вернитесь к своему трупу"
+L["GPS_STEP_SPIRIT_HEALER_FMT"]         = "Воскрешение: %s"
 L["GPS_TO_ETA_FMT"]                     = "До %s: %s"
 L["GPS_ETA_WIP"]                        = "(WIP)"
 L["GPS_ETA_WIP_TT"]                     = "Относитесь к расчетному времени с осторожностью: оно еще в работе."

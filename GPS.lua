@@ -1320,18 +1320,53 @@ local function StepsChanged(route, active)
     if GPS.AfterRoute then GPS.AfterRoute(true) end
 end
 
+-- The Spirit Healer beside a ghost (the catalog's, within 200 yards), as a
+-- corpse point with its name; nil without one.
+function GPS.SpiritHealerPoint()
+    local Npcs = ns.Npcs
+    local spot = Npcs and Npcs.SpotOfID and Npcs.SpotOfID(6491)   -- every graveyard's Spirit Healer
+    if not (spot and spot.mapID and spot.x and spot.name) then return nil end
+    local ci, wx, wy = WorldPos(spot.mapID, spot.x, spot.y)
+    local pci, px, py = PlayerWorldPos()
+    if not (ci and ci == pci and (wx - px) ^ 2 + (wy - py) ^ 2 <= 200 * 200) then return nil end
+    return { m = spot.mapID, x = spot.x, y = spot.y, ci = ci, wx = wx, wy = wy, name = spot.name }
+end
+
 local function LeadToCorpse()
     local route = Route()
     if not (route and route.steps and not route.arrived) then return end
     local i = route.active or 1
     if route.steps[i] and route.steps[i].corpse then return end
-    local p = CorpsePoint()
+    -- A guide's death skip: risen at the Spirit Healer beside the ghost.
+    local healer = GPS.deathSkip and GPS.SpiritHealerPoint()
+    local p = healer or CorpsePoint()
     if not p then return end
     local ci, px, py = PlayerWorldPos()
-    table.insert(route.steps, i, { kind = "travel", corpse = true, text = L["GPS_STEP_CORPSE"],
+    table.insert(route.steps, i, { kind = "travel", corpse = true, spirit = healer and true or nil,
+                                   text = healer and L["GPS_STEP_SPIRIT_HEALER_FMT"]:format(healer.name) or L["GPS_STEP_CORPSE"],
+                                   npc = healer and healer.name or nil,
                                    mapID = p.m, x = p.x, y = p.y, go = p, arrive = p, sec = 0,
                                    from = ci and { ci = ci, wx = px, wy = py } or nil })
     StepsChanged(route, i)
+end
+
+-- Set while a guide's step says to die and respawn (the gps deathSkip
+-- action); a ghost already led to one is led to the other.
+function GPS.SetDeathSkip(on)
+    on = on and true or nil
+    if on == GPS.deathSkip then return end
+    GPS.deathSkip = on
+    local route = Route()
+    if not (route and route.steps and UnitIsGhost and UnitIsGhost("player")) then return end
+    for i = 1, #route.steps do
+        local step = route.steps[i]
+        if step.corpse then
+            if step.spirit == on then return end
+            table.remove(route.steps, i)
+            break
+        end
+    end
+    LeadToCorpse()
 end
 
 local function Risen()
@@ -4149,6 +4184,34 @@ function GPS.SetArrowBox(on)
         db.gpsArrowTextWas, db.gpsArrowText = db.gpsArrowText, "off"
     end
     Refresh()
+end
+
+-- A line an extension puts under the step in that box (the gps setStatus
+-- action: a guide's grind progress), or nil.
+function GPS.SetStatus(text)
+    GPS.status = type(text) == "string" and text ~= "" and text or nil
+end
+
+-- A guide's farm circuit (the gps setCircuit action): its spots, { mapID,
+-- x, y } each in map fractions, drawn as a closed loop on the world map
+-- and the minimap; nil, fewer than three or across continents, none.
+function GPS.SetCircuit(list)
+    local c
+    if type(list) == "table" and #list >= 3 then
+        c = { pts = {} }
+        for _, s in ipairs(list) do
+            local ci, wx, wy = WorldPos(s.mapID, s.x, s.y)
+            if not ci or (c.ci and ci ~= c.ci) then
+                c = nil
+                break
+            end
+            c.ci = ci
+            c.pts[#c.pts + 1], c.pts[#c.pts + 2] = wx, wy
+        end
+    end
+    GPS.circuit = c
+    if ns.GPSPreview and ns.GPSPreview.Redraw then ns.GPSPreview.Redraw() end
+    if ns.GPSMinimap and ns.GPSMinimap.Redraw then ns.GPSMinimap.Redraw() end
 end
 
 -- The menu row hiding the steps already done (off unless turned on).
@@ -7104,6 +7167,9 @@ EasyFind.API.RegisterAction("gps", "arrowBox", function(on)
     if on == nil then return GPS.ArrowBoxShown() end
     GPS.SetArrowBox(on and true or false)
 end)
+EasyFind.API.RegisterAction("gps", "deathSkip", function(on) GPS.SetDeathSkip(on) end)
+EasyFind.API.RegisterAction("gps", "setStatus", function(text) GPS.SetStatus(text) end)
+EasyFind.API.RegisterAction("gps", "setCircuit", function(list) GPS.SetCircuit(list) end)
 EasyFind.API.RegisterAction("gps", "setStart", function(dest) return GPS:SetStart(dest) end)
 EasyFind.API.RegisterAction("gps", "clear", function() GPS:Clear() end)
 EasyFind.API.RegisterAction("gps", "mapClickNavigates", function() return GPS.MapClickNavigates() end)
