@@ -593,6 +593,15 @@ local function Refresh()
 end
 GPS.RefreshSurfaces = Refresh
 
+-- Whether one of the GPS's own views is on screen (its window, the map's
+-- page, the dock): the advice and the other ways show only there.
+function GPS.AnySurfaceVisible()
+    for i = 1, #surfaces do
+        if surfaces[i]:IsVisible() then return true end
+    end
+    return false
+end
+
 -- Plans run a slice a frame, so a long one never stalls the game: a bigger
 -- slice for the plan someone waits on (a route to show), a smaller one for
 -- the work after it. One at a time: a newer plan replaces one still
@@ -1868,6 +1877,14 @@ local function PlanOtherWays()
     Soon(function()
         local route = Route()
         if not (route and route.dest and not route.arrived) or GPS:IsPlanning() then return end
+        -- Shown only in the GPS's own views: with none on screen, worked
+        -- out once one is (about 40% of the game's time for seconds after
+        -- every route, a guide sending one each step, 2026-11-19).
+        if not GPS.AnySurfaceVisible() then
+            route.othersWanted = true
+            return
+        end
+        route.othersWanted = nil
         GPS:Plan(nil, function()
             local _, _, advice = GPS:BuildStops(route, route.via, route.wayAvoid)
             local ways = OtherWays(route)
@@ -2463,6 +2480,8 @@ end
 local function AdviceLines(route)
     if route and route.arrived then return { { text = L["GPS_REPORT"], report = true } } end
     if not route then return nil end
+    -- Put off while no view showed them: worked out now that one does.
+    if route.othersWanted and GPS.AnySurfaceVisible() then PlanOtherWays() end
     -- Suggest detours off: no flight path to learn, on the way or off it.
     local db = DB()
     local a = (db and db.gpsShowDetours == false) and {} or route.advice or {}
