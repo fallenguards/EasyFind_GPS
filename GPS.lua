@@ -655,6 +655,7 @@ function Planner.ReleaseLater()
         if Nav and not GPS:IsPlanning() and not (route and not route.arrived) then
             Nav.FreshScratch()
             ns.GPSRoute.ForgetWalkPaths()
+            ns.GPSRoute.ShowWalks(nil)
         end
     end)
 end
@@ -1312,6 +1313,7 @@ end
 -- where the plan set out from (BuildStops), so the drawn way begins there.
 function GPS.Replanned(route, steps, total, advice)
     route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
+    if ns.GPSRoute and ns.GPSRoute.ShowWalks then ns.GPSRoute.ShowWalks(nil) end
     local here = GPS.RouteStart(route) or GPS.PlayerStart()
     route.from = here and { ci = here.ci, wx = here.wx, wy = here.wy } or nil
     closing.step = nil
@@ -1921,7 +1923,9 @@ local function PlanOtherWays()
             local ways = OtherWays(route)
             -- What a parachute would save, beside the other ways.
             local J = ns.GPSJumps
-            return advice, ways, ways and J and J.ShopTip(route)
+            local shop = ways and J and J.ShopTip(route)
+            GPS.SettleGrid()
+            return advice, ways, shop
         end, function(advice, ways, shop)
             if Route() ~= route then return end
             route.advice, route.others, route.shop = advice or route.advice, ways, shop or nil
@@ -1945,10 +1949,27 @@ local function KeptWalks(steps, from)
     return out
 end
 
+-- The grid back under the shown route's own settings. Every plan leaves
+-- its own behind: the parachute tip's (any drop) stayed after each route,
+-- the route's ways kept under the old ones were found no more, and every
+-- walk searched from then on took any drop (2026-11-19). A field: the
+-- file is at Lua's 200 locals.
+function GPS.SettleGrid()
+    local route, Engine = Route(), ns.GPSRoute
+    if route and Engine and Engine.Settle then
+        Engine.Settle({ avoid = route.wayAvoid or GPS.Avoids() }, route.from and route.from.ci or 0)
+    end
+end
+
 -- The route's walks past the one set out on, drawn now that the route is
 -- on screen: each timed by its way, split by zone, the total following;
--- then, unless onlyDraw, the advice and the other ways.
+-- then, unless onlyDraw, the advice and the other ways. Its ways as kept
+-- now are the shown ones from here on (Route.ShowWalks).
 local function AfterRoute(onlyDraw)
+    local shownRoute = Route()
+    if shownRoute and ns.GPSRoute and ns.GPSRoute.ShowWalks then
+        ns.GPSRoute.ShowWalks(shownRoute, shownRoute.steps, shownRoute.from)
+    end
     Soon(function()
         local route = Route()
         local Engine = ns.GPSRoute
@@ -1959,6 +1980,7 @@ local function AfterRoute(onlyDraw)
         end
         GPS:Plan(nil, function()
             local Nav = ns.GPSNav
+            GPS.SettleGrid()
             if Nav then Nav.yieldCo = coroutine.running() end
             Engine.DrawWalks(route.steps, route.from)
             if Nav then Nav.yieldCo = nil end
@@ -1973,6 +1995,7 @@ local function AfterRoute(onlyDraw)
             local total = 0
             for i = 1, #steps do total = total + (steps[i].sec or 0) end
             route.steps, route.total, route.eta = steps, total, total
+            if Engine.ShowWalks then Engine.ShowWalks(route, steps, route.from) end
             route.walks = Engine.SaveWalk and KeptWalks(steps, route.from) or nil
             if route.report and Engine.StepsCode then route.report.steps = Engine.StepsCode(steps) end
             closing.eta = nil
@@ -1993,6 +2016,7 @@ function GPS.DrawWalk(ci, sx, sy, tx, ty, near)
     if jobsPending > 0 or GPS:IsPlanning() or not (Engine and Engine.WalkPath) then return false end
     GPS:Plan(nil, function()
         local Nav = ns.GPSNav
+        GPS.SettleGrid()
         if Nav then Nav.yieldCo = coroutine.running() end
         Engine.WalkPath(ci, sx, sy, tx, ty, nil, near)
         if Nav then Nav.yieldCo = nil end

@@ -526,12 +526,6 @@ local function DrawWalks(steps, start, all, zoneGoal)
     end
 end
 
--- The route's walks not drawn yet, drawn in order: the job after the
--- route shows.
-function Route.DrawWalks(steps, start)
-    DrawWalks(steps, start, true)
-end
-
 -- The travel edge from node i to j, one table per pair for the graph's
 -- life, its seconds those of this visit.
 local function TravelEdge(g, i, j, sec, wind)
@@ -1721,22 +1715,7 @@ function Route:Build(dest, opts)
     else
         known, listed, names = KnownSet(data)
     end
-    -- Walks go around what this character should not walk through
-    -- (opts.level: the character's level, the player's by default); on
-    -- unless turned off.
-    local Npcs = ns.Npcs
-    if Nav and Nav.SetDanger then
-        local on = not (opts.avoid and opts.avoid.danger == false)
-        Nav.SetDanger(on and DangerWeights(Npcs, opts.level or (UnitLevel and UnitLevel("player")),
-            opts.faction or (UnitFactionGroup and UnitFactionGroup("player"))) or nil)
-        Nav.SetRoads(opts.avoid and opts.avoid.offroad)
-    end
-    -- The highest drop walks take (Jumps.lua): the safe one when jumps are avoided.
-    if Nav and Nav.SetDropLimit then
-        local J = ns.GPSJumps
-        local jumps = not (opts.avoid and opts.avoid.jumps)
-        Nav.SetDropLimit(jumps and (opts.dropLimit or (J and J.Limit(start.ci))) or nil)
-    end
+    Route.Settle(opts, start.ci)
     if opts.via then return ViaStop(self, dest, opts, start, known, listed) end
     local ctx = {
         start = start, goal = goal, data = data,
@@ -1810,13 +1789,55 @@ local walkPaths, walkPathCount = {}, 0
 -- Keyed under the grid's settings too (Nav.epoch): a way drawn around the
 -- dangers of one route stays good once those settings come back, and the
 -- other ways' trials in between never throw the shown route's ways out.
+local function EndsKey(ci, sx, sy, tx, ty, near)
+    return ci .. ":" .. mfloor(sx) .. ":" .. mfloor(sy) .. ":" .. mfloor(tx) .. ":" .. mfloor(ty) .. (near and (":n" .. near) or "")
+end
+
 local function WalkKey(ci, sx, sy, tx, ty, near)
     local Nav = ns.GPSNav
-    return (Nav and Nav.epoch or 0) .. ":" .. ci .. ":" .. mfloor(sx) .. ":" .. mfloor(sy) .. ":" .. mfloor(tx) .. ":" .. mfloor(ty)
-        .. (near and (":n" .. near) or "")
+    return (Nav and Nav.epoch or 0) .. ":" .. EndsKey(ci, sx, sy, tx, ty, near)
 end
 
 function Route.ForgetWalkPaths() walkPaths, walkPathCount = {}, 0 end
+
+-- The ways of the route on screen, by their ends alone: found whatever
+-- settings the grid is under by then and however the kept walks have
+-- turned over. A step's way is the stretch cut from the walk planned;
+-- searched again between its ends it sets out on whichever floor lies
+-- there (out of Undercity's sewers: over the ground above them, and the
+-- map drew a straight line meanwhile, 2026-11-19).
+local shown, shownFor = {}, nil
+
+-- A step's ends as its walk is keyed, or nil for a step not walked.
+local function StepEnds(steps, i, start)
+    local s = steps[i]
+    local a, b = s.from or (i > 1 and steps[i - 1].arrive) or start, s.go or s.arrive
+    if s.kind == "travel" and not s.fly and a and b and a.wx and b.wx and a.ci == b.ci then
+        return a.ci, a.wx, a.wy, b.wx, b.wy, s.near
+    end
+end
+
+-- The kept ways of owner's steps become the shown ones; another owner's
+-- go, and none (nil) clears them.
+function Route.ShowWalks(owner, steps, start)
+    if owner ~= shownFor then shown, shownFor = {}, owner end
+    for i = 1, steps and #steps or 0 do
+        local ci, sx, sy, tx, ty, near = StepEnds(steps, i, start)
+        local path = ci and walkPaths[WalkKey(ci, sx, sy, tx, ty, near)]
+        if path then shown[EndsKey(ci, sx, sy, tx, ty, near)] = path end
+    end
+end
+
+-- The route's walks not drawn yet, drawn in order: the job after the
+-- route shows. A step whose way is shown keeps it, never searched again.
+function Route.DrawWalks(steps, start)
+    for i = 1, #steps do
+        local ci, sx, sy, tx, ty, near = StepEnds(steps, i, start)
+        if ci and not shown[EndsKey(ci, sx, sy, tx, ty, near)] then
+            DrawWalk(steps[i], steps[i].from or (i > 1 and steps[i - 1].arrive) or start)
+        end
+    end
+end
 
 local function KeepPath(key, path)
     if walkPathCount >= WALK_PATHS_KEPT then walkPaths, walkPathCount = {}, 0 end
@@ -1837,7 +1858,8 @@ end
 -- KEPT_WALK_VER: kept in another layout, a walk is drawn again.
 local KEPT_WALK_VER = 4
 function Route.SaveWalk(ci, sx, sy, tx, ty, near)
-    local path = walkPaths[WalkKey(ci, sx, sy, tx, ty, near)]
+    local path = shown[EndsKey(ci, sx, sy, tx, ty, near)]
+    if path == nil then path = walkPaths[WalkKey(ci, sx, sy, tx, ty, near)] end
     if path == nil then return nil end
     local w = { ver = KEPT_WALK_VER, ci = ci, sx = sx, sy = sy, tx = tx, ty = ty, near = near, none = not path or nil }
     if path then
@@ -1865,11 +1887,16 @@ end
 -- in: at, x, y, inside = under a roof from there on) },
 -- false when no way leads there, nil without walking data for ci. lazy:
 -- nil too when it is not drawn yet; the planner draws, everything else
--- asks lazily and is told when it is there. near: it ends within that many
--- yards of (tx, ty), as its step was priced (step.near).
+-- asks lazily and is told when it is there (the shown route's own ways
+-- first, Route.ShowWalks). near: it ends within that many yards of
+-- (tx, ty), as its step was priced (step.near).
 function Route.WalkPath(ci, sx, sy, tx, ty, lazy, near)
     local Nav = ns.GPSNav
     if not (Nav and Nav.Ensure(ci)) then return nil end
+    if lazy then
+        local way = shown[EndsKey(ci, sx, sy, tx, ty, near)]
+        if way then return way end
+    end
     local key = WalkKey(ci, sx, sy, tx, ty, near)
     local path = walkPaths[key]
     if path == nil and not lazy then
@@ -1919,6 +1946,14 @@ local function UnderRoof(doors, at)
         inside = doors[k].inside
     end
     return inside
+end
+
+-- A walk as kept under the grid's settings now, nil when not drawn: what a
+-- split reads, the plan's own walks and never the shown route's.
+local function KeptWalk(ci, sx, sy, tx, ty, near)
+    local Nav = ns.GPSNav
+    if not (Nav and Nav.Ensure(ci)) then return nil end
+    return walkPaths[WalkKey(ci, sx, sy, tx, ty, near)]
 end
 
 -- The stretch of a drawn walk from `from` to `stop` yards along it, between
@@ -1983,7 +2018,7 @@ local function WalkPieces(step, from, data, env, first)
     local ci, fx, fy = PointWorld(from)
     local ci2, tx, ty = PointWorld(target)
     if not (ci and ci == ci2) then return nil end
-    local path = Route.WalkPath(ci, fx, fy, tx, ty, true, step.near)
+    local path = KeptWalk(ci, fx, fy, tx, ty, step.near)
     if not path then return nil end
     step.jumps = path.jumps
     -- Cut by zone already: it stays as cut, wherever the player stands by
@@ -2213,7 +2248,7 @@ local function SewerPieces(step, from, env)
     local ci, fx, fy = PointWorld(from)
     local ci2, tx, ty = PointWorld(target)
     if not (ci and ci == ci2) then return nil end
-    local path = Route.WalkPath(ci, fx, fy, tx, ty, true, step.near)
+    local path = KeptWalk(ci, fx, fy, tx, ty, step.near)
     local into
     for _, l in ipairs(path and path.through or {}) do
         if l.en == SEWERS then
@@ -2251,6 +2286,29 @@ local function SewerPieces(step, from, env)
     KeepStretch(ci, path, 0, into.at, fx, fy, into.x, into.y, nil)
     KeepStretch(ci, path, into.at, path.len, into.x, into.y, tx, ty, step.near)
     return { first, rest }
+end
+
+-- The grid's settings for a trip from continent ci, which every plan sets
+-- for its own searches and leaves behind (a trial as with a parachute: any
+-- drop): the GPS puts the shown route's back with this before a walk is
+-- searched for it. Walks go around what this character should not walk
+-- through (opts.level and opts.faction: the player's by default; on unless
+-- opts.avoid.danger is false), keep to roads or not, and take drops up to
+-- the character's own height (Jumps.lua), the safe one with jumps avoided.
+function Route.Settle(opts, ci)
+    local Nav = ns.GPSNav
+    opts = opts or {}
+    if Nav and Nav.SetDanger then
+        local on = not (opts.avoid and opts.avoid.danger == false)
+        Nav.SetDanger(on and DangerWeights(ns.Npcs, opts.level or (UnitLevel and UnitLevel("player")),
+            opts.faction or (UnitFactionGroup and UnitFactionGroup("player"))) or nil)
+        Nav.SetRoads(opts.avoid and opts.avoid.offroad)
+    end
+    if Nav and Nav.SetDropLimit then
+        local J = ns.GPSJumps
+        local jumps = not (opts.avoid and opts.avoid.jumps)
+        Nav.SetDropLimit(jumps and (opts.dropLimit or (J and J.Limit(ci))) or nil)
+    end
 end
 
 -- Each long walk as a step per zone crossed. env: zoneAt(ci, wx, wy) -> map, name;

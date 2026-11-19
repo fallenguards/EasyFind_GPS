@@ -66,5 +66,52 @@ function tests.theWalkInByTheSewers_goesInAtThePipe()
     H.assertTrue(doors[#doors].inside == true, "and it ends under it")
 end
 
+-- The step out of the sewers keeps the tunnel for its way once the grid's
+-- settings move (the parachute tip's plan, any drop): shown, it is found
+-- by its ends; without that it was lost, the map drew a straight line from
+-- the sewers' mouth to the pipe, and a search between those two spots set
+-- out over the ground above (2026-11-19).
+function tests.theStepOutOfTheSewers_keepsItsTunnelUnderOtherSettings()
+    local env = H.newEnv()
+    local ns = H.newNs(env)
+    env.EasyFind._ns = ns
+    ns.Caps = { forever = true }
+    env.C_EncodingUtil = { DecodeBase64 = Inflate.DecodeBase64, DecompressString = function(s) return Inflate.Raw(s) end }
+    env.GetSubZoneText = function() return "" end
+    env.GetZoneText = function() return "" end
+    env.GetLocale = function() return "enUS" end
+    env.GetTime = function() return 0 end
+    env.C_Map = { GetMapInfo = function() return { name = "" } end, GetBestMapForUnit = function() return 1458 end }
+    for _, f in ipairs({ "Walk_EasternKingdoms.lua", "Floors_Forever.lua", "Floors.lua", "Nav.lua", "Route.lua" }) do
+        H.loadModule(f, env, ns)
+    end
+    ns.GPS = { PlayerWorldPos = function() return nil end }
+    local Route, Nav = ns.GPSRoute, ns.GPSNav
+    local start = { ci = 0, wx = QUARTER[1], wy = QUARTER[2] }
+    local target = { ci = 0, wx = WEST[1], wy = WEST[2], m = 1420, x = 0.5, y = 0.5 }
+    H.assertNotNil(Route.WalkPath(0, start.wx, start.wy, target.wx, target.wy), "the walk out")
+    -- The whole walk lies in the city's box; the land past the pipe is one zone.
+    local steps = Route.SplitWalks({ { kind = "travel", text = "Travel", mapID = 1420, go = target, arrive = target, sec = 100 } },
+        start, {}, { zoneAt = function() return 1420, "Tirisfal Glades" end, isCity = function(m) return m == 1458 end,
+                     mapPos = function() return 0.5, 0.5 end, startCity = { map = 1458, name = "Undercity", roofed = true } })
+    local out
+    for i = 2, #steps do
+        if steps[i].door then out = i end
+    end
+    H.assertNotNil(out, "a step that ends at the pipe")
+    local a, b = steps[out - 1].arrive, steps[out].arrive
+    local straight = math.sqrt((b.wx - a.wx) ^ 2 + (b.wy - a.wy) ^ 2)
+    local tunnel = Route.WalkPath(0, a.wx, a.wy, b.wx, b.wy, true)
+    H.assertTrue(tunnel ~= nil and tunnel.len > straight * 1.3, "its way winds round the tunnel")
+    local route = {}
+    Route.ShowWalks(route, steps, start)
+    Nav.SetDropLimit(math.huge)
+    H.assertTrue(Route.WalkPath(0, a.wx, a.wy, b.wx, b.wy, true) == tunnel, "shown: still the tunnel, the settings moved")
+    Route.ShowWalks(nil)
+    H.assertNil(Route.WalkPath(0, a.wx, a.wy, b.wx, b.wy, true), "not shown: lost, and drawn straight")
+    local again = Route.WalkPath(0, a.wx, a.wy, b.wx, b.wy)
+    H.assertTrue(again and again.len < tunnel.len - 30, "searched again between its ends it is another way: " .. tostring(again and again.len))
+end
+
 local pass, fail, failures = H.runSuite("GPSSewers", tests)
 return { pass = pass, fail = fail, failures = failures }

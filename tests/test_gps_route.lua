@@ -1248,6 +1248,87 @@ function tests.walk_outByTheSewers_onlyTheExitEndsAtTheDoor()
     H.assertEq(out[2].arrive.wy, 300)
 end
 
+-- Forever, 2026-11-19: with the map open, the step out of Undercity's
+-- sewers was a straight line from their mouth to the pipe. Walks are kept
+-- under the grid's settings, and the parachute tip, planned last after
+-- every route with any drop allowed, left its own behind: none of the
+-- route's ways was found again. The shown route's ways are found by their
+-- ends alone, under any settings and after the kept walks turn over.
+function tests.shownWays_areFoundWhateverTheGridsSettings()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    ns.GPSNav.epoch = 7
+    local steps, start = walk(Route)
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt })
+    local a, b = out[1].arrive, out[2].arrive
+    local planned = Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true)
+    H.assertNotNil(planned, "Bravo's stretch, kept by the split")
+    ns.GPSNav.epoch = 8
+    H.assertNil(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true), "the settings moved, nothing shown: lost (the straight line)")
+    ns.GPSNav.epoch = 7
+    local route = {}
+    Route.ShowWalks(route, out, start)
+    ns.GPSNav.epoch = 8
+    H.assertTrue(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true) == planned, "shown: the stretch planned, under other settings")
+    H.assertTrue(Route.WalkPath(1, start.wx, start.wy, a.wx, a.wy, true) ~= nil, "every step of it")
+    Route.ForgetWalkPaths()
+    H.assertTrue(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true) == planned, "and with the kept walks gone")
+    -- Kept with the route for the next session, though only shown by now.
+    local saved = Route.SaveWalk(1, a.wx, a.wy, b.wx, b.wy)
+    H.assertTrue(saved ~= nil and saved.pts == planned.pts, "saved from the shown ways")
+    -- The job after the route shows searches nothing for a shown step.
+    local searches = 0
+    local path = ns.GPSNav.Path
+    ns.GPSNav.Path = function(...) searches = searches + 1 return path(...) end
+    Route.DrawWalks(out, start)
+    H.assertEq(searches, 0, "no step searched again between its ends")
+    -- Another route's ways replace them; none clears them.
+    Route.ShowWalks({}, {}, start)
+    H.assertNil(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true), "another route on screen: the old one's ways are gone")
+    Route.ShowWalks(route, out, start)
+    H.assertNil(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true), "shown from the kept walks only: none left to show")
+    Route.ShowWalks(nil)
+    Route.DrawWalks(out, start)
+    H.assertTrue(searches > 0, "nothing shown: the job draws the walks")
+end
+
+-- A plan's split reads the walks that plan drew, never the shown route's:
+-- a new plan between the same ends is not cut along the old route's way.
+function tests.shownWays_areNotWhatASplitReads()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local steps, start = walk(Route)
+    Route.ShowWalks({}, steps, start)
+    Route.ForgetWalkPaths()
+    H.assertNotNil(Route.WalkPath(1, start.wx, start.wy, steps[1].go.wx, steps[1].go.wy, true), "the old route's way, shown")
+    local again = walk()
+    local out = Route.SplitWalks(again, start, data(), { zoneAt = zoneAt })
+    H.assertTrue(#out == 1 and out[1] == again[1], "the new plan's walk is not drawn yet: whole")
+end
+
+-- The grid's settings as a plan sets them, to put the shown route's back.
+function tests.settle_setsTheGridForATrip()
+    local _, ns, Route = fresh()
+    local set = {}
+    ns.GPSNav = {
+        SetDanger = function(v) set.danger = v == nil and "none" or v end,
+        SetRoads = function(v) set.roads = v end,
+        SetDropLimit = function(v) set.drop = v == nil and "safe" or v end,
+    }
+    ns.GPSJumps = { Limit = function(ci) return ci == 1 and 26 or nil end }
+    Route.Settle({ avoid = { danger = false, offroad = true, jumps = true } }, 1)
+    H.assertEq(set.danger, "none")
+    H.assertEq(set.roads, true)
+    H.assertEq(set.drop, "safe", "jumps avoided: the safe height")
+    Route.Settle({}, 1)
+    H.assertEq(set.drop, 26, "the character's own height")
+    H.assertTrue(not set.roads)
+    Route.Settle({ dropLimit = math.huge }, 1)
+    H.assertEq(set.drop, math.huge, "a trial as with a parachute")
+    Route.Settle(nil, 1)
+    H.assertEq(set.drop, 26, "and back")
+end
+
 -- A route keeps its drawn walks: put back in a later session they are
 -- found without a search (a route in progress at login drew every walk
 -- again, about a second of the GPS at 6 to 10 ms a frame).
