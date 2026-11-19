@@ -307,5 +307,28 @@ function tests.aRoom_thePlayersOwnSpotTakesNoSpawnsFloor()
     H.assertNotNil(ns.GPSFloors.Want(0, RUPERT[1], RUPERT[2], true), "as a spot: the spawn's")
 end
 
+-- A spot a planned walk was cut at keeps the floor the walk stood on
+-- there (Floors.Walked): the mouth of Undercity's sewers lies under open
+-- ground, and a spot with nothing to say its floor takes the open one.
+local MOUTH = { 1662.2, 495.2 }                -- where the walk out enters the Sewers, Undercity 39.4, 33.7
+
+function tests.aSpotAWalkWasCutAt_keepsTheWalksFloor()
+    local ns = Load(CLIENTS[3], {})
+    local F = ns.GPSFloors
+    local at, all = HeightAt(ns, MOUTH[1], MOUTH[2])
+    H.assertTrue(#all == 2, "two floors stack there: " .. #all)
+    local low = math.min(all[1], all[2])
+    H.assertTrue(at ~= low, "nothing says which: the open ground over the tunnel")
+    H.assertNil(F.Want(0, MOUTH[1], MOUTH[2]))
+    F.Walked(0, MOUTH[1], MOUTH[2], low)
+    local w = F.Want(0, MOUTH[1], MOUTH[2])
+    H.assertTrue(w ~= nil and w.z == low and w.city ~= nil, "the walk's own floor, by its height")
+    H.assertEq((HeightAt(ns, MOUTH[1], MOUTH[2])), low, "and the grid puts the spot on it")
+    H.assertNotNil(F.Want(0, MOUTH[1], MOUTH[2], true), "for an arrival too")
+    H.assertNil(F.Want(0, MOUTH[1] + 40, MOUTH[2]), "that spot alone")
+    F.ForgetWalked()
+    H.assertNil(F.Want(0, MOUTH[1], MOUTH[2]), "another route on screen: forgotten")
+end
+
 local pass, fail, failures = H.runSuite("GPS floors", tests)
 return { pass = pass, fail = fail, failures = failures }

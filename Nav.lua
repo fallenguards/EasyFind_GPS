@@ -1645,9 +1645,18 @@ local function Sees(w, t, g, t2, g2)
     return t == t2 and g == g2
 end
 
+-- The height of floor g of tile t where its cell's floors stack (Floors'
+-- data), nil where it is the only one.
+local function FloorHeight(w, t, g)
+    if not (Floors and Floors.Height) then return nil end
+    local cc = U16(t.fc, g)
+    return Floors.Height(w.ci, t.key, cc, g - U16(t.cf, cc + 1))
+end
+
 -- A door on the straight walk from floor g of tile t to floor g2 of tile
 -- t2: the first floor along it under a roof (inside) or in the open (not),
--- as Sees steps it; the far end where the line cannot be stepped.
+-- as Sees steps it, with its height where floors stack; the far end where
+-- the line cannot be stepped.
 local function DoorOn(w, t, g, t2, g2, inside)
     local cell = w.cell
     local x0, y0 = FloorXY(w, t, g)
@@ -1662,9 +1671,12 @@ local function DoorOn(w, t, g, t2, g2, inside)
         if stepRow then d, ir = alongRow, ir + 1 else d, ic = alongCol, ic + 1 end
         t, g = Step(w, t, g, d)
         if not g then break end
-        if (sbyte(t.fl, g) % 4 >= 2) == inside then return FloorXY(w, t, g) end
+        if (sbyte(t.fl, g) % 4 >= 2) == inside then
+            local x, y = FloorXY(w, t, g)
+            return x, y, FloorHeight(w, t, g)
+        end
     end
-    return x1, y1
+    return x1, y1, FloorHeight(w, t2, g2)
 end
 
 -- Whether one walks straight from (ax, ay) to (bx, by): each cell along
@@ -1761,9 +1773,10 @@ end
 -- same the walk was priced by) and the drops above the safe height it
 -- takes ({ v = the vertex it lands on, h = yards }), or nil. Drawn the way
 -- it is walked: opts.reverse is for pricing only. Last, after the named
--- floors, its doors: from (whether it sets out under a roof) and each
--- place it comes out into the open or goes in ({ v = the vertex its
--- stretch ends at, x, y, inside = under a roof from there on }).
+-- floors ({ v, en, name, z }), its doors: from (whether it sets out under
+-- a roof) and each place it comes out into the open or goes in ({ v = the
+-- vertex its stretch ends at, x, y, z, inside = under a roof from there
+-- on }). z: the height of the walk's own floor there where floors stack.
 function Nav.Path(ci, ax, ay, bx, by, opts)
     local w = World(ci)
     if not w or (opts and opts.reverse) then return nil end
@@ -1819,7 +1832,7 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
             en, name = Floors.LevelName(w.ci, key, cc, fg[v] - U16(tv.cf, cc + 1), x, y)
         end
         if en ~= was then
-            if en then levels[#levels + 1] = { v = v, en = en, name = name } end
+            if en then levels[#levels + 1] = { v = v, en = en, name = name, z = FloorHeight(w, tv, fg[v]) } end
             was = en
         end
     end
@@ -1891,8 +1904,8 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
             if not doors then
                 doors = { from = inside }
             elseif inside ~= (sbyte(vt[last].fl, vg[last]) % 4 >= 2) then
-                local x, y = DoorOn(w, vt[last], vg[last], tv, gv, inside)
-                doors[#doors + 1] = { v = v, x = x, y = y, inside = inside }
+                local x, y, z = DoorOn(w, vt[last], vg[last], tv, gv, inside)
+                doors[#doors + 1] = { v = v, x = x, y = y, z = z, inside = inside }
             end
             last = v
         end

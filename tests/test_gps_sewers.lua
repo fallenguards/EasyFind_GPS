@@ -113,5 +113,60 @@ function tests.theStepOutOfTheSewers_keepsItsTunnelUnderOtherSettings()
     H.assertTrue(again and again.len < tunnel.len - 30, "searched again between its ends it is another way: " .. tostring(again and again.len))
 end
 
+-- "Walk into the Sewers" ends at their mouth, a spot under open ground.
+-- Searched again from where the player stood by then (he moves while a
+-- route is planned), the walk to it ended on the ground above: on through
+-- the whole tunnel, out by the pipe and back over the top, 774 yd for 104,
+-- drawn as a line from the pipe back to the pin (2026-11-19). The cut
+-- spot keeps the floor the planned walk entered on, and the walk shown
+-- registers it for every search to or from it.
+function tests.theWalkToTheSewersMouth_searchedAgainEndsInTheTunnel()
+    local env = H.newEnv()
+    local ns = H.newNs(env)
+    env.EasyFind._ns = ns
+    ns.Caps = { forever = true }
+    env.C_EncodingUtil = { DecodeBase64 = Inflate.DecodeBase64, DecompressString = function(s) return Inflate.Raw(s) end }
+    env.GetSubZoneText = function() return "" end
+    env.GetZoneText = function() return "" end
+    env.GetLocale = function() return "enUS" end
+    env.GetTime = function() return 0 end
+    env.C_Map = { GetMapInfo = function() return { name = "" } end, GetBestMapForUnit = function() return 1458 end }
+    for _, f in ipairs({ "Walk_EasternKingdoms.lua", "Floors_Forever.lua", "Floors.lua", "Nav.lua", "Route.lua" }) do
+        H.loadModule(f, env, ns)
+    end
+    ns.GPS = { PlayerWorldPos = function() return nil end }
+    local Route = ns.GPSRoute
+    local start = { ci = 0, wx = QUARTER[1], wy = QUARTER[2] }
+    local target = { ci = 0, wx = WEST[1], wy = WEST[2], m = 1420, x = 0.5, y = 0.5 }
+    local planned = Route.WalkPath(0, start.wx, start.wy, target.wx, target.wy)
+    local into
+    for _, l in ipairs(planned.through or {}) do
+        if l.en == "Sewers" then into = l end
+    end
+    H.assertTrue(into ~= nil and into.z ~= nil and into.z < 0, "the walk enters the Sewers on a floor under the ground: " .. tostring(into and into.z))
+    local steps = Route.SplitWalks({ { kind = "travel", text = "Travel", mapID = 1420, go = target, arrive = target, sec = 100 } },
+        start, {}, { zoneAt = function() return 1420, "Tirisfal Glades" end, isCity = function(m) return m == 1458 end,
+                     mapPos = function() return 0.5, 0.5 end, startCity = { map = 1458, name = "Undercity", roofed = true } })
+    local mouth = steps[1].arrive
+    H.assertEq(mouth.z, into.z, "the step's end keeps that floor")
+    -- 20 yd on from where the plan set out.
+    local fx, fy = start.wx + 14, start.wy + 14
+    local straight = math.sqrt((mouth.wx - fx) ^ 2 + (mouth.wy - fy) ^ 2)
+    local lost = Route.WalkPath(0, fx, fy, mouth.wx, mouth.wy)
+    H.assertTrue(lost and lost.len > 4 * straight, "nothing shown: it ends on the ground above, far round: " .. tostring(lost and lost.len))
+    Route.ShowWalks({}, steps, start)
+    Route.ForgetWalkPaths()
+    local way = Route.WalkPath(0, fx, fy, mouth.wx, mouth.wy)
+    H.assertTrue(way and way.len < 2.5 * straight, string.format("shown: it ends in the tunnel, %.0f yd for %.0f straight", way and way.len or -1, straight))
+    -- The step on from the mouth, searched again, is the tunnel too.
+    local door = steps[2].arrive
+    local tunnel = Route.WalkPath(0, mouth.wx, mouth.wy, door.wx, door.wy, true)
+    Route.ShowWalks(nil)
+    ns.GPSFloors.Walked(0, mouth.wx, mouth.wy, mouth.z)
+    Route.ForgetWalkPaths()
+    local again = Route.WalkPath(0, mouth.wx, mouth.wy, door.wx, door.wy)
+    H.assertTrue(again and math.abs(again.len - tunnel.len) < 15, "from the mouth on: the tunnel again, " .. tostring(again and again.len))
+end
+
 local pass, fail, failures = H.runSuite("GPSSewers", tests)
 return { pass = pass, fail = fail, failures = failures }

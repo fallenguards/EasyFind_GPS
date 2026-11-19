@@ -207,6 +207,21 @@ local function SpotKey(ci, x, y)
     return (ci * 400000 + mfloor(x * 10 + 0.5) + 200000) * 400000 + mfloor(y * 10 + 0.5) + 200000
 end
 
+-- The floor a planned walk stood on at a spot it was cut at (the mouth
+-- of Undercity's sewers, where one step ends and the next begins), by its
+-- height: a walk searched to or from that spot again takes the same
+-- floor. Without it the spot was the open ground over the sewers, and the
+-- walk to it ran out through the whole tunnel and back over the top, 783
+-- yd for 110 (2026-11-19).
+local walked = {}
+function Floors.Walked(ci, x, y, z)
+    walked[SpotKey(ci, x, y)] = z
+end
+
+function Floors.ForgetWalked()
+    walked = {}
+end
+
 -- (x, y) is where a journey ends.
 function Floors.Goal(ci, x, y)
     local k = SpotKey(ci, x, y)
@@ -217,8 +232,9 @@ end
 
 -- What picks (x, y)'s floor in a stacked city: the player's sub-zone at
 -- the player's spot (unless spawnOnly), what it was there once he left,
--- else the height of the spawn beside it; nil outside. The answer is
--- reused: read it before the next call.
+-- else the height a planned walk stood at there (Floors.Walked), else
+-- that of the spawn beside it; nil outside. The answer is reused: read
+-- it before the next call.
 function Floors.Want(ci, x, y, spawnOnly)
     local data = Data(ci)
     local city = data and City(data, x, y)
@@ -227,7 +243,7 @@ function Floors.Want(ci, x, y, spawnOnly)
     if not city then
         -- A room names no floor: the player's own is not known.
         if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS then return nil end
-        local z = data and RoomSpawn(ci, x, y)
+        local z = data and (RoomSpawn(ci, x, y) or walked[SpotKey(ci, x, y)])
         if z then
             want.city, want.sub, want.z, want.inside = nil, nil, z, nil
             return want
@@ -254,7 +270,7 @@ function Floors.Want(ci, x, y, spawnOnly)
         local t = told[SpotKey(ci, x, y)]
         if t then return t end
     end
-    want.city, want.sub, want.z, want.inside = city, nil, NearestAnchor(data, x, y), nil
+    want.city, want.sub, want.z, want.inside = city, nil, walked[SpotKey(ci, x, y)] or NearestAnchor(data, x, y), nil
     if want.z then return want end
     return nil
 end

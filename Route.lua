@@ -1820,11 +1820,19 @@ end
 -- The kept ways of owner's steps become the shown ones; another owner's
 -- go, and none (nil) clears them.
 function Route.ShowWalks(owner, steps, start)
-    if owner ~= shownFor then shown, shownFor = {}, owner end
+    local Floors = ns.GPSFloors
+    if owner ~= shownFor then
+        shown, shownFor = {}, owner
+        if Floors and Floors.ForgetWalked then Floors.ForgetWalked() end
+    end
     for i = 1, steps and #steps or 0 do
         local ci, sx, sy, tx, ty, near = StepEnds(steps, i, start)
         local path = ci and walkPaths[WalkKey(ci, sx, sy, tx, ty, near)]
         if path then shown[EndsKey(ci, sx, sy, tx, ty, near)] = path end
+        -- A spot the walk was cut at keeps its floor for any walk searched
+        -- to or from it (the follower's, from wherever the player stands).
+        local p = steps[i].go or steps[i].arrive
+        if p and p.z and p.wx and Floors and Floors.Walked then Floors.Walked(p.ci, p.wx, p.wy, p.z) end
     end
 end
 
@@ -1913,7 +1921,7 @@ function Route.WalkPath(ci, sx, sy, tx, ty, lazy, near)
                 local v, l = levels[k].v, levels[k]
                 if v then
                     through = through or {}
-                    through[#through + 1] = { at = cum[v], x = pts[2 * v - 1], y = pts[2 * v], en = l.en, name = l.name }
+                    through[#through + 1] = { at = cum[v], x = pts[2 * v - 1], y = pts[2 * v], en = l.en, name = l.name, z = l.z }
                 end
             end
             local roof
@@ -1923,7 +1931,7 @@ function Route.WalkPath(ci, sx, sy, tx, ty, lazy, near)
                     local d = doors[k]
                     local v = d.v
                     local far = msqrt((d.x - pts[2 * v - 3]) ^ 2 + (d.y - pts[2 * v - 2]) ^ 2)
-                    roof[k] = { at = cum[v - 1] + math.min(cum[v] - cum[v - 1], far), x = d.x, y = d.y, inside = d.inside }
+                    roof[k] = { at = cum[v - 1] + math.min(cum[v] - cum[v - 1], far), x = d.x, y = d.y, z = d.z, inside = d.inside }
                 end
             end
             path = { pts = pts, cum = cum, len = cum[#cum], time = time or cum[#cum], jumps = list, through = through,
@@ -1982,7 +1990,7 @@ local function KeepStretch(ci, path, from, stop, sx, sy, ex, ey, near)
     for _, l in ipairs(path.through or {}) do
         if l.at >= from and l.at < stop then
             through = through or {}
-            through[#through + 1] = { at = l.at - from, x = l.x, y = l.y, en = l.en, name = l.name }
+            through[#through + 1] = { at = l.at - from, x = l.x, y = l.y, en = l.en, name = l.name, z = l.z }
         end
     end
     local doors
@@ -1990,7 +1998,7 @@ local function KeepStretch(ci, path, from, stop, sx, sy, ex, ey, near)
         doors = { from = UnderRoof(path.doors, from) }
         for _, d in ipairs(path.doors) do
             if d.at > from and d.at < stop then
-                doors[#doors + 1] = { at = d.at - from, x = d.x, y = d.y, inside = d.inside }
+                doors[#doors + 1] = { at = d.at - from, x = d.x, y = d.y, z = d.z, inside = d.inside }
             end
         end
     end
@@ -2076,7 +2084,8 @@ local function WalkPieces(step, from, data, env, first)
         end
         local run = runs[#runs]
         if map and (not run or run.map ~= map) then
-            runs[#runs + 1] = { map = map, name = name or "?", at = at, x = x, y = y, door = atDoor }
+            runs[#runs + 1] = { map = map, name = name or "?", at = at, x = x, y = y, door = atDoor and true or nil,
+                                z = atDoor and atDoor.z or nil }
         end
     end
     -- Read at each bend, every WALK_SAMPLE yards between two, and with a
@@ -2085,7 +2094,7 @@ local function WalkPieces(step, from, data, env, first)
     local function Doors(upTo)
         while doors[door] and doors[door].at <= upTo do
             local d = doors[door]
-            atDoor = true
+            atDoor = d
             Read(d.x, d.y, d.at)
             atDoor, door = nil, door + 1
         end
@@ -2149,7 +2158,7 @@ local function WalkPieces(step, from, data, env, first)
             elseif runs[r] and runs[r].map == runs[r - 1].map then
                 table.remove(runs, r)
             elseif pastDoor and runs[r] then
-                runs[r].at, runs[r].x, runs[r].y, runs[r].door = gone.at, gone.x, gone.y, gone.door
+                runs[r].at, runs[r].x, runs[r].y, runs[r].door, runs[r].z = gone.at, gone.x, gone.y, gone.door, gone.z
             end
         else
             r = r + 1
@@ -2216,7 +2225,8 @@ local function WalkPieces(step, from, data, env, first)
             if env.mapPos then mx, my = env.mapPos(ci, border.x, border.y, run.map) end
             -- A border the zone's own map cannot place: the walk stays whole.
             if env.mapPos and not mx then return nil end
-            local spot = { ci = ci, wx = border.x, wy = border.y, m = run.map, x = mx, y = my }
+            -- z: the walk's own floor there where floors stack (a door's).
+            local spot = { ci = ci, wx = border.x, wy = border.y, m = run.map, x = mx, y = my, z = border.z }
             piece.mapID, piece.x, piece.y, piece.go, piece.arrive = run.map, mx, my, spot, spot
             piece.enter = border.map
             -- Ends at a roofed city's door: the way past it is on other ground.
@@ -2269,7 +2279,9 @@ local function SewerPieces(step, from, env)
     if not mx then return { rest } end
     local first = {}
     for key, value in pairs(step) do first[key] = value end
-    local spot = { ci = ci, wx = into.x, wy = into.y, m = map, x = mx, y = my }
+    -- z: the floor the walk enters them on, taken again by any walk
+    -- searched to or from the mouth (Floors.Walked).
+    local spot = { ci = ci, wx = into.x, wy = into.y, m = map, x = mx, y = my, z = into.z }
     first.mapID, first.x, first.y, first.go, first.arrive = map, mx, my, spot, spot
     first.text, first.enterSub, first.near, first.floor = sformat(L["GPS_STEP_INTO_FMT"], into.name), into.name, nil, nil
     first.door = nil   -- the rest's end, not the mouth

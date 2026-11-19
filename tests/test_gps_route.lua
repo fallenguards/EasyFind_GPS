@@ -1292,6 +1292,39 @@ function tests.shownWays_areFoundWhateverTheGridsSettings()
     H.assertTrue(searches > 0, "nothing shown: the job draws the walks")
 end
 
+-- A spot a walk is cut at keeps the height of the walk's floor there (the
+-- named floor's or the door's z), and the shown route tells the floors
+-- (Floors.Walked) so a walk searched to or from the spot takes it again;
+-- another route on screen forgets the last one's.
+function tests.shownWays_tellTheFloorsOfTheirCutSpots()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local path = ns.GPSNav.Path
+    ns.GPSNav.Path = function(...)
+        local pts, len = path(...)
+        return pts, len, nil, nil, { { v = 2, en = "Sewers", name = "Sewers", z = -11 } },
+            { from = true, { v = 3, x = 0, y = 300, z = 62, inside = false } }
+    end
+    ns.L.GPS_STEP_INTO_FMT, ns.L.GPS_STEP_VIA_FMT, ns.L.GPS_STEP_EXIT_FMT = "Walk into the %s", "%s, through the %s", "Exit %s"
+    local told, forgot = {}, 0
+    ns.GPSFloors = {
+        Walked = function(ci, x, y, z) told[#told + 1] = { ci, x, y, z } end,
+        ForgetWalked = function() forgot = forgot + 1 end,
+    }
+    local steps, start = walk(Route)
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = function(_, x, y) return (x + 100) / 2000, (y + 100) / 2000 end,
+        isCity = function(m) return m == 99 end, startCity = { map = 99, name = "City", roofed = true } })
+    H.assertEq(out[1].arrive.z, -11, "the sewers' mouth: the floor the walk enters them on")
+    H.assertEq(out[2].arrive.z, 62, "the door: the floor outside it")
+    local route = {}
+    Route.ShowWalks(route, out, start)
+    H.assertEq(forgot, 1, "a route newly on screen: the last one's spots forgotten")
+    H.assertEq(#told, 2, "its two cut spots told")
+    H.assertTrue(told[1][2] == out[1].arrive.wx and told[1][3] == out[1].arrive.wy and told[1][4] == -11, "the mouth at its height")
+    Route.ShowWalks(route, out, start)
+    H.assertEq(forgot, 1, "the same route again: nothing forgotten")
+end
+
 -- A plan's split reads the walks that plan drew, never the shown route's:
 -- a new plan between the same ends is not cut along the old route's way.
 function tests.shownWays_areNotWhatASplitReads()
