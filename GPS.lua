@@ -1579,6 +1579,19 @@ end
 
 GPS.Destination = Destination   -- the trip editor's stops
 
+-- A caller's ways to leave out (opts.avoid, a guide keeping the
+-- Hearthstone for its own steps) on top of the player's; nil without.
+function GPS.CallerAvoid(opts)
+    local extra = opts and opts.avoid
+    if type(extra) ~= "table" then return nil end
+    local avoid = {}
+    for k, v in pairs(GPS.Avoids() or {}) do avoid[k] = v end
+    for k, v in pairs(extra) do
+        if v then avoid[k] = true end
+    end
+    return avoid
+end
+
 function GPS:NavigateTo(data, opts)
     if data then data = GPS.LeadsTo(data) end
     if not self:CanNavigate(data) then return false end
@@ -1602,9 +1615,10 @@ function GPS:NavigateTo(data, opts)
                                           category = data.category, displayID = data.displayID, isLocal = false })
         end
     end
-    self:Plan(dest.name, function() return self:BuildRoute(dest, nil, nil, true, "first") end,
+    local avoid = GPS.CallerAvoid(opts)
+    self:Plan(dest.name, function() return self:BuildRoute(dest, nil, avoid, true, "first") end,
         function(steps, total, advice)
-            GPS.Navigated(dest, steps, total, advice)
+            GPS.Navigated(dest, steps, total, advice, nil, avoid)
         end)
     return true
 end
@@ -1626,14 +1640,16 @@ function GPS:NavigateTrip(list, opts)
         self:Open()
     end
     local dest = stops[#stops]
-    self:Plan(dest.name, function() return Trip.Build(stops, nil, nil, true, "first") end,
+    local avoid = GPS.CallerAvoid(opts)
+    self:Plan(dest.name, function() return Trip.Build(stops, nil, avoid, true, "first") end,
         function(steps, total, advice)
-            if steps then GPS.Navigated(dest, steps, total, advice, stops) end
+            if steps then GPS.Navigated(dest, steps, total, advice, stops, avoid) end
         end)
     return true
 end
 
-function GPS.Navigated(dest, steps, total, advice, stops)
+-- avoid: the caller's ways left out, kept for the route's replans.
+function GPS.Navigated(dest, steps, total, advice, stops, avoid)
     local db = DB()
     if not db then return end
     -- Planned from elsewhere: the route waits there until the player comes.
@@ -1649,7 +1665,7 @@ function GPS.Navigated(dest, steps, total, advice, stops)
     local same = old and old.dest and old.dest.name == dest.name and old.dest.mapID == dest.mapID
     CharDB().route = { dest = dest, steps = steps, active = 1, t = time(), eta = total, total = total, advice = advice,
                        from = from, origin = origin, stops = stops or { dest }, skipLearn = same and old.skipLearn or nil,
-                       dangerSeen = same and old.dangerSeen or nil,
+                       dangerSeen = same and old.dangerSeen or nil, wayAvoid = avoid,
                        report = { from = start, total = total, t = time(), fly = flies,
                                   steps = Engine and Engine.StepsCode and Engine.StepsCode(steps) or nil } }
     if GPS.AfterRoute then GPS.AfterRoute() end
@@ -2068,7 +2084,8 @@ function GPS:ReportRoute(stepIndex)
     local route = Route()
     local Engine = ns.GPSRoute
     if not (route and Engine and Engine.ReportCode and EasyFind.OpenRouteReport) then return end
-    local code = Engine.ReportCode(route, { version = ns.version, avoid = GPS.Avoids(), hearth = HearthPoint() })
+    local code = Engine.ReportCode(route, { version = ns.version, avoid = route.wayAvoid or GPS.Avoids(),
+                                            hearth = HearthPoint() })
     local step = stepIndex and route.steps and route.steps[stepIndex]
     local line
     if step then
@@ -4113,7 +4130,7 @@ function GPS.AutoLearnRow()
             if db then db.gpsAutoLearn = Utils.OffOrNil(v) end
             local route = Route()
             if route and route.dest and not route.arrived then
-                GPS:Plan(route.dest.name, function() return GPS:BuildStops(route, nil, nil, nil, "first") end,
+                GPS:Plan(route.dest.name, function() return GPS:BuildStops(route, nil, route.wayAvoid, nil, "first") end,
                     function(steps, total, advice)
                         if steps and Route() == route then GPS.StopAdded(route, nil, {}, steps, total, advice) end
                     end)

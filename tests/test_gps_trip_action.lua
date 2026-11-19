@@ -24,17 +24,20 @@ local function Load()
     function GPS:Open() seen.opened = seen.opened + 1 end
     function GPS:ShowWindow() seen.window = true end
     function GPS:Plan(_, build, done) done(build()) end
-    function GPS.Navigated(dest, _, _, _, stops) seen.dest, seen.stops = dest, stops end
+    function GPS.Navigated(dest, _, _, _, stops, avoid) seen.dest, seen.stops, seen.kept = dest, stops, avoid end
+    function GPS.Avoids() return seen.settings end
+    function GPS:BuildRoute(_, _, avoid) seen.planned = avoid return {}, 1 end
     local env = setmetatable({
         GPS = GPS, INSTANCE_CATEGORIES = {}, EntranceOf = function() return nil end,
         DB = function() return {} end,
-        ns = { GPSTrip = { Build = function(stops) seen.built = stops return {}, 1 end } },
+        ns = { GPSTrip = { Build = function(stops, _, avoid) seen.built, seen.planned = stops, avoid return {}, 1 end } },
         EasyFind = { API = { Fire = function() end }, db = {} },
         StopTicker = function() end, LiftPin = function() end, Refresh = function() end, Route = function() end,
         Utils = { SafeAfter = function() end }, ARRIVED_LINGER = 1, time = os.time,
         PlaySound = function() seen.sounds = seen.sounds + 1 end, SOUNDKIT = { IG_QUEST_LIST_COMPLETE = 1 },
     }, { __index = _G })
     local code = Slice(src, "local function Destination(data)") .. Slice(src, "local function Arrive(route)")
+        .. Slice(src, "function GPS.CallerAvoid(opts)") .. Slice(src, "function GPS:NavigateTo(data, opts)")
         .. Slice(src, "function GPS:NavigateTrip(list, opts)") .. "\nreturn Arrive"
     local Arrive = assert(load(code, "=GPS.lua trip", "t", env))()
     return GPS, seen, Arrive
@@ -56,6 +59,28 @@ function tests.aTrip_isPlannedThroughItsPlacesInOrder_toTheLast()
     H.assertEq(seen.dest, seen.built[2], "the route's end is the last stop")
     H.assertEq(seen.stops, seen.built, "its stops kept for the trip editor")
     H.assertEq(seen.opened, 0, "quiet: the window is not opened")
+end
+
+-- A guide leaves the Hearthstone to its own steps (2026-11-19: a guide's
+-- "Travel back to Brill" hearthed): opts.avoid joins the player's own
+-- ways left out, for the plan and kept on the route for its replans.
+function tests.aCallersAvoid_joinsThePlayersOwn_andStaysWithTheRoute()
+    local GPS, seen = Load()
+    seen.settings = { taxi = true, danger = false }
+    local trip = { { name = "Apothecary Johaan", mapID = 1420, x = 0.6, y = 0.52 },
+                   { name = "Executor Zygand", mapID = 1420, x = 0.61, y = 0.52 } }
+    GPS:NavigateTrip(trip, { quiet = true, avoid = { hearth = true } })
+    H.assertTrue(seen.planned.hearth, "the hearth left out")
+    H.assertTrue(seen.planned.taxi, "the player's own still left out")
+    H.assertEq(seen.planned.danger, false, "and the player's own switches as set")
+    H.assertEq(seen.kept, seen.planned, "kept on the route")
+    H.assertNil(seen.settings.hearth, "the player's settings untouched")
+    GPS:NavigateTo(trip[1], { quiet = true, avoid = { hearth = true } })
+    H.assertTrue(seen.planned.hearth and seen.planned.taxi, "one place the same")
+    H.assertEq(seen.kept, seen.planned)
+    GPS:NavigateTrip(trip, { quiet = true })
+    H.assertNil(seen.planned, "none given: the player's own, as before")
+    H.assertNil(seen.kept)
 end
 
 function tests.nothingReachable_noTrip()
