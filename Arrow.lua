@@ -136,6 +136,14 @@ local function Build()
     grip:RegisterForDrag("LeftButton")
     grip:SetScript("OnMouseDown", function(_, button) plate:GetScript("OnMouseDown")(plate, button) end)
     grip:SetScript("OnMouseUp", function(_, button) plate:GetScript("OnMouseUp")(plate, button) end)
+    -- The arrow's own right-click opens the plate's menu, the plate hidden
+    -- too; its other clicks pass through to the world.
+    local clicker = CreateFrame("Frame", nil, frame)
+    clicker:SetAllPoints(frame)
+    clicker:EnableMouse(false)
+    clicker:SetScript("OnMouseDown", grip:GetScript("OnMouseDown"))
+    clicker:SetScript("OnMouseUp", grip:GetScript("OnMouseUp"))
+    local passing = false
     -- Unlocked (the plate's menu), it takes a plain drag; locked, Shift held.
     local function Unlocked() local d = DB() return d ~= nil and d.gpsArrowUnlocked == true end
     local function DragStart() if IsShiftKeyDown() or Unlocked() then frame:StartMoving() end end
@@ -147,6 +155,7 @@ local function Build()
         local take = IsShiftKeyDown() or Unlocked()
         frame:EnableMouse(take)
         grip:EnableMouse(take)
+        clicker:EnableMouse(passing and not take)
     end
     plate.isArrow = true
     function Arrow.SetUnlocked(on)
@@ -167,6 +176,8 @@ local function Build()
         if why == "combat" then return frame:RegisterEvent("PLAYER_REGEN_ENABLED") end
         frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
         plate:EnableMouse(ok)
+        passing = ns.Utils.SafeCallMethod(clicker, "SetPropagateMouseClicks", true) and true or false
+        TakeMouse()
     end
     frame:SetScript("OnDragStart", DragStart)
     frame:SetScript("OnDragStop", DragStop)

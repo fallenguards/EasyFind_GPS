@@ -4133,6 +4133,24 @@ function GPS.AvoidRow(kind)
         end }
 end
 
+-- The box under the arrow and the beacon, the Arrow text setting: shown
+-- unless off; shown again, it says what it said before.
+function GPS.ArrowBoxShown()
+    local db = DB()
+    return not (db and db.gpsArrowText == "off")
+end
+
+function GPS.SetArrowBox(on)
+    local db = DB()
+    if not db or on == GPS.ArrowBoxShown() then return end
+    if on then
+        db.gpsArrowText, db.gpsArrowTextWas = db.gpsArrowTextWas, nil
+    else
+        db.gpsArrowTextWas, db.gpsArrowText = db.gpsArrowText, "off"
+    end
+    Refresh()
+end
+
 -- The menu row hiding the steps already done (off unless turned on).
 function GPS.HideDoneRow()
     return { kind = "check", label = L["GPS_HIDE_DONE"], tooltip = L["GPS_HIDE_DONE_TT"],
@@ -7081,6 +7099,11 @@ EasyFind.API.RegisterAction("gps", "navigateTrip", function(list, opts) return G
 EasyFind.API.RegisterAction("gps", "canNavigate", function(dest) return GPS:CanNavigate(dest) end)
 -- A guide's creatures under the arrow, a Target button each: { name, kind }.
 EasyFind.API.RegisterAction("gps", "setTargets", function(list) if ns.GPSArrow then ns.GPSArrow.SetTargets(list) end end)
+-- No argument: whether the box under the arrow shows; true or false: show or hide it.
+EasyFind.API.RegisterAction("gps", "arrowBox", function(on)
+    if on == nil then return GPS.ArrowBoxShown() end
+    GPS.SetArrowBox(on and true or false)
+end)
 EasyFind.API.RegisterAction("gps", "setStart", function(dest) return GPS:SetStart(dest) end)
 EasyFind.API.RegisterAction("gps", "clear", function() GPS:Clear() end)
 EasyFind.API.RegisterAction("gps", "mapClickNavigates", function() return GPS.MapClickNavigates() end)

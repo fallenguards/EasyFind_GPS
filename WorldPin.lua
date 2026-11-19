@@ -317,6 +317,11 @@ function WorldPin.NewPlate(parent)
                 d.gpsPlateBorder = on or nil
                 WorldPin.ApplyPlateBorders()
             end }
+        -- Off, the arrow's own right-click opens this menu to bring it back.
+        defs[#defs + 1] = { kind = "check", label = L["GPS_PLATE_SHOWN"],
+            tooltip = L["GPS_PLATE_SHOWN_TT_FMT"]:format(L["GPS_ARROW_TEXT"]),
+            get = function() return ns.GPS.ArrowBoxShown() end,
+            set = function(on) ns.GPS.SetArrowBox(on) end }
         -- The arrow's plate: unlocked, the arrow takes a plain drag.
         local Arrow = p.isArrow and ns.GPSArrow
         if Arrow and Arrow.SetUnlocked then
