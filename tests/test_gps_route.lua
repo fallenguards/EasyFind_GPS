@@ -1097,6 +1097,157 @@ function tests.walk_outByTheSewers_splitAgainKeepsItsOrder()
     for i = 1, #out do H.assertTrue(away[i] == out[i], "step " .. i .. " as it was, from outside") end
 end
 
+-- A city under a roof throughout (Undercity, Ironforge) holds only ground
+-- under one: its map's box reaches over the land above it, and "Exit
+-- Undercity, through the Sewers" ran on past the pipe to the box's edge,
+-- its way outside drawn on the city's plan (2026-11-19). The city's
+-- stretch ends at the door the way comes out by (Nav.Path's doors), the
+-- land's zones from there on; an open city's still ends with its box.
+local function withDoors(ns, doors)
+    local path = ns.GPSNav.Path
+    ns.GPSNav.Path = function(...)
+        local pts, len = path(...)
+        return pts, len, nil, nil, nil, doors
+    end
+end
+local function wholeBox(_, x, y) return (x + 100) / 2000, (y + 100) / 2000 end
+
+function tests.walk_outOfARoofedCity_endsAtItsDoor()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    -- Out into the open 300 yd west of A, on the stretch that ends at B.
+    withDoors(ns, { from = true, { v = 3, x = 0, y = 300, inside = false } })
+    local steps, start = walk(Route)
+    local isCity = function(m) return m == 99 end
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = wholeBox, isCity = isCity,
+        startCity = { map = 99, name = "City", roofed = true } })
+    H.assertEq(#out, 4, "the city, Alpha, Bravo, Charlie")
+    H.assertEq(out[1].walkZone, 99)
+    H.assertEq(out[1].arrive.wx, 0)
+    H.assertEq(out[1].arrive.wy, 300, "the city ends at the door itself")
+    H.assertTrue(out[1].door == true, "marked: the way past it is on other ground")
+    H.assertEq(out[2].walkZone, 10, "the land from the door on")
+    H.assertNil(out[2].door)
+    local inside = Route.WalkPath(1, start.wx, start.wy, 0, 300, true)
+    H.assertTrue(inside.doors.from == true and #inside.doors == 0, "the city's stretch is all under the roof")
+    local outside = Route.WalkPath(1, 0, 300, out[2].arrive.wx, out[2].arrive.wy, true)
+    H.assertTrue(outside.doors.from == false, "the land's sets out in the open")
+    -- An open city in the same box: the whole walk is the city's, as before.
+    Route.ForgetWalkPaths()
+    steps, start = walk(Route)
+    out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = wholeBox, isCity = isCity,
+        startCity = { map = 99, name = "City" }, goalCity = { map = 99, name = "City" } })
+    H.assertTrue(#out == 1 and out[1] == steps[1], "an open city keeps its box")
+end
+
+-- Past the door the land begins: a zone clipped short there joins the
+-- zone after it, never the city, and a walk ending a few yards out keeps
+-- that last stretch.
+function tests.walk_outOfARoofedCity_theLandStartsAtTheDoor()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    withDoors(ns, { from = true, { v = 3, x = 0, y = 450, inside = false } })
+    local steps, start = walk(Route)
+    local env = { zoneAt = zoneAt, mapPos = wholeBox, isCity = function(m) return m == 99 end,
+                  startCity = { map = 99, name = "City", roofed = true } }
+    local out = Route.SplitWalks(steps, start, data(), env)
+    H.assertEq(#out, 3, "the city, Bravo, Charlie: Alpha's 50 yd join Bravo")
+    H.assertEq(out[1].arrive.wy, 450, "the city still ends at its door")
+    H.assertTrue(out[1].door == true)
+    H.assertEq(out[2].walkZone, 11)
+    -- A walk that ends 50 yd past the door.
+    Route.ForgetWalkPaths()
+    withNav(ns, function(sx, sy, tx, ty) return { sx, sy, 0, 0, tx, ty } end)
+    withDoors(ns, { from = true, { v = 3, x = 0, y = 400, inside = false } })
+    local target = { ci = 1, wx = 0, wy = 450, m = 10, x = 0.1, y = 0.1 }
+    Route.WalkPath(1, start.wx, start.wy, target.wx, target.wy)
+    out = Route.SplitWalks({ { kind = "travel", text = "Travel to Spot", mapID = 10, go = target, arrive = target, sec = 50 } },
+        start, data(), env)
+    H.assertEq(#out, 2, "the city to its door, then the spot outside")
+    H.assertEq(out[1].arrive.wy, 400)
+    H.assertEq(out[2].arrive, target)
+end
+
+-- Open ground crossed for a few yards inside a roofed city (a court under
+-- the sky) is no way out of it: the city on both sides is one stretch.
+function tests.walk_inARoofedCity_aCourtUnderTheSkyIsNoExit()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    withDoors(ns, { from = true, { v = 3, x = 0, y = 300, inside = false }, { v = 3, x = 0, y = 360, inside = true } })
+    local steps, start, target = walk(Route)
+    target.m = 99
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = wholeBox, isCity = function(m) return m == 99 end,
+        startCity = { map = 99, name = "City", roofed = true }, goalCity = { map = 99, name = "City", roofed = true } })
+    H.assertTrue(#out == 1 and out[1] == steps[1], "one city from end to end: " .. #out)
+end
+
+-- Out of Undercity from the Ruins' hall the way crosses their court to the
+-- outer gate: under a roof, 120 yd in the open, under the gate, then out
+-- for good (Forever's grid). The city ends at the gate, the last door,
+-- not at the hall's; open ground too long for a court is the land.
+function tests.walk_outOfARoofedCity_pastACourt_endsAtTheLastDoor()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    withDoors(ns, { from = true, { v = 3, x = 0, y = 300, inside = false }, { v = 3, x = 0, y = 420, inside = true },
+                    { v = 3, x = 0, y = 450, inside = false } })
+    local steps, start = walk(Route)
+    local env = { zoneAt = zoneAt, mapPos = wholeBox, isCity = function(m) return m == 99 end,
+                  startCity = { map = 99, name = "City", roofed = true } }
+    local out = Route.SplitWalks(steps, start, data(), env)
+    H.assertEq(out[1].walkZone, 99)
+    H.assertEq(out[1].arrive.wy, 450, "the court is the city's: out by the gate")
+    H.assertTrue(out[1].door == true)
+    Route.ForgetWalkPaths()
+    withNav(ns, junction)
+    withDoors(ns, { from = true, { v = 3, x = 0, y = 100, inside = false }, { v = 3, x = 0, y = 400, inside = true },
+                    { v = 3, x = 0, y = 450, inside = false } })
+    steps, start = walk(Route)
+    out = Route.SplitWalks(steps, start, data(), env)
+    H.assertEq(out[1].arrive.wy, 100, "300 yd in the open is no court: out by the first door")
+    H.assertEq(out[2].walkZone, 10, "and a roof passed under on the way is the land's")
+end
+
+-- Walked into, a roofed city begins at the door the way goes in by.
+function tests.walk_intoARoofedCity_beginsAtItsDoor()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    -- In under the roof 800 yd north of B, on the stretch that ends at C.
+    withDoors(ns, { from = false, { v = 4, x = 800, y = 1000, inside = true } })
+    local steps, start, target = walk(Route)
+    target.m = 99
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = wholeBox,
+        isCity = function(m) return m == 99 end, goalCity = { map = 99, name = "City", roofed = true } })
+    H.assertEq(#out, 4, "Alpha, Bravo, Charlie, the city")
+    H.assertEq(out[3].walkZone, 12)
+    H.assertEq(out[3].arrive.wx, 800, "the land runs to the door")
+    H.assertTrue(out[3].door == true)
+    H.assertEq(out[4].walkZone, 99)
+    H.assertEq(out[4].arrive, target)
+end
+
+-- The step into the sewers ends at their mouth, not at the door: only the
+-- rest, which ends at it, is marked.
+function tests.walk_outByTheSewers_onlyTheExitEndsAtTheDoor()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local path = ns.GPSNav.Path
+    ns.GPSNav.Path = function(...)
+        local pts, len = path(...)
+        return pts, len, nil, nil, { { v = 2, en = "Sewers", name = "Sewers" } },
+            { from = true, { v = 3, x = 0, y = 300, inside = false } }
+    end
+    ns.L.GPS_STEP_INTO_FMT, ns.L.GPS_STEP_VIA_FMT = "Walk into the %s", "%s, through the %s"
+    ns.L.GPS_STEP_EXIT_FMT = "Exit %s"
+    local steps, start = walk(Route)
+    local out = Route.SplitWalks(steps, start, data(), { zoneAt = zoneAt, mapPos = wholeBox,
+        isCity = function(m) return m == 99 end, startCity = { map = 99, name = "City", roofed = true } })
+    H.assertEq(out[1].text, "Walk into the Sewers")
+    H.assertNil(out[1].door, "the mouth is no door out")
+    H.assertEq(out[2].text, "Exit City, through the Sewers")
+    H.assertTrue(out[2].door == true)
+    H.assertEq(out[2].arrive.wy, 300)
+end
+
 -- A route keeps its drawn walks: put back in a later session they are
 -- found without a search (a route in progress at login drew every walk
 -- again, about a second of the GPS at 6 to 10 ms a frame).

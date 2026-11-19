@@ -359,5 +359,39 @@ function tests.aLift_theWayPastItWaitsTillItIsRidden()
     H.assertTrue(westmost() < -30, "ridden, the walk on: " .. westmost())
 end
 
+-- Past a roofed city's door the way is on the land over the city: out of
+-- Undercity by its sewers the walk outside lay across the tunnel on the
+-- minimap, a line through its walls (2026-11-19). The way ahead stops at
+-- the door till it is gone through; a walk on to a walk else runs on.
+function tests.aCitysDoor_theWayPastItWaitsTillItIsGoneThrough()
+    local drawn, _, now, Mini = fresh()
+    local route = Mini._ns.GPS.CurrentRoute()
+    local door = { ci = 1, wx = 40, wy = 0 }
+    route.steps = {
+        { kind = "travel", go = door, arrive = door },
+        { kind = "travel", go = { ci = 1, wx = 40, wy = 80 } },
+    }
+    local function westmost()
+        local x = 0
+        for _, p in ipairs(drawn.pieces) do
+            for i = 1, #p.pts, 2 do x = math.min(x, p.pts[i]) end
+        end
+        return x
+    end
+    now.t = now.t + 1
+    Mini:Refresh()
+    H.assertTrue(westmost() < -30, "no door: the walk on is drawn too: " .. westmost())
+    route.steps[1].door = true
+    now.t = now.t + 1
+    Mini:Refresh()
+    H.assertTrue(#drawn.pieces >= 1, "the walk to the door")
+    H.assertTrue(westmost() > -5, "nothing past the door: " .. westmost())
+    route.active = 2
+    Mini._ns.GPS.PlayerWorldPos = function() return 1, 40, 0 end
+    now.t = now.t + 1
+    Mini:Refresh()
+    H.assertTrue(westmost() < -30, "through it, the walk on: " .. westmost())
+end
+
 local pass, fail, failures = H.runSuite("GPSMinimap", tests)
 return { pass = pass, fail = fail, failures = failures }

@@ -282,8 +282,10 @@ local function Draw()
                 end
             end
         end
-        -- Past a lift the way is on another level over or under this one.
-        if step.kind == "elevator" then break end
+        -- Past a lift the way is on another level over or under this one;
+        -- past a roofed city's door it is on the land over the city, or in
+        -- under it (the way outside lay across the sewers' tunnel, 2026-11-19).
+        if step.kind == "elevator" or step.door then break end
     end
     Flush()
     local circuit = ns.GPS.circuit

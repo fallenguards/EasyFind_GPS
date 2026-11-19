@@ -36,5 +36,35 @@ function tests.aWalkIntoTheCityFromTheWest_namesTheSewers()
     H.assertTrue(v ~= nil and pts[2 * v - 1] ~= nil, "at a point of the walk, kept through its straightening")
 end
 
+-- The walk also tells where it goes in under the city's roof and comes
+-- out of it (Nav.Path's doors, off the grid's indoor floors): the pipe at
+-- the west wall, Undercity 15, 35, where a player stood at 14.8, 33.9
+-- just out of it (2026-11-19). A roofed city's step ends there.
+local PIPE = { 1650, 724 }                -- the pipe's mouth, world yards
+local QUARTER = { 1616.1, 413.7 }         -- by the canals, Undercity 47.9, 40.9
+
+function tests.theWalkOutByTheSewers_comesOutAtThePipe()
+    local ns = Load()
+    local pts, _, _, _, _, doors = ns.GPSNav.Path(0, QUARTER[1], QUARTER[2], WEST[1], WEST[2])
+    H.assertNotNil(pts, "a way on foot")
+    H.assertTrue(doors ~= nil and doors.from == true, "sets out under the city's roof")
+    H.assertEq(#doors, 1, "one door: out by the pipe, and in the open from there")
+    local d = doors[1]
+    H.assertTrue(d.inside == false)
+    H.assertTrue(math.abs(d.x - PIPE[1]) < 15 and math.abs(d.y - PIPE[2]) < 15,
+        string.format("at the pipe's mouth: %.0f, %.0f", d.x, d.y))
+    H.assertTrue(d.v ~= nil and pts[2 * d.v] ~= nil, "on a stretch of the walk")
+end
+
+function tests.theWalkInByTheSewers_goesInAtThePipe()
+    local ns = Load()
+    local _, _, _, _, _, doors = ns.GPSNav.Path(0, WEST[1], WEST[2], FARANELL[1], FARANELL[2], { indoorsB = true })
+    H.assertTrue(doors ~= nil and doors.from == false, "sets out in the open")
+    H.assertTrue(#doors >= 1 and doors[1].inside == true, "then in under the roof")
+    H.assertTrue(math.abs(doors[1].x - PIPE[1]) < 15 and math.abs(doors[1].y - PIPE[2]) < 15,
+        string.format("at the pipe's mouth: %.0f, %.0f", doors[1].x, doors[1].y))
+    H.assertTrue(doors[#doors].inside == true, "and it ends under it")
+end
+
 local pass, fail, failures = H.runSuite("GPSSewers", tests)
 return { pass = pass, fail = fail, failures = failures }

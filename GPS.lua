@@ -402,6 +402,11 @@ local function IsCity(mapID)
 end
 GPS.IsCity = IsCity
 
+-- Cities under a roof throughout, by each client's map (Undercity and
+-- Ironforge on Era, TBC and Forever, then on MoP Classic): open ground
+-- inside their map's box is the land over them (Route.lua WalkPieces).
+GPS.ROOFED = { [1458] = true, [1455] = true, [998] = true, [87] = true }
+
 local function SplitWalks(steps, dest, origin)
     local Route = ns.GPSRoute
     local ci, wx, wy
@@ -418,8 +423,9 @@ local function SplitWalks(steps, dest, origin)
     local db = DB()
     local ok, out = pcall(Route.SplitWalks, steps, start, ns.GPSData, {
         zoneAt = ZoneAt, mapPos = MapPos, isCity = IsCity,
-        startCity = hereInfo and { map = here, name = hereInfo.name } or nil,
-        goalCity = dest.mapID and IsCity(dest.mapID) and { map = dest.mapID, name = (C_Map.GetMapInfo(dest.mapID) or {}).name } or nil,
+        startCity = hereInfo and { map = here, name = hereInfo.name, roofed = GPS.ROOFED[here] } or nil,
+        goalCity = dest.mapID and IsCity(dest.mapID) and { map = dest.mapID, name = (C_Map.GetMapInfo(dest.mapID) or {}).name,
+                                                        roofed = GPS.ROOFED[dest.mapID] } or nil,
         goalZone = dest.zone and dest.mapID or nil,
         wholeWalks = db ~= nil and db.gpsZoneSteps == false,
     })
@@ -1199,12 +1205,36 @@ function GPS.StepPassed(route, ci, px, py)
     local step, nxt = route.steps[i], route.steps[i + 1]
     if not (step and nxt and step.kind == "travel" and nxt.kind == "travel") then return false end
     if step.fly or nxt.fly or step.corpse or step.inside then return false end
+    -- A roofed city's door, or a place the game names, is gone through:
+    -- no corner cuts past it under the ground (the sewers' tunnel winds
+    -- round nearer the next spot than its own pipe is).
+    if step.door or step.enterSub then return false end
     local sci, sx, sy = PointWorld(step.arrive or step.go)
     local nci, nx, ny = PointWorld(nxt.go or nxt.arrive)
     if not (sci and nci and sci == ci and nci == ci) then return false end
     if (px - sx) ^ 2 + (py - sy) ^ 2 > PASS_YARDS * PASS_YARDS then return false end
     local toNext = ((px - nx) ^ 2 + (py - ny) ^ 2) ^ 0.5
     return toNext < ((sx - nx) ^ 2 + (sy - ny) ^ 2) ^ 0.5 - PASS_MARGIN
+end
+
+-- Whether the player is through the door the active step ends at: past
+-- its spot along the last stretch of the step's own way. Within reach of
+-- it on the near side the step stays (the way on lies over the tunnel);
+-- true where the way is not known. A field: the file is at 200 locals.
+function GPS.ThroughDoor(route, ci, px, py)
+    local i = route.active or 1
+    local step = route.steps[i]
+    local fci, fx, fy = PointWorld(i > 1 and route.steps[i - 1].arrive or route.from)
+    local tci, tx, ty = PointWorld(step.go or step.arrive)
+    local Engine = ns.GPSRoute
+    if not (fci and tci == fci and ci == tci and Engine and Engine.WalkPath) then return true end
+    local way = Engine.WalkPath(tci, fx, fy, tx, ty, true, step.near)
+    local pts = way and way.pts
+    for v = pts and #pts - 3 or 0, 1, -2 do
+        local dx, dy = tx - pts[v], ty - pts[v + 1]
+        if dx * dx + dy * dy > 1 then return (px - tx) * dx + (py - ty) * dy >= 0 end
+    end
+    return true
 end
 
 -- While a crossing is the step (a hearth, a flight), a later step the
@@ -1564,6 +1594,7 @@ local function Tick()
         if spot then radius = ARRIVE.spot end
         local dx, dy = px - sx, py - sy
         if (dx * dx + dy * dy) > radius * radius then return end
+        if step.door and not GPS.ThroughDoor(route, ci, px, py) then return end
         -- Over the spot on another floor (the ring above an auction house).
         if ns.GPSFloors and not ns.GPSFloors.SameLevel(ci, sx, sy) then return end
         -- Upstairs or below in a room nothing tells the floors apart: the

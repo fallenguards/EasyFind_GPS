@@ -1645,6 +1645,28 @@ local function Sees(w, t, g, t2, g2)
     return t == t2 and g == g2
 end
 
+-- A door on the straight walk from floor g of tile t to floor g2 of tile
+-- t2: the first floor along it under a roof (inside) or in the open (not),
+-- as Sees steps it; the far end where the line cannot be stepped.
+local function DoorOn(w, t, g, t2, g2, inside)
+    local cell = w.cell
+    local x0, y0 = FloorXY(w, t, g)
+    local x1, y1 = FloorXY(w, t2, g2)
+    local nr, ncl = mfloor(mabs(x1 - x0) / cell + 0.5), mfloor(mabs(y1 - y0) / cell + 0.5)
+    local alongRow, alongCol = x1 > x0 and 1 or 3, y1 > y0 and 2 or 0
+    local ir, ic = 0, 0
+    while ir < nr or ic < ncl do
+        local stepRow = (0.5 + ir) * ncl < (0.5 + ic) * nr
+        if ic >= ncl then stepRow = true elseif ir >= nr then stepRow = false end
+        local d
+        if stepRow then d, ir = alongRow, ir + 1 else d, ic = alongCol, ic + 1 end
+        t, g = Step(w, t, g, d)
+        if not g then break end
+        if (sbyte(t.fl, g) % 4 >= 2) == inside then return FloorXY(w, t, g) end
+    end
+    return x1, y1
+end
+
 -- Whether one walks straight from (ax, ay) to (bx, by): each cell along
 -- the line reached from the one before by a link, across tiles, and none
 -- before the last of them water unless the start is. nil off the grid.
@@ -1738,7 +1760,10 @@ end
 -- yards it was chosen by), its time (yards walked, swimming slower, the
 -- same the walk was priced by) and the drops above the safe height it
 -- takes ({ v = the vertex it lands on, h = yards }), or nil. Drawn the way
--- it is walked: opts.reverse is for pricing only.
+-- it is walked: opts.reverse is for pricing only. Last, after the named
+-- floors, its doors: from (whether it sets out under a roof) and each
+-- place it comes out into the open or goes in ({ v = the vertex its
+-- stretch ends at, x, y, inside = under a roof from there on }).
 function Nav.Path(ci, ax, ay, bx, by, opts)
     local w = World(ci)
     if not w or (opts and opts.reverse) then return nil end
@@ -1858,8 +1883,22 @@ function Nav.Path(ci, ax, ay, bx, by, opts)
             end
         end
     end
+    local doors, last
+    for v = 1, #keep do
+        local tv, gv = vt[v], vg[v]
+        if tv and gv then
+            local inside = sbyte(tv.fl, gv) % 4 >= 2
+            if not doors then
+                doors = { from = inside }
+            elseif inside ~= (sbyte(vt[last].fl, vg[last]) % 4 >= 2) then
+                local x, y = DoorOn(w, vt[last], vg[last], tv, gv, inside)
+                doors[#doors + 1] = { v = v, x = x, y = y, inside = inside }
+            end
+            last = v
+        end
+    end
     out[#out + 1], out[#out + 2] = bx, by
-    return out, cost, walk[7], jumps, levels
+    return out, cost, walk[7], jumps, levels, doors
 end
 
 -- Probe (dev tools, tests): the tile and floor under a point (exact: its

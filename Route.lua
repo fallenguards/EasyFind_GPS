@@ -1835,12 +1835,14 @@ end
 -- A drawn walk as a route keeps it (GPS.lua), nil when not drawn; KeepWalk
 -- puts one back, so a way an earlier session found is not searched again.
 -- KEPT_WALK_VER: kept in another layout, a walk is drawn again.
-local KEPT_WALK_VER = 3
+local KEPT_WALK_VER = 4
 function Route.SaveWalk(ci, sx, sy, tx, ty, near)
     local path = walkPaths[WalkKey(ci, sx, sy, tx, ty, near)]
     if path == nil then return nil end
     local w = { ver = KEPT_WALK_VER, ci = ci, sx = sx, sy = sy, tx = tx, ty = ty, near = near, none = not path or nil }
-    if path then w.pts, w.len, w.time, w.jumps, w.through = path.pts, path.len, path.time, path.jumps, path.through end
+    if path then
+        w.pts, w.len, w.time, w.jumps, w.through, w.doors = path.pts, path.len, path.time, path.jumps, path.through, path.doors
+    end
     return w
 end
 
@@ -1848,7 +1850,8 @@ function Route.KeepWalk(w)
     if w.ver ~= KEPT_WALK_VER then return end
     local path = false
     if not w.none then
-        path = { pts = w.pts, cum = Cum(w.pts), len = w.len, time = w.time, jumps = w.jumps, through = w.through }
+        path = { pts = w.pts, cum = Cum(w.pts), len = w.len, time = w.time, jumps = w.jumps, through = w.through,
+                 doors = w.doors }
     end
     KeepPath(WalkKey(w.ci, w.sx, w.sy, w.tx, w.ty, w.near), path)
 end
@@ -1857,7 +1860,9 @@ end
 -- so far), len (yards walked), time (running yards: swimming takes longer),
 -- jumps (each drop that costs health: at, yards along it to its ledge, the
 -- ledge x, y and its height h), through (each named floor it enters: at,
--- x, y, en its English name, name the client's) },
+-- x, y, en its English name, name the client's), doors (from: whether it
+-- sets out under a roof; each place it comes out into the open or goes
+-- in: at, x, y, inside = under a roof from there on) },
 -- false when no way leads there, nil without walking data for ci. lazy:
 -- nil too when it is not drawn yet; the planner draws, everything else
 -- asks lazily and is told when it is there. near: it ends within that many
@@ -1868,7 +1873,7 @@ function Route.WalkPath(ci, sx, sy, tx, ty, lazy, near)
     local key = WalkKey(ci, sx, sy, tx, ty, near)
     local path = walkPaths[key]
     if path == nil and not lazy then
-        local pts, _, time, jumps, levels = Nav.Path(ci, sx, sy, tx, ty, near and { near = near } or nil)
+        local pts, _, time, jumps, levels, doors = Nav.Path(ci, sx, sy, tx, ty, near and { near = near } or nil)
         if pts then
             local cum = Cum(pts)
             local list, through
@@ -1884,13 +1889,36 @@ function Route.WalkPath(ci, sx, sy, tx, ty, lazy, near)
                     through[#through + 1] = { at = cum[v], x = pts[2 * v - 1], y = pts[2 * v], en = l.en, name = l.name }
                 end
             end
-            path = { pts = pts, cum = cum, len = cum[#cum], time = time or cum[#cum], jumps = list, through = through }
+            local roof
+            if doors then
+                roof = { from = doors.from }
+                for k = 1, #doors do
+                    local d = doors[k]
+                    local v = d.v
+                    local far = msqrt((d.x - pts[2 * v - 3]) ^ 2 + (d.y - pts[2 * v - 2]) ^ 2)
+                    roof[k] = { at = cum[v - 1] + math.min(cum[v] - cum[v - 1], far), x = d.x, y = d.y, inside = d.inside }
+                end
+            end
+            path = { pts = pts, cum = cum, len = cum[#cum], time = time or cum[#cum], jumps = list, through = through,
+                     doors = roof }
         else
             path = false
         end
         KeepPath(key, path)
     end
     return path
+end
+
+-- Whether a walk with these doors (a drawn walk's .doors) is under a roof
+-- `at` yards along it (at a door, as from there on); nil without them.
+local function UnderRoof(doors, at)
+    if not doors then return nil end
+    local inside = doors.from
+    for k = 1, #doors do
+        if doors[k].at > at then break end
+        inside = doors[k].inside
+    end
+    return inside
 end
 
 -- The stretch of a drawn walk from `from` to `stop` yards along it, between
@@ -1922,15 +1950,25 @@ local function KeepStretch(ci, path, from, stop, sx, sy, ex, ey, near)
             through[#through + 1] = { at = l.at - from, x = l.x, y = l.y, en = l.en, name = l.name }
         end
     end
+    local doors
+    if path.doors then
+        doors = { from = UnderRoof(path.doors, from) }
+        for _, d in ipairs(path.doors) do
+            if d.at > from and d.at < stop then
+                doors[#doors + 1] = { at = d.at - from, x = d.x, y = d.y, inside = d.inside }
+            end
+        end
+    end
     KeepPath(WalkKey(ci, sx, sy, ex, ey, near), { pts = out, cum = ocum, len = stop - from,
                                              time = path.time * (stop - from) / mmax(1, path.len), jumps = jumps,
-                                             through = through })
+                                             through = through, doors = doors })
 end
 
 -- Walks, zone by zone
 
 local WALK_SAMPLE = 100    -- yards between zone readings along a walk
 local WALK_MIN_RUN = 150   -- a zone crossed for less than this is no step
+local ROOF_GAP = 200       -- open ground crossed for less between two roofs of a roofed city is a court of it
 
 local function PointWorld(p)
     if not p then return nil end
@@ -1955,29 +1993,66 @@ local function WalkPieces(step, from, data, env, first)
     local runs = {}
     -- The continent names the zone around a city for the city's own points
     -- (Thunder Bluff's read as Mulgore, 2026-11-09): inside the map box of
-    -- the city set out from, or walked to, a point is the city's.
-    local cities = {}
+    -- the city set out from, or walked to, a point is the city's. A city
+    -- under a roof throughout (roofed: Undercity, Ironforge) holds only
+    -- ground under one: open ground in its box is the land over it, so its
+    -- stretch ends at the door the way leaves by (the sewers' pipe; the
+    -- step ran on to the box's edge and drew the way outside on the city's
+    -- plan, 2026-11-19), and begins at the one it enters by.
+    local cities, roofed = {}, false
     if first and env.startCity then cities[#cities + 1] = env.startCity end
     if env.goalCity and not (env.startCity and env.startCity.map == env.goalCity.map) then
         cities[#cities + 1] = env.goalCity
+    end
+    for i = 1, #cities do roofed = roofed or cities[i].roofed == true end
+    -- A roofed city's doors on this walk, its courts closed: open ground
+    -- crossed for less than ROOF_GAP between two stretches under a roof is
+    -- the city's still (the Ruins' court over Undercity, between its hall
+    -- and its gate: the city ends at the gate).
+    local roof
+    if roofed and path.doors then
+        local all = path.doors
+        roof = { from = all.from }
+        local k = 1
+        while k <= #all do
+            local out, back = all[k], all[k + 1]
+            if not out.inside and back and back.inside and back.at - out.at < ROOF_GAP then
+                k = k + 2
+            else
+                roof[#roof + 1] = out
+                k = k + 1
+            end
+        end
     end
     local function Within(mapID, x, y)
         if not env.mapPos then return false end
         local mx, my = env.mapPos(ci, x, y, mapID)
         return mx ~= nil and mx >= 0 and mx <= 1 and my >= 0 and my <= 1
     end
+    local atDoor
     local function Read(x, y, at)
         local map, name = env.zoneAt(ci, x, y)
         for i = 1, #cities do
             local city = cities[i]
-            if map ~= city.map and Within(city.map, x, y) then
+            if map ~= city.map and Within(city.map, x, y) and not (city.roofed and UnderRoof(roof, at) == false) then
                 map, name = city.map, city.name
                 break
             end
         end
         local run = runs[#runs]
         if map and (not run or run.map ~= map) then
-            runs[#runs + 1] = { map = map, name = name or "?", at = at, x = x, y = y }
+            runs[#runs + 1] = { map = map, name = name or "?", at = at, x = x, y = y, door = atDoor }
+        end
+    end
+    -- Read at each bend, every WALK_SAMPLE yards between two, and with a
+    -- roofed city at each door, where its stretch ends or begins.
+    local doors, door = roof or {}, 1
+    local function Doors(upTo)
+        while doors[door] and doors[door].at <= upTo do
+            local d = doors[door]
+            atDoor = true
+            Read(d.x, d.y, d.at)
+            atDoor, door = nil, door + 1
         end
     end
     for v = 1, #pts / 2 do
@@ -1986,9 +2061,11 @@ local function WalkPieces(step, from, data, env, first)
             local extra = mfloor(seg / WALK_SAMPLE)
             for s = 1, extra do
                 local t = s / (extra + 1)
+                Doors(cum[v - 1] + t * seg)
                 Read(ax + t * (pts[2 * v - 1] - ax), ay + t * (pts[2 * v] - ay), cum[v - 1] + t * seg)
             end
         end
+        Doors(cum[v])
         Read(pts[2 * v - 1], pts[2 * v], cum[v])
     end
     -- A city's map reaches past its walls (Undercity's over the lake road):
@@ -2013,17 +2090,31 @@ local function WalkPieces(step, from, data, env, first)
             end
         end
     end
+    -- A roofed city's own stretch: the one set out on, or the one walked to.
+    local function OwnRoof(r)
+        local run = runs[r]
+        if not run then return false end
+        local s, g = env.startCity, env.goalCity
+        return (r == 1 and first and s ~= nil and s.roofed == true and s.map == run.map)
+            or (r == #runs and g ~= nil and g.roofed == true and g.map == run.map)
+    end
     -- A zone clipped for a few yards (a border the way runs along) is
-    -- no step; its stretch joins the zone before it.
+    -- no step; its stretch joins the zone before it. A roofed city's own
+    -- stretch ends at its door however short, and past the door set out
+    -- by the land begins: a clipped zone there joins the one after it,
+    -- and the walk's last stretch stays.
     local r = 1
     while r <= #runs and #runs > 1 do
         local stop = runs[r + 1] and runs[r + 1].at or path.len
-        if stop - runs[r].at < WALK_MIN_RUN then
-            table.remove(runs, r)
+        local pastDoor = r == 2 and OwnRoof(1)
+        if stop - runs[r].at < WALK_MIN_RUN and not OwnRoof(r) and not (pastDoor and r == #runs) then
+            local gone = table.remove(runs, r)
             if r == 1 then
                 runs[1].at, runs[1].x, runs[1].y = 0, fx, fy
             elseif runs[r] and runs[r].map == runs[r - 1].map then
                 table.remove(runs, r)
+            elseif pastDoor and runs[r] then
+                runs[r].at, runs[r].x, runs[r].y, runs[r].door = gone.at, gone.x, gone.y, gone.door
             end
         else
             r = r + 1
@@ -2041,10 +2132,12 @@ local function WalkPieces(step, from, data, env, first)
         end
     end
     -- Setting out from inside a city: getting out of it is the first
-    -- step, up to the way's first turn.
+    -- step, up to the way's first turn. Not from open ground in a roofed
+    -- city's box: that is out of it already.
     local city = first and env.startCity
     if city and runs[1] and runs[1].map ~= city.map and #pts >= 4
-       and cum[2] < (runs[2] and runs[2].at or path.len) then
+       and cum[2] < (runs[2] and runs[2].at or path.len)
+       and not (city.roofed and UnderRoof(roof, 0) == false) then
         runs[1].at, runs[1].x, runs[1].y = cum[2], pts[3], pts[4]
         table.insert(runs, 1, { map = city.map, name = city.name or "?", at = 0, x = fx, y = fy })
     end
@@ -2091,6 +2184,8 @@ local function WalkPieces(step, from, data, env, first)
             local spot = { ci = ci, wx = border.x, wy = border.y, m = run.map, x = mx, y = my }
             piece.mapID, piece.x, piece.y, piece.go, piece.arrive = run.map, mx, my, spot, spot
             piece.enter = border.map
+            -- Ends at a roofed city's door: the way past it is on other ground.
+            piece.door = border.door
             piece.near = nil   -- a border is reached itself
             if env.wholeWalks then
                 piece.text = step.text
@@ -2142,6 +2237,7 @@ local function SewerPieces(step, from, env)
     local spot = { ci = ci, wx = into.x, wy = into.y, m = map, x = mx, y = my }
     first.mapID, first.x, first.y, first.go, first.arrive = map, mx, my, spot, spot
     first.text, first.enterSub, first.near, first.floor = sformat(L["GPS_STEP_INTO_FMT"], into.name), into.name, nil, nil
+    first.door = nil   -- the rest's end, not the mouth
     first.jumps, rest.jumps = nil, nil
     for _, j in ipairs(path.jumps or {}) do
         local piece = j.at < into.at and first or rest
