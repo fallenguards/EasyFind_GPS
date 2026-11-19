@@ -1948,6 +1948,9 @@ local function WalkPieces(step, from, data, env, first)
     local path = Route.WalkPath(ci, fx, fy, tx, ty, true, step.near)
     if not path then return nil end
     step.jumps = path.jumps
+    -- Cut by zone already: it stays as cut, wherever the player stands by
+    -- the next pass (its jumps, above, are all a route kept needs back).
+    if step.walkZone then return nil end
     local pts, cum = path.pts, path.cum
     local runs = {}
     -- The continent names the zone around a city for the city's own points
@@ -2162,9 +2165,15 @@ function Route.SplitWalks(steps, start, data, env)
     for i = 1, #steps do
         local step = steps[i]
         local from = i == 1 and start or steps[i - 1].arrive
+        -- The walk set out on: the first step, or its rest once the step
+        -- into the sewers was cut off it. Split again (the pass after the
+        -- other walks are drawn), that rest read without the city set out
+        -- from was cut by the land's zones, a zone's step landing before
+        -- "Exit Undercity" (2026-11-19).
+        local first = i == 1 or (i == 2 and steps[1].enterSub ~= nil and step.viaSewers ~= nil)
         local pieces
         -- A ghost's walk to its corpse stays one step, from where it released.
-        if Walked(step) and not step.corpse then pieces = WalkPieces(step, from, data, env, i == 1) end
+        if Walked(step) and not step.corpse then pieces = WalkPieces(step, from, data, env, first) end
         for _, piece in ipairs(pieces or { step }) do
             local sewer = Walked(piece) and not piece.corpse and SewerPieces(piece, from, env)
             for _, p in ipairs(sewer or { piece }) do out[#out + 1] = p end

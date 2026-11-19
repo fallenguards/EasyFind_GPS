@@ -1057,6 +1057,46 @@ function tests.walk_throughTheSewers_saysSo()
     H.assertNotNil(stretch, "the rest's way is kept, followed without a search")
 end
 
+-- Forever, 2026-11-19: out of Undercity by its sewers the steps read
+-- "Walk into the Sewers", "Walk through Tirisfal Glades to Silverpine
+-- Forest", "Exit Undercity, through the Sewers". The pass after the other
+-- walks are drawn split the route again, and the rest of the first walk,
+-- now the second step, was read without the city set out from: the
+-- land's zones cut it, a zone's step landing before the exit. Split again
+-- the steps are the same ones in the same order, wherever the player is.
+function tests.walk_outByTheSewers_splitAgainKeepsItsOrder()
+    local _, ns, Route = fresh()
+    withNav(ns, junction)
+    local path = ns.GPSNav.Path
+    ns.GPSNav.Path = function(...)
+        local pts, len = path(...)
+        return pts, len, nil, nil, { { v = 2, en = "Sewers", name = "Sewers" } }
+    end
+    ns.L.GPS_STEP_INTO_FMT, ns.L.GPS_STEP_VIA_FMT = "Walk into the %s", "%s, through the %s"
+    ns.L.GPS_STEP_EXIT_FMT, ns.L.GPS_STEP_WALK_THROUGH_FMT = "Exit %s", "Walk through %s to %s"
+    local steps, start = walk(Route)
+    -- The city's box reaches 900 yd west: Alpha and Bravo both lie in it.
+    local box = function(_, x, y, mapID)
+        if mapID == 99 then return (x + 100) / 2000, (y + 100) / 1000 end
+        return (x + 100) / 2000, (y + 100) / 2000
+    end
+    local function Env(city)
+        return { zoneAt = zoneAt, mapPos = box, isCity = function(m) return m == 99 end,
+                 startCity = city and { map = 99, name = "City" } or nil }
+    end
+    local out = Route.SplitWalks(steps, start, data(), Env(true))
+    H.assertEq(out[1].text, "Walk into the Sewers")
+    H.assertEq(out[2].text, "Exit City, through the Sewers")
+    H.assertEq(out[3].walkZone, 11, "then Bravo, the land past the box")
+    local again = Route.SplitWalks(out, start, data(), Env(true))
+    H.assertEq(#again, #out, "split once, split no further: " .. #again)
+    for i = 1, #out do H.assertTrue(again[i] == out[i], "step " .. i .. " as it was: " .. tostring(again[i].text)) end
+    -- At login the player may stand anywhere along the route.
+    local away = Route.SplitWalks(out, start, data(), Env(false))
+    H.assertEq(#away, #out, "nor from outside the city: " .. #away)
+    for i = 1, #out do H.assertTrue(away[i] == out[i], "step " .. i .. " as it was, from outside") end
+end
+
 -- A route keeps its drawn walks: put back in a later session they are
 -- found without a search (a route in progress at login drew every walk
 -- again, about a second of the GPS at 6 to 10 ms a frame).
