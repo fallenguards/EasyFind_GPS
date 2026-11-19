@@ -393,5 +393,27 @@ function tests.aCitysDoor_theWayPastItWaitsTillItIsGoneThrough()
     H.assertTrue(westmost() < -30, "through it, the walk on: " .. westmost())
 end
 
+-- A later step's way is asked for with the step's own reach (near), as it
+-- is kept: asked without, a step that ends beside its spot was never
+-- found and stayed a straight line.
+function tests.aLaterStepsWay_isAskedWithItsReach()
+    local _, _, now, Mini = fresh()
+    local route = Mini._ns.GPS.CurrentRoute()
+    local turn = { ci = 1, wx = 40, wy = 0 }
+    route.steps = {
+        { kind = "travel", go = turn, arrive = turn },
+        { kind = "travel", go = { ci = 1, wx = 40, wy = 80 }, near = 25 },
+    }
+    local asked
+    local find = Mini._ns.GPSRoute.WalkPath
+    Mini._ns.GPSRoute.WalkPath = function(ci, sx, sy, tx, ty, lazy, near)
+        if sx == 40 and ty == 80 then asked = near end
+        return find(ci, sx, sy, tx, ty, lazy, near)
+    end
+    now.t = now.t + 1
+    Mini:Refresh()
+    H.assertEq(asked, 25)
+end
+
 local pass, fail, failures = H.runSuite("GPSMinimap", tests)
 return { pass = pass, fail = fail, failures = failures }

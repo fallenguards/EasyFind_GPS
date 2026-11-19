@@ -163,7 +163,7 @@ local function Walk(route, i, ci, sci, sx, sy, tx, ty)
     local c = legs[i]
     if c and c.route == route and c.sx == sx and c.sy == sy and c.tx == tx and c.ty == ty then return c.path end
     local find = ns.GPSRoute and ns.GPSRoute.WalkPath
-    local path = sci == ci and find and find(ci, sx, sy, tx, ty, true)
+    local path = sci == ci and find and find(ci, sx, sy, tx, ty, true, route.steps[i].near)
     -- Not drawn yet: asked again next time, straight meanwhile.
     if path == nil and sci == ci then return nil end
     path = path or false
