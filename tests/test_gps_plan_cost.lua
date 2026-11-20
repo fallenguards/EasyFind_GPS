@@ -162,5 +162,32 @@ function tests.release_shelvedFindsGoIdle_landmarksStay()
     Nav.SetDropLimit(nil)
 end
 
+-- A pair's danger weight is its line's share in each quarter, worked out
+-- quarter by quarter: the same as weighing the line at 20,000 points.
+function tests.aLinesDangerWeight_isEachQuartersShare()
+    local Nav = Grid()
+    local dw = {}
+    for k = 1, 16 do dw[k] = ({ 1, 1.5, 2.5, 5 })[(k * 7) % 4 + 1] end
+    local function Sampled(ax, ay, bx, by)
+        local sum, n = 0, 20000
+        for j = 0, n - 1 do
+            local f = (j + 0.5) / n
+            local qx, qy = math.floor(ax + (bx - ax) * f), math.floor(ay + (by - ay) * f)
+            sum = sum + dw[qx * 4 + qy + 1]
+        end
+        return sum / n
+    end
+    local lines = {
+        { 0.1, 0.1, 3.9, 3.9 }, { 3.9, 0.2, 0.3, 3.7 }, { 0.5, 2.5, 3.5, 2.5 }, { 1.5, 3.9, 1.5, 0.1 },
+        { 0.2, 0.3, 0.8, 0.6 }, { 2.9, 1.1, 0.4, 1.8 }, { 3.99, 3.99, 0.01, 0.02 }, { 1.2, 0.4, 1.7, 3.6 },
+    }
+    for _, l in ipairs(lines) do
+        local got, want = Nav._lineWeight(dw, l[1], l[2], l[3], l[4]), Sampled(l[1], l[2], l[3], l[4])
+        H.assertTrue(math.abs(got - want) < 0.001, table.concat(l, ", ") .. ": " .. got .. " for " .. want)
+        H.assertTrue(math.abs(got - Nav._lineWeight(dw, l[3], l[4], l[1], l[2])) < 1e-9, "the same the other way round")
+    end
+    H.assertEq(Nav._lineWeight(dw, 2.2, 1.3, 2.8, 1.9), dw[2 * 4 + 1 + 1])
+end
+
 local pass, fail, failures = H.runSuite("GPSPlanCost", tests)
 return { pass = pass, fail = fail, failures = failures }

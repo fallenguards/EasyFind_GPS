@@ -38,7 +38,6 @@ local offRoad, roadsOnly = OFF_ROAD_WEIGHT, false
 -- Ground to go around (Nav.SetDanger): a yard there costs its weight to
 -- choose, its time the same. { [continent] = { [danger cell] = weight } }
 local dangerSet
-local DANGER_SAMPLE = 16   -- yards between the points a crossing pair's line is weighed at
 local quartersOf = {}      -- per cells a side: each row's quarter of the tile
 -- The highest drop walks take, in yards: nil the safe height each
 -- continent's data was built with, else a character's own (Nav.SetDropLimit),
@@ -424,6 +423,32 @@ local function TileDanger(w, key)
     end
     return dw or nil
 end
+
+-- The mean of a tile's danger weights along a line, its ends in quarters
+-- (0 to 4 a side): each quarter's weight by the line's share inside it.
+local function LineWeight(dw, ax, ay, bx, by)
+    local cx, cy = mmin(3, mmax(0, mfloor(ax))), mmin(3, mmax(0, mfloor(ay)))
+    local ex, ey = mmin(3, mmax(0, mfloor(bx))), mmin(3, mmax(0, mfloor(by)))
+    if cx == ex and cy == ey then return dw[cx * 4 + cy + 1] end
+    local dx, dy = bx - ax, by - ay
+    local stepX, stepY = ex > cx and 1 or -1, ey > cy and 1 or -1
+    -- Where the line leaves its quarter by x and by y (2: never).
+    local nextX = cx ~= ex and (cx + (stepX > 0 and 1 or 0) - ax) / dx or 2
+    local nextY = cy ~= ey and (cy + (stepY > 0 and 1 or 0) - ay) / dy or 2
+    local at, sum = 0, 0
+    while cx ~= ex or cy ~= ey do
+        local weight = dw[cx * 4 + cy + 1]
+        if nextX < nextY then
+            sum, at, cx = sum + (nextX - at) * weight, nextX, cx + stepX
+            nextX = cx ~= ex and nextX + stepX / dx or 2
+        else
+            sum, at, cy = sum + (nextY - at) * weight, nextY, cy + stepY
+            nextY = cy ~= ey and nextY + stepY / dy or 2
+        end
+    end
+    return sum + (1 - at) * dw[cx * 4 + cy + 1]
+end
+Nav._lineWeight = LineWeight
 
 -- Each row's (and column's) quarter of a tile N cells a side.
 local function Quarters(N)
@@ -930,16 +955,8 @@ local function TileCosts(w, key)
     local function Along(a, b)
         if not dw then return 1 end
         if flat then return flat end
-        local dx, dy = sx[b] - sx[a], sy[b] - sy[a]
-        local k = mmax(1, mfloor(msqrt(dx * dx + dy * dy) / DANGER_SAMPLE))
-        local sum = 0
-        for j = 0, k - 1 do
-            local f = (j + 0.5) / k
-            local qx = mmin(3, mmax(0, mfloor((sx[a] + dx * f - qx0) * 4 / TILE)))
-            local qy = mmin(3, mmax(0, mfloor((sy[a] + dy * f - qy0) * 4 / TILE)))
-            sum = sum + dw[qx * 4 + qy + 1]
-        end
-        return sum / k
+        return LineWeight(dw, (sx[a] - qx0) * 4 / TILE, (sy[a] - qy0) * 4 / TILE,
+            (sx[b] - qx0) * 4 / TILE, (sy[b] - qy0) * 4 / TILE)
     end
     -- Each pair's cost by its index in the upper triangle: the straight
     -- line plus the way around, false where no way joins them; and that
