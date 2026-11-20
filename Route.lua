@@ -356,6 +356,8 @@ local function TravelCost(g, d, detour)
 end
 
 local WALK_KEY = 65536
+-- A heap id from here up is a walk not bounded yet, its key added.
+local UNBOUND = WALK_KEY * WALK_KEY
 
 -- The least a walk not yet priced can take, in running yards: the
 -- straight line, or on the walking grid the landmarks' bound on its cost,
@@ -571,9 +573,11 @@ end
 -- continent (and landmass, without the walking grid); a walk not yet
 -- priced on the grid costs the least it can. A timed crossing's wait
 -- hangs on when its dock is reached: its edge is made for the visit.
+-- A walk's bound costs a search at each end, so it waits on the heap at
+-- its straight line and is worked out only once that comes up.
 local function Dijkstra(g)
     local n = #g.nodes
-    local nodes, walkSec, walkWind, nav = g.nodes, g.walkSec, g.walkWind, g.nav
+    local nodes, walkSec, walkWind, nav, least = g.nodes, g.walkSec, g.walkWind, g.nav, g.least
     local bound = nav and 1
     local dist, prev, prevEdge, done = {}, {}, {}, {}
     dist[g.start] = 0
@@ -585,8 +589,21 @@ local function Dijkstra(g)
         if pops % 32 == 0 then Pause() end
         local best, bestD = heap:Pop()
         if not best then break end
+        if best >= UNBOUND then
+            local key = best - UNBOUND
+            local i, idx = mfloor(key / WALK_KEY), key % WALK_KEY
+            local to = idx + n
+            if not done[to] then
+                local sec = TravelCost(g, LeastYards(g, i, idx), bound)
+                local nd = dist[i] + sec
+                if nd < (dist[to] or mhuge) then
+                    dist[to], prev[to] = nd, i
+                    prevEdge[to] = TravelEdge(g, i, idx, sec)
+                    heap:Push(nd, to)
+                end
+            end
         -- An entry outdone since it was pushed is passed over.
-        if not done[best] and bestD <= dist[best] then
+        elseif not done[best] and bestD <= dist[best] then
             local onFoot = best > n
             local i = onFoot and best - n or best
             if i == g.goal then
@@ -602,13 +619,19 @@ local function Dijkstra(g)
                     if idx ~= i and (nav or nodes[idx].land == land) and nodes[idx].inside == node.inside then
                         local key = i * WALK_KEY + idx
                         local priced = walkSec[key]
-                        local sec = priced or TravelCost(g, LeastYards(g, i, idx), bound)
-                        local nd = bestD + sec
+                        local yards = not priced and (least[key] or (not nav and LeastYards(g, i, idx)))
                         local to = idx + n
-                        if nd < (dist[to] or mhuge) then
-                            dist[to], prev[to] = nd, best
-                            prevEdge[to] = TravelEdge(g, i, idx, sec, priced and walkWind[key] or nil)
-                            heap:Push(nd, to)
+                        if priced or yards then
+                            local sec = priced or TravelCost(g, yards, bound)
+                            local nd = bestD + sec
+                            if nd < (dist[to] or mhuge) then
+                                dist[to], prev[to] = nd, best
+                                prevEdge[to] = TravelEdge(g, i, idx, sec, priced and walkWind[key] or nil)
+                                heap:Push(nd, to)
+                            end
+                        else
+                            local nd = bestD + TravelCost(g, Dist(node.p, nodes[idx].p), bound)
+                            if nd < (dist[to] or mhuge) then heap:Push(nd, UNBOUND + key) end
                         end
                     end
                 end

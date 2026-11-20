@@ -22,6 +22,7 @@ local SNAP_CELLS = 6               -- a point off the grid takes a floor this ma
 local REACH_KEPT = 256             -- end points whose tile search is kept
 local LANDMARKS_USED = 3           -- of the data's landmarks, the most telling for a walk
 local WALKS_KEPT = 512             -- walk costs kept
+local MARKS_KEPT = 2048            -- points whose landmark distances are kept
 -- Walking weights, the same in dev/tools/navmesh/grid.py: swimming at the
 -- game's swim speed against running; off the road costs what the road does.
 local SWIM_WEIGHT = 7.0 / 4.72
@@ -140,7 +141,7 @@ local function World(ci)
     local data = ns.GPSNavData and ns.GPSNavData[ci]
     if not data then return nil end
     w = { ci = ci, data = data, N = data.cells, cell = data.cell, tiles = {}, order = {}, costs = {},
-          reach = {}, reachN = 0, walks = {}, walksN = 0, marks = {}, danger = {} }
+          reach = {}, reachN = 0, walks = {}, walksN = 0, marks = {}, marksN = 0, danger = {}, shelf = {} }
     worlds[ci] = w
     return w
 end
@@ -454,7 +455,7 @@ local function Reset()
     Nav.epoch = Epoch()
     for _, w in pairs(worlds) do
         w.walks, w.walksN, w.reach, w.reachN, w.costs = {}, 0, {}, 0, {}
-        w.tiles, w.order, w.marks, w.danger = {}, {}, {}, {}
+        w.tiles, w.order, w.marks, w.marksN, w.danger, w.shelf = {}, {}, {}, 0, {}, {}
     end
 end
 
@@ -477,15 +478,21 @@ function Nav.SetRoads(on)
 end
 
 -- The highest drop walks may take, in yards (math.huge: any); nil goes
--- back to the safe height each continent's data was built with.
+-- back to the safe height each continent's data was built with. The
+-- tiles hold every drop with its height. What was found under the old
+-- limit is shelved until it comes back: every route is followed by
+-- trials under other limits (no jumps, a parachute).
 function Nav.SetDropLimit(yards)
     if yards == dropLimit then return end
+    local old, new = dropLimit or false, yards or false
     dropLimit = yards
-    -- The tiles hold every drop with its height: only what was found
-    -- under the old limit goes.
     Nav.epoch = Epoch()
     for _, w in pairs(worlds) do
-        w.walks, w.walksN, w.reach, w.reachN, w.costs, w.marks = {}, 0, {}, 0, {}, {}
+        w.shelf[old] = { w.walks, w.walksN, w.reach, w.reachN, w.costs, w.marks, w.marksN }
+        local set = w.shelf[new] or { {}, 0, {}, 0, {}, {}, 0 }
+        w.shelf[new] = nil
+        w.walks, w.walksN, w.reach, w.reachN, w.costs, w.marks, w.marksN =
+            set[1], set[2], set[3], set[4], set[5], set[6], set[7]
     end
 end
 
@@ -910,13 +917,19 @@ local function TileCosts(w, key)
     for k = 1, n do sx[k], sy[k] = SideXY(w, SideV(sides, side[k])) end
     -- Danger: a pair's cost at the mean weight along its line.
     local dw = TileDanger(w, key)
-    local qx0, qy0
+    local qx0, qy0, flat
     if dw then
         local tx, ty = mfloor(key / 64), key % 64
         qx0, qy0 = ORIGIN - ty * TILE - TILE, ORIGIN - tx * TILE - TILE
+        -- One weight all over the tile: every line's mean.
+        flat = dw[1]
+        for k = 2, 16 do
+            if dw[k] ~= flat then flat = nil break end
+        end
     end
     local function Along(a, b)
         if not dw then return 1 end
+        if flat then return flat end
         local dx, dy = sx[b] - sx[a], sy[b] - sy[a]
         local k = mmax(1, mfloor(msqrt(dx * dx + dy * dy) / DANGER_SAMPLE))
         local sum = 0
@@ -1412,6 +1425,8 @@ local function Marks(w, x, y, rev)
     local m = w.marks[key]
     if m ~= nil then return m or nil end
     w.used = GetTime()
+    if w.marksN >= MARKS_KEPT then w.marks, w.marksN = {}, 0 end
+    w.marksN = w.marksN + 1
     local alt = w.data.marks
     local _, _, reach = End(w, x, y, nil, rev)
     if not (alt and reach) then
@@ -1550,10 +1565,28 @@ end
 function Nav.Has(ci) return ns.GPSNavData ~= nil and ns.GPSNavData[ci] ~= nil end
 Nav.Ensure = Nav.Has
 
+-- One kept set's tile costs and ends idle for age seconds go: whether
+-- any stay, and how many ends went.
+local function DropIdle(costs, reach, age, now)
+    local stays, gone = false, 0
+    for key, tc in pairs(costs) do
+        if tc and (tc.used or 0) + age <= now then costs[key] = nil elseif tc then stays = true end
+    end
+    for rk, kept in pairs(reach) do
+        if (kept.used or 0) + age <= now then
+            reach[rk], gone = nil, gone + 1
+        else
+            stays = true
+        end
+    end
+    return stays, gone
+end
+
 -- Decoded data idle for age seconds goes: a tile by its last read, a
 -- tile's walking costs and a kept end by the last walk that read them,
--- and a continent's kept walks once no walk has asked for them. True
--- while anything decoded remains.
+-- and a continent's kept walks once no walk has asked for them, the
+-- shelved ones too. Landmark distances stay: small, and every plan's
+-- bounds. True while anything decoded remains.
 function Nav.Release(age)
     local now = GetTime()
     local held = false
@@ -1568,20 +1601,21 @@ function Nav.Release(age)
             end
         end
         if #order > 0 then held = true end
-        for key, tc in pairs(w.costs) do
-            if tc and (tc.used or 0) + age <= now then w.costs[key] = nil elseif tc then held = true end
-        end
-        for rk, kept in pairs(w.reach) do
-            if (kept.used or 0) + age <= now then
-                w.reach[rk], w.reachN = nil, w.reachN - 1
-            else
-                held = true
-            end
+        local stays, gone = DropIdle(w.costs, w.reach, age, now)
+        w.reachN = w.reachN - gone
+        if stays then held = true end
+        for _, set in pairs(w.shelf) do
+            stays, gone = DropIdle(set[5], set[3], age, now)
+            set[4] = set[4] - gone
+            if stays then held = true end
         end
         if w.used then
             if w.used + age <= now then
                 w.used = nil
-                w.walks, w.walksN, w.reach, w.reachN, w.costs, w.marks = {}, 0, {}, 0, {}, {}
+                w.walks, w.walksN, w.reach, w.reachN, w.costs = {}, 0, {}, 0, {}
+                for _, set in pairs(w.shelf) do
+                    set[1], set[2], set[3], set[4], set[5] = {}, 0, {}, 0, {}
+                end
             else
                 held = true
             end
