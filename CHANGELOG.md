@@ -7,12 +7,12 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 ## [1.9.0] - 2026-11-21
 
 ### Added
-- **Guides can lead the GPS**: a guide extension, such as the EasyFind: RestedXP Extension, sends its next few stops as one route, puts its step's creatures under the arrow with a Target button each and the items or macros the step says to use beside them, and keeps the Hearthstone and flight paths for the steps that call for them
+- **Guides can lead the GPS**: a guide extension, such as the EasyFind: RestedXP Extension, sends its next few stops as one route, puts its step's creatures under the arrow with a Target button each and the items or macros the step says to use beside them, keeps the Hearthstone and flight paths for the steps that call for them, and leads straight to a spot the guide glides or flies to
 - **Walks go around danger**: a walk keeps away from ground where creatures are three or more levels above you, further out of the way the higher they are. On by default; Dangerous areas under Route planning > Avoid turns it off
 - **The box under the arrow, line by line**: its description, this step's distance and time, and the total time left each have a switch, on the box's right-click menu and in the GPS options. Box under the arrow on that menu hides the box itself; a right-click on the arrow brings the menu back
 - **Show on map for a group member**: a party or raid member's right-click menu opens the world map on their zone and marks them as they move
 - **A menu on the Target buttons**: a right-click opens a menu with Close
-- **The whole step on hover**: hover the box under the arrow to read a step that was cut to fit
+- **Long steps in full**: a step too long for one line of the box under the arrow runs onto more lines. Wrap long steps, among the box's switches, cuts it to one line again, and hovering the box reads the rest
 
 ### Changed
 - **Shorter walks**: off the roads, down slopes and around hills a walk takes the direct way where it went the long way round
