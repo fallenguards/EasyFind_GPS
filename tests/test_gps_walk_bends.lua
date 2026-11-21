@@ -37,5 +37,13 @@ function tests.downTheBump_notRoundIt()
     H.assertTrue(pts[5] < 3760, "the first leg goes west off the bump: x " .. math.floor(pts[5]))
 end
 
+-- The Bandit Hideout: in by the cave's mouth, not round the mountain to the hill above it.
+function tests.intoTheHideout_byItsMouth()
+    local _, len = Walk(3610, 1716, 3687, 1412)
+    H.assertTrue(len < 600, "304 yd straight, 453 by the mouth: " .. math.floor(len))
+    _, len = Walk(3610, 1716, 3717, 1435)
+    H.assertTrue(len < 600, "301 yd straight, 411 by the mouth, 1,290 round the mountain: " .. math.floor(len))
+end
+
 local pass, fail, failures = H.runSuite("GPSWalkBends", tests)
 return { pass = pass, fail = fail, failures = failures }
