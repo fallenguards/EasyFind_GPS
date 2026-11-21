@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.9.1] - 2026-11-21
+
+### Fixed
+- **Death skips on Zephras Isle**: on a guide's step that says to die and respawn, a ghost is led to the Spirit Healer where the guide's step puts it. It was led back to its corpse wherever the GPS knew no Spirit Healer nearby
+
+---
+
 ## [1.9.0] - 2026-11-21
 
 ### Added
