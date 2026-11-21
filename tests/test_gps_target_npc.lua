@@ -68,7 +68,7 @@ local function fresh(opts)
     ns.ShowTogglePopup = function(name, anchor, defs) menu.name, menu.anchor, menu.defs = name, anchor, defs end
     H.loadModule("Arrow.lua", env, ns)
     local w = { Arrow = ns.GPSArrow, player = player, state = state, combat = combat, ticks = ticks, db = db,
-                menu = menu }
+                menu = menu, frames = frames }
     function w.button(i)
         local name = (i or 1) == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i)
         for _, f in ipairs(frames) do if f.name == name then return f end end
@@ -286,6 +286,73 @@ function tests.aGuidesTargets_inAFight_stayAsTheyWere()
     w.combat.v = false
     w.tick()
     H.assertTrue(w.shown()[1]:find("Bareth Dawnstone", 1, true) ~= nil, "the new list after it")
+end
+
+-- A guide's things to use (setUses): a button each under the target rows,
+-- its press the item, the spell or the macro (asked for, 2026-11-21).
+local function useButton(w, i)
+    for _, f in ipairs(w.frames) do if f.name == "EasyFindGPSUse" .. i then return f end end
+end
+
+function tests.aGuidesUses_aButtonEach_underTheTargets()
+    local w = fresh()
+    w.state.route = nil
+    w.Arrow.SetTargets({ { name = "Scarlet Warrior", kind = "kill" } })
+    w.Arrow.SetUses({
+        { kind = "item", id = 1251, name = "Linen Bandage", icon = 133685 },
+        { kind = "macro", name = "Linen Bandages", icon = 134400, macro = "/cast Linen Bandage" },
+        { kind = "spell", id = 8690, name = "Hearthstone" },
+    })
+    local item, macro, spell = useButton(w, 1), useButton(w, 2), useButton(w, 3)
+    H.assertTrue(item:IsShown() and macro:IsShown() and spell:IsShown(), "one each")
+    H.assertEq(item:GetAttribute("type"), "item")
+    H.assertEq(item:GetAttribute("item"), "item:1251")
+    H.assertEq(item.look.text:GetText(), "|T133685:14|t Linen Bandage", "its icon and name")
+    H.assertEq(macro:GetAttribute("type"), "macro")
+    H.assertEq(macro:GetAttribute("macrotext"), "/cast Linen Bandage")
+    H.assertNil(macro:GetAttribute("item"), "nothing of the row before")
+    H.assertEq(spell:GetAttribute("spell"), "Hearthstone")
+    H.assertEq(spell.look.text:GetText(), "Hearthstone", "no icon given: the name alone")
+    H.assertTrue(item.y < w.button(1).y, "under the target row")
+    H.assertTrue(macro.y < item.y and spell.y < macro.y, "stacked down")
+    H.assertEq(w.button(1):GetAttribute("type"), "macro", "the Target button and its key are the creature's still")
+    w.Arrow.SetUses(nil)
+    H.assertFalse(item:IsShown(), "none set: gone")
+    H.assertNil(item:GetAttribute("type"), "and its action off")
+end
+
+function tests.aGuidesUses_closedFromTheMenu_backWithANewList()
+    local w = fresh()
+    w.state.route = nil
+    local list = { { kind = "item", id = 1251, name = "Linen Bandage" }, { kind = "item", id = 2589, name = "Linen Cloth" } }
+    w.Arrow.SetUses(list)
+    useButton(w, 1).rowMenu(useButton(w, 1))
+    w.menu.defs[1].onClick()
+    H.assertEq(useButton(w, 1):GetAttribute("item"), "item:2589", "the bandage closed, the cloth moved up")
+    H.assertFalse(useButton(w, 2):IsShown())
+    w.Arrow.SetUses({ { kind = "item", id = 1251, name = "Linen Bandage" } })
+    H.assertEq(useButton(w, 1):GetAttribute("item"), "item:1251", "a new list opens it again")
+end
+
+function tests.aGuidesUses_inAFight_stayAsTheyWere_andBadOnesAreLeftOut()
+    local w = fresh()
+    w.state.route = nil
+    w.Arrow.SetUses({ { kind = "item", id = 1251, name = "Linen Bandage" } })
+    w.combat.v = true
+    w.Arrow.SetUses({ { kind = "item", id = 2589, name = "Linen Cloth" } })
+    H.assertEq(useButton(w, 1):GetAttribute("item"), "item:1251", "no secure change in a fight")
+    w.combat.v = false
+    w.tick()
+    H.assertEq(useButton(w, 1):GetAttribute("item"), "item:2589", "the new list after it")
+    w.Arrow.SetUses({ { kind = "macro", name = "No text" }, { kind = "item", name = "No id" }, { kind = "dance", id = 1 },
+                      "junk", { kind = "item", id = 4, name = "Kept" } })
+    H.assertEq(useButton(w, 1):GetAttribute("item"), "item:4", "only the one that can be pressed")
+    H.assertFalse(useButton(w, 2) ~= nil and useButton(w, 2):IsShown())
+    w.Arrow.SetUses({ { kind = "item", id = 1 }, { kind = "item", id = 2 }, { kind = "item", id = 3 }, { kind = "item", id = 4 },
+                      { kind = "item", id = 5 } })
+    H.assertTrue(useButton(w, 4):IsShown(), "four at most")
+    H.assertNil(useButton(w, 5))
+    H.assertEq(useButton(w, 1).look.text:GetText(), "Use", "no name yet: the game's word")
 end
 
 local pass, fail, failures = H.runSuite("GPSTargetNpc", tests)

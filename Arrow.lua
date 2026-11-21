@@ -236,8 +236,11 @@ function Arrow:Guiding() return frame ~= nil and frame:IsShown() end
 local TARGET_YARDS, TARGET_EVERY, TARGET_MAX, ROW_H, ROW_GAP = 40, 0.5, 6, 24, 2
 local KIND_ICON = { kill = "Interface\\Cursor\\Attack", talk = "Interface\\GossipFrame\\GossipGossipIcon" }
 -- btns, rows, guide (set from outside), npc { dest, name, ci, wx, wy },
--- closed (a route's dest), closedNames (a guide's), ticker, menuAnchor
-local target = { btns = {}, rows = {}, closedNames = {} }
+-- closed (a route's dest), closedNames (a guide's), ticker, menuAnchor;
+-- uses (a guide's things to use), useBtns, closedUses (by row)
+local target = { btns = {}, rows = {}, closedNames = {}, useBtns = {}, closedUses = {} }
+local USE_MAX = 4
+local USE_KINDS = { item = true, spell = true, macro = true }
 
 function Arrow.TargetMark()
     local db = DB()
@@ -277,7 +280,7 @@ local function HideButton(btn)
     btn:Hide()
     btn:ClearAllPoints()
     btn:SetAttribute("type", nil)
-    btn.macro, btn.label, btn.x, btn.y, btn.row = nil, nil, nil, nil, nil
+    btn.macro, btn.label, btn.x, btn.y, btn.row, btn.use = nil, nil, nil, nil, nil, nil
 end
 
 local TargetTick
@@ -288,6 +291,7 @@ local TargetTick
 local function TargetMenu(btn)
     local row = btn.row
     if not (row and ns.ShowTogglePopup) then return end
+    local isUse = btn.isUse
     local dest = row.route and target.npc and target.npc.dest
     local anchor = target.menuAnchor
     if not anchor then
@@ -301,7 +305,9 @@ local function TargetMenu(btn)
     anchor:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / scale, cy / scale)
     ns.ShowTogglePopup("EasyFindGPSTargetMenu", anchor, {
         { kind = "action", label = _G["CLOSE"] or "Close", onClick = function()
-            if row.route then
+            if isUse then
+                target.closedUses[row] = true
+            elseif row.route then
                 target.closed = dest
             else
                 target.closedNames[row.name] = true
@@ -311,12 +317,9 @@ local function TargetMenu(btn)
     }, {})
 end
 
-local function TargetButton(i)
-    local btn = target.btns[i]
-    if btn then return btn end
+local function StackButton(pool, i, name)
     -- starts shown: hidden at the end of its setup
-    btn = CreateFrame("Button", i == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i), UIParent,
-        "SecureActionButtonTemplate")
+    local btn = CreateFrame("Button", name, UIParent, "SecureActionButtonTemplate")
     btn:SetFrameStrata("LOW")
     btn:RegisterForClicks("AnyUp", "AnyDown")
     btn:SetAttribute("useOnKeyDown", false)
@@ -332,8 +335,35 @@ local function TargetButton(i)
     btn.look = look
     btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
     btn:Hide()
-    target.btns[i] = btn
+    pool[i] = btn
     return btn
+end
+
+local function TargetButton(i)
+    return target.btns[i] or StackButton(target.btns, i, i == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i))
+end
+
+local function UseButton(i)
+    local btn = target.useBtns[i]
+    if btn then return btn end
+    btn = StackButton(target.useBtns, i, "EasyFindGPSUse" .. i)
+    btn.isUse = true
+    return btn
+end
+
+-- A row's words, its width for them and its place in the stack.
+local function PlaceRow(btn, label, x, top)
+    if btn.label ~= label then
+        btn.label = label
+        btn.look.text:SetText(label)
+        btn:SetSize(btn.look.text:GetStringWidth() + 20, ROW_H)
+    end
+    if btn.x ~= x or btn.y ~= top then
+        btn.x, btn.y = x, top
+        btn:ClearAllPoints()
+        btn:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, top)
+    end
+    btn:Show()
 end
 
 -- The stack's top on UIParent: under the plate while the arrow shows; at
@@ -395,30 +425,42 @@ TargetTick = function()
         local kind = KIND_ICON[row.kind]
         local label = markIcon .. (kind and ("|T" .. kind .. ":14|t ") or "")
             .. ((row.route and #rows == 1) and (_G["TARGET"] or "Target") or row.name)
-        if btn.label ~= label then
-            btn.label = label
-            btn.look.text:SetText(label)
-            btn:SetSize(btn.look.text:GetStringWidth() + 20, ROW_H)
-        end
-        local top = y - (i - 1) * (ROW_H + ROW_GAP)
-        if btn.x ~= x or btn.y ~= top then
-            btn.x, btn.y = x, top
-            btn:ClearAllPoints()
-            btn:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, top)
-        end
-        btn:Show()
+        PlaceRow(btn, label, x, y - (i - 1) * (ROW_H + ROW_GAP))
     end
     for i = #rows + 1, #target.btns do
         if target.btns[i]:IsShown() then HideButton(target.btns[i]) end
     end
-    if not (target.guide or target.npc) and target.ticker then
+    -- A guide's things to use, under the targets: the press uses the item,
+    -- casts the spell or runs the macro.
+    local used = 0
+    if target.uses then
+        for _, use in ipairs(target.uses) do
+            if used < USE_MAX and not target.closedUses[use] then
+                used = used + 1
+                local btn = UseButton(used)
+                btn.row = use
+                if btn.use ~= use then
+                    btn.use = use
+                    btn:SetAttribute("type", use.kind)
+                    btn:SetAttribute("item", use.kind == "item" and ("item:" .. use.id) or nil)
+                    btn:SetAttribute("spell", use.kind == "spell" and (use.name or use.id) or nil)
+                    btn:SetAttribute("macrotext", use.kind == "macro" and use.macro or nil)
+                end
+                PlaceRow(btn, use.label, x, y - (#rows + used - 1) * (ROW_H + ROW_GAP))
+            end
+        end
+    end
+    for i = used + 1, #target.useBtns do
+        if target.useBtns[i]:IsShown() then HideButton(target.useBtns[i]) end
+    end
+    if not (target.guide or target.npc or target.uses) and target.ticker then
         target.ticker:Cancel()
         target.ticker = nil
     end
 end
 
 local function TargetSync()
-    if (TargetNpc() or target.guide) and not target.ticker then
+    if (TargetNpc() or target.guide or target.uses) and not target.ticker then
         target.ticker = C_Timer.NewTicker(TARGET_EVERY, TargetTick)
     end
     TargetTick()
@@ -429,6 +471,28 @@ end
 function Arrow.SetTargets(list)
     target.guide = type(list) == "table" and #list > 0 and list or nil
     wipe(target.closedNames)
+    TargetSync()
+end
+
+-- A guide's things to use for its step, each { kind = "item" | "spell" |
+-- "macro", id, name, icon, macro (its text) }: a button under the target
+-- rows while set; nil or none takes them away. One with no kind or nothing
+-- to press is left out.
+function Arrow.SetUses(list)
+    local uses
+    for _, use in ipairs(type(list) == "table" and list or {}) do
+        local ok = type(use) == "table" and USE_KINDS[use.kind]
+            and (use.kind == "macro" and type(use.macro) == "string"
+                or use.kind == "item" and type(use.id) == "number"
+                or use.kind == "spell" and (use.name or use.id) ~= nil)
+        if ok then
+            use.label = (use.icon and ("|T" .. use.icon .. ":14|t ") or "") .. (use.name or _G["USE"] or "Use")
+            uses = uses or {}
+            uses[#uses + 1] = use
+        end
+    end
+    target.uses = uses
+    wipe(target.closedUses)
     TargetSync()
 end
 
