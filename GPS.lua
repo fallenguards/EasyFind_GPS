@@ -4281,11 +4281,13 @@ end
 
 -- The box under the arrow and the beacon: shown unless switched off, its
 -- lines each a switch of their own (2026-11-19: "as much/little as ppl
--- want"), all stored only when off.
+-- want"), all stored only when off. The last is no line: a long step
+-- runs onto more lines, where off cuts it to one (2026-11-21).
 GPS.BOX_LINES = {
     { key = "gpsBoxStep", label = _G["QUEST_DESCRIPTION"] or "Description" },
     { key = "gpsBoxThisStep", label = L["GPS_BOX_THIS_STEP"] },
     { key = "gpsBoxTotal", label = L["GPS_BOX_TOTAL"] },
+    { key = "gpsBoxWrap", label = L["GPS_BOX_WRAP"] },
 }
 
 function GPS.ArrowBoxShown()

@@ -44,6 +44,7 @@ local function Plate(db, gps)
         .. "\n" .. Cut(src, "function WorldPin.PlateLines(route, yards)", "\nend\n")
     local env = setmetatable({
         WorldPin = {}, mmax = math.max, mmin = math.min, PLATE_MAX_W = 240, sformat = string.format,
+        WRAP_LINES = 4, Natural = function(fs) return fs:GetStringWidth() end,
         ns = { L = setmetatable({}, { __index = function(_, k) return k .. " %s" end }), GPS = gps },
     }, { __index = _G })
     assert(load(chunk, "=WorldPin.lua plate", "t", env))()
@@ -56,6 +57,8 @@ local function Line()
     function fs:GetStringWidth() return #(self.text or "") * 6 end
     function fs:GetStringHeight() return (self.text or "") ~= "" and 10 or 0 end
     function fs:SetWidth() end
+    function fs:SetWordWrap() end
+    function fs:SetMaxLines() end
     function fs:SetShown(on) self.shown = on end
     function fs:ClearAllPoints() self.under = nil end
     function fs:SetPoint(_, rel) self.under = rel end

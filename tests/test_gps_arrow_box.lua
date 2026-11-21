@@ -42,6 +42,7 @@ local function Plate(gps)
         .. Cut(src, "function WorldPin.PlateLines(route, yards)", "\nend\n")
     local env = setmetatable({
         WorldPin = {}, mmax = math.max, mmin = math.min, PLATE_MAX_W = 240, sformat = string.format,
+        WRAP_LINES = 4, Natural = function(fs) return fs:GetStringWidth() end,
         ns = { L = setmetatable({}, { __index = function(_, k) return k .. " %s" end }), GPS = gps },
     }, { __index = _G })
     assert(load(chunk, "=WorldPin.lua plate", "t", env))()
@@ -54,6 +55,8 @@ local function Line()
     function fs:GetStringWidth() return #(self.text or "") * 6 end
     function fs:GetStringHeight() return (self.text or "") ~= "" and 10 or 0 end
     function fs:SetWidth() end
+    function fs:SetWordWrap(on) self.wraps = on end
+    function fs:SetMaxLines(n) self.maxLines = n end
     function fs:SetShown(on) self.shown = on end
     function fs:ClearAllPoints() self.under = nil end
     function fs:SetPoint(_, rel) self.under = rel end
@@ -171,6 +174,32 @@ function tests.theArrowUnlocked_theGripsHoverIsTheBoxs()
     H.assertEq(#heard, 2, "a box with no hover of its own: nothing, no error")
 end
 
+-- Most of a guide's steps were cut with an ellipsis (2026-11-21, "make
+-- room for it"): a long step runs onto more lines, four at most, and a
+-- switch among the box's own cuts it to one line again, at once.
+function tests.aLongStep_runsOntoMoreLines_unlessSwitchedOff()
+    local db = {}
+    local GPS = Box(db)
+    local WorldPin = Plate(GPS)
+    local plate = { text = Line(), note = Line(), sub = Line(), sub2 = Line(), SetSize = function() end }
+    local long = "Jump off the mountain and use Walk on Air to fly towards the waypoint location."
+    WorldPin.FillPlate(plate, long, "This step: 364 yd")
+    H.assertTrue(plate.text.wraps, "wrapped")
+    H.assertEq(plate.text.maxLines, 4, "four lines at most; past that, the hover")
+    local wrap
+    for _, line in ipairs(GPS.BOX_LINES) do
+        if line.key == "gpsBoxWrap" then wrap = line end
+    end
+    H.assertNotNil(wrap, "its switch among the box's own")
+    GPS.SetBoxLine("gpsBoxWrap", false)
+    H.assertEq(db.gpsBoxWrap, false, "off, stored")
+    WorldPin.FillPlate(plate, long, "This step: 364 yd")
+    H.assertFalse(plate.text.wraps, "the same words filled again: one line now")
+    H.assertEq(plate.text.maxLines, 1)
+    GPS.SetBoxLine("gpsBoxWrap", true)
+    H.assertNil(db.gpsBoxWrap, "on, nothing stored")
+end
+
 function tests.itsMenuRow_turnsTheBoxOffAndOn()
     local db = {}
     local GPS = Box(db)
@@ -204,7 +233,7 @@ function tests.theBoxsSwitches_areInTheFlyoutOffItsRow()
     H.assertEq(checks, 1, "one switch at the top level: the box's")
     local rows, labels = box.rows(), {}
     for _, r in ipairs(rows) do labels[#labels + 1] = r.isSeparator and "-" or r.text end
-    H.assertEq(table.concat(labels, ","), "GPS_PLATE_BORDER_MENU,-,Description,GPS_BOX_THIS_STEP,GPS_BOX_TOTAL")
+    H.assertEq(table.concat(labels, ","), "GPS_PLATE_BORDER_MENU,-,Description,GPS_BOX_THIS_STEP,GPS_BOX_TOTAL,GPS_BOX_WRAP")
     local total = rows[5]
     H.assertTrue(total.keepOpen, "a click leaves the flyout open")
     H.assertTrue(total.check.get())

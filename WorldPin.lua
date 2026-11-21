@@ -34,6 +34,7 @@ local WHITE = "Interface\\Buttons\\WHITE8x8"
 
 local THROTTLE = 0.05
 local PLATE_MAX_W = 240
+local WRAP_LINES = 4   -- a wrapped step's lines at most; the rest on hover
 local BEAM_H = 520
 local CORE_W, GLOW_W, HELIX_W = 18, 34, 60
 local EMBLEM = 64
@@ -370,18 +371,31 @@ local function StackLine(p, fs, s, above, h)
     return fs, h + (fs:GetStringHeight() or 10)
 end
 
+-- A line's width written out on one line, whatever width it was last set to.
+local function Natural(fs)
+    local unbounded = fs.GetUnboundedStringWidth
+    return unbounded and unbounded(fs) or fs:GetStringWidth() or 0
+end
+
 -- New lines on a plate, sized to them, the shown ones stacked from the
--- top; the same again does nothing.
+-- top; the same again does nothing. A step too long for the plate runs
+-- onto more lines (WRAP_LINES at most), unless its switch cuts it to one.
 function WorldPin.FillPlate(p, text, sub, sub2, note)
     text, sub, sub2, note = text or "", sub or "", sub2 or "", note or ""
-    if text == p.shownText and sub == p.shownSub and sub2 == p.shownSub2 and note == p.shownNote then return end
-    p.shownText, p.shownSub, p.shownSub2, p.shownNote = text, sub, sub2, note
+    local GPS = ns.GPS
+    local wrap = not (GPS and GPS.BoxLineShown) or GPS.BoxLineShown("gpsBoxWrap")
+    if text == p.shownText and sub == p.shownSub and sub2 == p.shownSub2 and note == p.shownNote
+        and wrap == p.shownWrap then
+        return
+    end
+    p.shownText, p.shownSub, p.shownSub2, p.shownNote, p.shownWrap = text, sub, sub2, note, wrap
+    p.text:SetWordWrap(wrap)
+    p.text:SetMaxLines(wrap and WRAP_LINES or 1)
     p.text:SetText(text)
     p.note:SetText(note)
     p.sub:SetText(sub)
     p.sub2:SetText(sub2)
-    local w = mmax(p.text:GetStringWidth() or 0, p.note:GetStringWidth() or 0, p.sub:GetStringWidth() or 0,
-        p.sub2:GetStringWidth() or 0)
+    local w = mmax(Natural(p.text), Natural(p.note), Natural(p.sub), Natural(p.sub2))
     local inner = mmin(PLATE_MAX_W, mmax(60, w))
     p.text:SetWidth(inner)
     p.note:SetWidth(inner)
