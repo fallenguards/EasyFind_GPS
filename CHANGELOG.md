@@ -4,6 +4,30 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.9.0] - 2026-11-21
+
+### Added
+- **Guides can lead the GPS**: a guide extension, such as the EasyFind: RestedXP Extension, sends its next few stops as one route, puts its step's creatures under the arrow with a Target button each and the items or macros the step says to use beside them, and keeps the Hearthstone and flight paths for the steps that call for them
+- **Walks go around danger**: a walk keeps away from ground where creatures are three or more levels above you, further out of the way the higher they are. On by default; Dangerous areas under Route planning > Avoid turns it off
+- **The box under the arrow, line by line**: its description, this step's distance and time, and the total time left each have a switch, on the box's right-click menu and in the GPS options. Box under the arrow on that menu hides the box itself; a right-click on the arrow brings the menu back
+- **Show on map for a group member**: a party or raid member's right-click menu opens the world map on their zone and marks them as they move
+- **A menu on the Target buttons**: a right-click opens a menu with Close
+- **The whole step on hover**: hover the box under the arrow to read a step that was cut to fit
+
+### Changed
+- **Shorter walks**: off the roads, down slopes and around hills a walk takes the direct way where it went the long way round
+- **Dungeons in caves end at the portal**: a route to Wailing Caverns leads down the cave to the portal, where it ended at the cave's mouth
+- **Thunder Bluff is reached by a lift**: a route to the city rides up, where it ended in the canyon below
+- **Jumps**: a step down a ledge says to jump and where; "at full health" is gone
+- **Zephras Isle** (WoW Forever): its walking paths are rebuilt from the game as it is now, so a spot inside the Bandit Hideout is reached through the cave's mouth, not round the mountain
+
+### Fixed
+- **Leaving Undercity through its sewers**: the steps read in the right order and the line no longer crosses the tunnel's walls
+- **A quest tracked by a guide or another addon** no longer takes the arrow away from the route
+- **Hitches while a route is planned**: long routes are worked out in smaller pieces, and the other ways only while a GPS window or the map's page is open to list them
+
+---
+
 ## [1.8.1] - 2026-11-17
 
 ### Fixed
