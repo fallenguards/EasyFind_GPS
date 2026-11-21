@@ -292,6 +292,12 @@ function WorldPin.NewPlate(parent)
     local menuAnchor = CreateFrame("Frame", nil, p)
     menuAnchor:SetSize(1, 1)
     p:EnableMouse(true)
+    -- A step cut to fit ("..."): the whole of it on hover.
+    if ns.Utils and ns.Utils.AttachDelayedTooltip then
+        ns.Utils.AttachDelayedTooltip(p, "ANCHOR_TOP", function(self)
+            if self.text:IsTruncated() then return self.shownText end
+        end)
+    end
     -- A right-drag that turned the camera is not a click on the plate.
     local downX, downY
     p:SetScript("OnMouseDown", function(_, button)

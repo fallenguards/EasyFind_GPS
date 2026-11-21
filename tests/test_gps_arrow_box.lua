@@ -101,6 +101,76 @@ end
 
 local tests = {}
 
+-- A step cut to fit the box is read whole on hover (asked for,
+-- 2026-11-21); one that fits says nothing more.
+function tests.aCutStep_isReadWholeOnHover()
+    local src = Source("WorldPin.lua")
+    local s = assert(src:find("\nfunction WorldPin.NewPlate(parent)", 1, true), "NewPlate")
+    local _, e = assert(src:find("\n    return p\nend\n", s, true))
+    local cut = false
+    local function Frame()
+        local fr = { scripts = {} }
+        function fr:SetScript(k, fn) self.scripts[k] = fn end
+        function fr:GetScript(k) return self.scripts[k] end
+        for _, m in ipairs({ "SetSize", "EnableMouse", "ClearAllPoints", "SetPoint", "SetJustifyH", "SetWordWrap",
+                             "SetShadowColor" }) do
+            fr[m] = function() end
+        end
+        function fr:CreateFontString() return Frame() end
+        function fr:IsTruncated() return cut end
+        return fr
+    end
+    local resolve
+    local env = setmetatable({
+        WorldPin = { ApplyPlateBorder = function() end },
+        ns = { L = KEYED_L, Utils = { AttachDelayedTooltip = function(_, _, fn) resolve = fn end } },
+        CreateFrame = function() return Frame() end,
+        PaintPlate = function() end,
+        plates = {},
+        DB = function() return {} end,
+    }, { __index = _G })
+    assert(load(src:sub(s, e), "=WorldPin.NewPlate", "t", env))()
+    local plate = env.WorldPin.NewPlate(Frame())
+    H.assertNotNil(resolve, "the box takes a hover")
+    plate.shownText = "Press the Macro in the Active Items Frame to craft Linen Bandages."
+    H.assertNil(resolve(plate), "it fits: nothing more to say")
+    cut = true
+    H.assertEq(resolve(plate), plate.shownText, "cut: all of it")
+end
+
+-- The arrow unlocked, a grip over the box takes the mouse and the box
+-- under it never heard the hover (2026-11-21, his arrow unlocked): the
+-- grip passes its hover on to the box.
+function tests.theArrowUnlocked_theGripsHoverIsTheBoxs()
+    local chunk = Cut(Source("Arrow.lua"), '    local grip = CreateFrame("Frame", nil, plate)',
+        "        if leave then leave(plate) end\n    end)\n")
+    local function Frame()
+        local fr = { scripts = {} }
+        function fr:SetScript(k, fn) self.scripts[k] = fn end
+        function fr:GetScript(k) return self.scripts[k] end
+        for _, m in ipairs({ "SetAllPoints", "EnableMouse", "RegisterForDrag" }) do fr[m] = function() end end
+        return fr
+    end
+    local plate, grip = Frame(), nil
+    local heard = {}
+    plate:SetScript("OnEnter", function(self) heard[#heard + 1] = { "enter", self } end)
+    plate:SetScript("OnLeave", function(self) heard[#heard + 1] = { "leave", self } end)
+    local env = setmetatable({ plate = plate, CreateFrame = function()
+        grip = Frame()
+        return grip
+    end }, { __index = _G })
+    assert(load(chunk, "=Arrow.lua grip", "t", env))()
+    grip.scripts.OnEnter(grip)
+    grip.scripts.OnLeave(grip)
+    H.assertEq(#heard, 2)
+    H.assertEq(heard[1][1], "enter")
+    H.assertTrue(heard[1][2] == plate and heard[2][2] == plate, "as the box itself, for its tooltip's owner")
+    H.assertEq(heard[2][1], "leave")
+    plate.scripts = {}
+    grip.scripts.OnEnter(grip)
+    H.assertEq(#heard, 2, "a box with no hover of its own: nothing, no error")
+end
+
 function tests.itsMenuRow_turnsTheBoxOffAndOn()
     local db = {}
     local GPS = Box(db)

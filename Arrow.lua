@@ -136,6 +136,16 @@ local function Build()
     grip:RegisterForDrag("LeftButton")
     grip:SetScript("OnMouseDown", function(_, button) plate:GetScript("OnMouseDown")(plate, button) end)
     grip:SetScript("OnMouseUp", function(_, button) plate:GetScript("OnMouseUp")(plate, button) end)
+    -- Unlocked, the grip takes the mouse over the plate: its hover is the
+    -- plate's (a cut step read whole), which the plate alone never got.
+    grip:SetScript("OnEnter", function()
+        local enter = plate:GetScript("OnEnter")
+        if enter then enter(plate) end
+    end)
+    grip:SetScript("OnLeave", function()
+        local leave = plate:GetScript("OnLeave")
+        if leave then leave(plate) end
+    end)
     -- The arrow's own right-click opens the plate's menu, the plate hidden
     -- too; its other clicks pass through to the world.
     local clicker = CreateFrame("Frame", nil, frame)
