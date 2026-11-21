@@ -137,6 +137,35 @@ function tests.deathSkip_aHealerTooFar_theCorpse()
     H.assertEq(state.route.steps[2].text, "Return to your corpse")
 end
 
+-- Zephras Isle's Spirit Healers are in no catalog: its ghosts were led
+-- back to their corpses on a guide's death skip (2026-11-21). The guide's
+-- step says where its healer stands; that spot is taken, however far.
+function tests.deathSkip_theGuidesOwnSpot_whereTheCatalogHasNoneNear()
+    local GPS, LeadToCorpse, _, state = Load()
+    state.route = { steps = { Walk("a"), Walk("b") }, active = 2 }
+    state.ghost = true
+    state.healer = nil
+    GPS.SetDeathSkip({ mapID = 10, x = 0.9, y = 0.5, name = "Spirit Healer" })
+    local step = state.route.steps[2]
+    H.assertTrue(step.corpse and step.spirit, "to the healer the guide names, 400 yards off")
+    H.assertEq(step.arrive.wx, 900)
+    H.assertEq(step.npc, "Spirit Healer", "named by the guide where the catalog has none")
+    GPS.SetDeathSkip({ mapID = 10, x = 0.9, y = 0.5, name = "Spirit Healer" })
+    H.assertEq(#state.route.steps, 3, "the same spot again: nothing")
+    GPS.SetDeathSkip({ mapID = 10, x = 0.7, y = 0.5, name = "Spirit Healer" })
+    H.assertEq(#state.route.steps, 3, "another spot: swapped, not added")
+    H.assertEq(state.route.steps[2].arrive.wx, 700)
+    GPS.SetDeathSkip(true)
+    H.assertNil(state.route.steps[2].spirit, "no spot and none in the catalog: the corpse")
+    GPS.SetDeathSkip(false)
+    state.healer = { name = "Geistheiler", mapID = 10, x = 0.52, y = 0.5 }
+    GPS.SetDeathSkip({ mapID = 10, x = 0.9, y = 0.5, name = "Spirit Healer" })
+    H.assertEq(state.route.steps[2].npc, "Geistheiler", "the catalog's name for it, in the client's language")
+    H.assertEq(state.route.steps[2].arrive.wx, 900, "at the guide's spot still")
+    LeadToCorpse()
+    H.assertEq(#state.route.steps, 3)
+end
+
 -- The guide's step coming up or going while the ghost walks: the one way
 -- is swapped for the other, once.
 function tests.deathSkip_switchedWhileAGhost_swapsTheWay()

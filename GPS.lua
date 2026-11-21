@@ -1366,11 +1366,20 @@ local function StepsChanged(route, active)
     if GPS.AfterRoute then GPS.AfterRoute(true) end
 end
 
--- The Spirit Healer beside a ghost (the catalog's, within 200 yards), as a
--- corpse point with its name; nil without one.
+-- The Spirit Healer a ghost on a death skip is led to, as a corpse point
+-- with its name: where the guide's own step puts it (GPS.deathSkipAt),
+-- else the catalog's beside the ghost (within 200 yards); nil without
+-- either. Zephras Isle's are in no catalog, so its ghosts were led back
+-- to their corpses (2026-11-21).
 function GPS.SpiritHealerPoint()
     local Npcs = ns.Npcs
     local spot = Npcs and Npcs.SpotOfID and Npcs.SpotOfID(6491)   -- every graveyard's Spirit Healer
+    local at = GPS.deathSkipAt
+    local name = (spot and spot.name) or (at and at.name)
+    if at and name then
+        local aci, awx, awy = WorldPos(at.mapID, at.x, at.y)
+        if aci then return { m = at.mapID, x = at.x, y = at.y, ci = aci, wx = awx, wy = awy, name = name } end
+    end
     if not (spot and spot.mapID and spot.x and spot.name) then return nil end
     local ci, wx, wy = WorldPos(spot.mapID, spot.x, spot.y)
     local pci, px, py = PlayerWorldPos()
@@ -1397,17 +1406,23 @@ local function LeadToCorpse()
 end
 
 -- Set while a guide's step says to die and respawn (the gps deathSkip
--- action); a ghost already led to one is led to the other.
+-- action): true, or the Spirit Healer's own spot { mapID, x, y, name } as
+-- the guide's step gives it. A ghost already led to one is led to the
+-- other, and to a spot that changed.
 function GPS.SetDeathSkip(on)
+    local at = type(on) == "table" and on.mapID and on.x and on.y and on or nil
     on = on and true or nil
-    if on == GPS.deathSkip then return end
-    GPS.deathSkip = on
+    local was = GPS.deathSkipAt
+    local sameSpot = (at == nil and was == nil)
+        or (at ~= nil and was ~= nil and at.mapID == was.mapID and at.x == was.x and at.y == was.y)
+    if on == GPS.deathSkip and sameSpot then return end
+    GPS.deathSkip, GPS.deathSkipAt = on, at
     local route = Route()
     if not (route and route.steps and UnitIsGhost and UnitIsGhost("player")) then return end
     for i = 1, #route.steps do
         local step = route.steps[i]
         if step.corpse then
-            if step.spirit == on then return end
+            if step.spirit == on and sameSpot then return end
             table.remove(route.steps, i)
             break
         end
