@@ -302,11 +302,13 @@ local function Destination(data)
     -- a group member followed (UnitDirections.lua); npc: the name a Target
     -- press finds near the end (Arrow.lua); quietArrival: no arrival sound
     -- (a guide followed moves straight on); hold: a trip's stop the route
-    -- never moves past on its own (a guide's, till the guide moves on).
+    -- never moves past on its own (a guide's, till the guide moves on);
+    -- direct: led there in a straight line, no way planned (a guide's
+    -- step that glides or flies to its spot).
     local dest = { name = data.destName or data.name, icon = data.icon, category = data.category, displayID = data.displayID,
                    step = type(data.step) == "string" and data.step or nil, questMark = data.questMark,
                    questID = data.questID, followGUID = data.followGUID, quietArrival = data.quietArrival or nil,
-                   hold = data.hold or nil }
+                   hold = data.hold or nil, direct = data.direct or nil }
     if data.npcName then
         dest.npc = data.npcName
     elseif data.npcID or data.category == "npc" then
@@ -498,7 +500,7 @@ function GPS:BuildRoute(dest, via, avoid, quick, draw, startFrom, dropLimit)
     local Route = ns.GPSRoute
     local planned = startFrom or (startFrom == nil and StartPoint()) or nil
     local origin = planned or GPS.PlayerStart()
-    if Route and ns.GPSData then
+    if Route and ns.GPSData and not dest.direct then
         local h = HearthPoint()
         local db = DB()
         -- Set out from where the player stands: indoors there or not (a
@@ -531,7 +533,8 @@ function GPS:BuildRoute(dest, via, avoid, quick, draw, startFrom, dropLimit)
         end
         if via then return nil end   -- no way with that stop: the route stays as it was
     end
-    -- No way through the data: a plain leg, priced as the crow flies when
+    -- No way through the data, or none asked for (dest.direct: flown, so
+    -- no walk is drawn on it after): a plain leg, priced as the crow flies when
     -- the spot is on this continent; on another, the step says there is
     -- no way from here, and nothing follows it.
     local sec
@@ -545,6 +548,7 @@ function GPS:BuildRoute(dest, via, avoid, quick, draw, startFrom, dropLimit)
     end
     return {
         { kind = "travel", name = dest.name, mapID = dest.mapID, x = dest.x, y = dest.y, sec = sec, noWay = noWay or nil,
+          fly = dest.direct or nil,
           arrive = tci and { m = dest.mapID, x = dest.x, y = dest.y, ci = tci, wx = tx, wy = ty } or nil,
           text = (not noWay and dest.step) or sformat(L[noWay and "GPS_STEP_NO_WAY_FMT" or "GPS_STEP_TRAVEL_FMT"], dest.name or "?") },
     }, sec

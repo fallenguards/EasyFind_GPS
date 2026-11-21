@@ -61,6 +61,48 @@ function tests.aTrip_isPlannedThroughItsPlacesInOrder_toTheLast()
     H.assertEq(seen.opened, 0, "quiet: the window is not opened")
 end
 
+-- A guide's step that glides to its spot ("Jump off the mountain and use
+-- Walk on Air", 2026-11-21): the walk down and round the mountain was
+-- planned, the arrow leading away from the beacon. dest.direct is led
+-- straight there, no way planned, on its own leg of a trip too.
+function tests.aDirectPlace_isLedStraight_noWayPlanned()
+    local src = Source()
+    local planner = 0
+    local GPS = { PlayerStart = function() return { ci = 1, wx = 0, wy = 0 } end, Avoids = function() return nil end,
+                  SkipFor = function() return nil end }
+    local env = setmetatable({
+        GPS = GPS, StartPoint = function() return nil end, HearthPoint = function() return nil end,
+        DB = function() return {} end, SplitWalks = function(steps) return steps end,
+        ns = { GPSData = {}, GPSRoute = {
+            Build = function() planner = planner + 1 return { { kind = "walk", sec = 99 } } end,
+            TravelSeconds = function(_, yards) return yards / 7 end,
+        } },
+        PlayerWorldPos = function() return 1, 0, 0 end,
+        WorldPos = function() return 1, 300, 400 end,
+        L = setmetatable({}, { __index = function(_, k) return k end }), sformat = string.format,
+    }, { __index = _G })
+    assert(load(Slice(src, "function GPS:BuildRoute(dest, via, avoid, quick, draw, startFrom, dropLimit)"),
+        "=GPS.lua BuildRoute", "t", env))()
+    local dest = { name = "The ledge below", mapID = 2521, x = 0.46, y = 0.56, step = "Jump off and glide", direct = true }
+    local steps, sec = GPS:BuildRoute(dest)
+    H.assertEq(planner, 0, "no way asked of the planner")
+    H.assertEq(#steps, 1)
+    H.assertEq(steps[1].kind, "travel")
+    H.assertTrue(steps[1].fly, "flown: no walk is drawn on it after, and none strayed from")
+    H.assertEq(steps[1].text, "Jump off and glide", "the step's own words")
+    H.assertEq(steps[1].arrive.wx, 300, "ending on the spot")
+    H.assertTrue(math.abs(sec - 500 / 7) < 1e-6, "timed as the crow flies")
+    dest.direct = nil
+    steps = GPS:BuildRoute(dest)
+    H.assertEq(planner, 1, "without it the way is planned as ever")
+    H.assertEq(steps[1].kind, "walk")
+    local Trip, seen = Load()
+    Trip:NavigateTrip({ { name = "The ledge below", mapID = 2521, x = 0.46, y = 0.56, direct = true },
+                        { name = "Missionary Jasaan", mapID = 2521, x = 0.47, y = 0.56 } }, { quiet = true })
+    H.assertTrue(seen.built[1].direct, "kept on its stop of a trip")
+    H.assertNil(seen.built[2].direct, "and on that stop alone")
+end
+
 -- A guide leaves the Hearthstone to its own steps (2026-11-19: a guide's
 -- "Travel back to Brill" hearthed): opts.avoid joins the player's own
 -- ways left out, for the plan and kept on the route for its replans.
