@@ -23,10 +23,16 @@ local ticker, last, ride, still
 
 local function Routes() return ns.GPSData and ns.GPSData.routes end
 
+-- EasyFind's own answer where it has one: the client's is empty in some sessions.
+local function Realm()
+    if ns.RealmName then return ns.RealmName() or "?" end
+    return GetRealmName and GetRealmName() or "?"
+end
+
 local function Store()
     local db = EasyFind.db
     if not db then return nil end
-    local realm = GetRealmName and GetRealmName() or "?"
+    local realm = Realm()
     db.gpsBoats = db.gpsBoats or {}
     db.gpsBoats[realm] = db.gpsBoats[realm] or {}
     return db.gpsBoats[realm]
@@ -144,7 +150,7 @@ end
 -- from now, until it next leaves; nil while no recent ride has timed it.
 function Boats.WaitAt(routeID, stop, arriveIn)
     local route = Routes() and Routes()[routeID]
-    local store = EasyFind.db and EasyFind.db.gpsBoats and EasyFind.db.gpsBoats[GetRealmName and GetRealmName() or "?"]
+    local store = EasyFind.db and EasyFind.db.gpsBoats and EasyFind.db.gpsBoats[Realm()]
     local seen = store and store[routeID]
     local st = route and route.stops[stop]
     if not (seen and st) then return nil end

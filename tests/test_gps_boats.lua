@@ -17,6 +17,7 @@ local function fresh()
     env.IsPlayerMoving = function() return false end
     env.GetServerTime = function() return clock.t end
     env.GetRealmName = function() return "Realm" end
+    env.UnitName = function() return "Thrall" end
     ns.GPSData = { routes = { [7] = { period = 300, stops = {
         { ci = 1, wx = 0, wy = 0, dwell = 60, at = 0 },
         { ci = 1, wx = 1000, wy = 0, dwell = 60, at = 150 },
