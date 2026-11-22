@@ -156,8 +156,13 @@ local function Build()
     local passing = false
     -- Unlocked (the plate's menu), it takes a plain drag; locked, Shift held.
     local function Unlocked() local d = DB() return d ~= nil and d.gpsArrowUnlocked == true end
-    local function DragStart() if IsShiftKeyDown() or Unlocked() then frame:StartMoving() end end
+    local function DragStart()
+        if not (IsShiftKeyDown() or Unlocked()) then return end
+        Arrow.dragging = true
+        frame:StartMoving()
+    end
     local function DragStop()
+        Arrow.dragging = nil
         frame:StopMovingOrSizing()
         SavePlace()
     end
@@ -209,12 +214,16 @@ local function Build()
     frame:Hide()
 end
 
+-- Set below: the buttons under the plate keep their place by the arrow.
+local StackFollow
+
 local function Update()
     local px, py, ax, ay, left = Aim()
     local facing = px and GetPlayerFacing and GetPlayerFacing()
     local bearing = facing and not (issecretvalue and issecretvalue(facing)) and Bearing(aimCi, px, py, ax, ay)
     if not bearing then
         if frame then frame:Hide() end
+        StackFollow()
         return
     end
     if not frame then Build() end
@@ -225,9 +234,12 @@ local function Update()
     plate:SetShown(text ~= nil)
     if text then Pin.FillPlate(plate, text, line, trip, note) end
     frame:Show()
+    StackFollow()
 end
 
 local function Tick(_, dt)
+    -- Dragged, the buttons under it move every frame, not every tick.
+    if Arrow.dragging then StackFollow() end
     since = since + dt
     if since < THROTTLE then return end
     since = 0
@@ -244,13 +256,35 @@ function Arrow:Guiding() return frame ~= nil and frame:IsShown() end
 -- hang from UIParent at the plate's foot, so a fight locks nothing of the
 -- arrow; in one they stay as they were.
 local TARGET_YARDS, TARGET_EVERY, TARGET_MAX, ROW_H, ROW_GAP = 40, 0.5, 6, 24, 2
+-- Two targets on a row: the gap between them, the widest pair.
+local PAIR_GAP, PAIR_MAX_W = 4, 380
+-- A thing to use as an icon: its side, the gap to the next, the bubble's rim.
+local ICON, ICON_GAP, ICON_PAD = 26, 4, 5
+local HILITE_PILL, HILITE_ICON = "Interface\\Buttons\\UI-Common-MouseHilight", "Interface\\Buttons\\ButtonHilight-Square"
+local NO_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 local KIND_ICON = { kill = "Interface\\Cursor\\Attack", talk = "Interface\\GossipFrame\\GossipGossipIcon" }
 -- btns, rows, guide (set from outside), npc { dest, name, ci, wx, wy },
 -- closed (a route's dest), closedNames (a guide's), ticker, menuAnchor;
--- uses (a guide's things to use), useBtns, closedUses (by row)
-local target = { btns = {}, rows = {}, closedNames = {}, useBtns = {}, closedUses = {} }
+-- uses (a guide's things to use), useBtns, closedUses (by row), bubble
+-- (behind the icons); x, y (the stack's top as placed), live (buttons
+-- shown), events (cooldowns and a fight's end, while any show)
+local target = { btns = {}, rows = {}, closedNames = {}, useBtns = {}, closedUses = {}, live = 0 }
+Arrow._stack = target   -- tests
 local USE_MAX = 4
 local USE_KINDS = { item = true, spell = true, macro = true }
+local WATCHED = { "PLAYER_REGEN_ENABLED", "SPELL_UPDATE_COOLDOWN", "BAG_UPDATE_COOLDOWN" }
+
+-- The things to use as icons in one bubble, and the targets two to a row:
+-- each on unless switched off (a guide extension's settings page).
+function Arrow.UseIcons()
+    local db = DB()
+    return not (db and db.gpsUseIcons == false)
+end
+
+function Arrow.TargetPairs()
+    local db = DB()
+    return not (db and db.gpsTargetPairs == false)
+end
 
 function Arrow.TargetMark()
     local db = DB()
@@ -291,6 +325,7 @@ local function HideButton(btn)
     btn:ClearAllPoints()
     btn:SetAttribute("type", nil)
     btn.macro, btn.label, btn.x, btn.y, btn.row, btn.use = nil, nil, nil, nil, nil, nil
+    btn.dx, btn.dy = nil, nil
 end
 
 local TargetTick
@@ -343,7 +378,7 @@ local function StackButton(pool, i, name)
     look.text:ClearAllPoints()
     look.text:SetPoint("CENTER")
     btn.look = look
-    btn:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    btn:SetHighlightTexture(HILITE_PILL, "ADD")
     btn:Hide()
     pool[i] = btn
     return btn
@@ -353,27 +388,170 @@ local function TargetButton(i)
     return target.btns[i] or StackButton(target.btns, i, i == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i))
 end
 
+local function SpellID(use)
+    if use.id then return use.id end
+    local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(use.name)
+    return info and info.spellID or nil
+end
+
+-- A thing to use, hovered: the item's or the spell's own tooltip. A macro
+-- has none: its name, where the icon alone does not say it.
+local function UseEnter(btn)
+    local use = btn.use
+    if not use then return end
+    local spell = use.kind == "spell" and SpellID(use)
+    if use.kind == "item" or spell then
+        GameTooltip:SetOwner(btn, "ANCHOR_RIGHT")
+        if spell then GameTooltip:SetSpellByID(spell) else GameTooltip:SetItemByID(use.id) end
+        GameTooltip:Show()
+    elseif btn.worn == "icon" and ns.ShowHintTooltip then
+        ns.ShowHintTooltip(btn, "ANCHOR_RIGHT", use.name or _G["USE"] or "Use")
+    end
+end
+
+local function UseLeave(btn)
+    if GameTooltip:IsOwned(btn) then GameTooltip:Hide() end
+    if ns.HideHintTooltip then ns.HideHintTooltip(btn) end
+end
+
 local function UseButton(i)
     local btn = target.useBtns[i]
     if btn then return btn end
     btn = StackButton(target.useBtns, i, "EasyFindGPSUse" .. i)
     btn.isUse = true
+    btn:SetScript("OnEnter", UseEnter)
+    btn:SetScript("OnLeave", UseLeave)
     return btn
 end
 
--- A row's words, its width for them and its place in the stack.
-local function PlaceRow(btn, label, x, top)
-    if btn.label ~= label then
-        btn.label = label
-        btn.look.text:SetText(label)
-        btn:SetSize(btn.look.text:GetStringWidth() + 20, ROW_H)
+-- A pill's words and its width for them.
+local function Words(btn, label)
+    if btn.label == label then return end
+    btn.label = label
+    btn.look.text:SetText(label)
+    btn.w = btn.look.text:GetStringWidth() + 20
+    btn:SetSize(btn.w, ROW_H)
+end
+
+local function UseTexture(use)
+    if use.icon then return use.icon end
+    local tex
+    if use.kind == "item" then
+        tex = C_Item and C_Item.GetItemIconByID and C_Item.GetItemIconByID(use.id)
+    elseif use.kind == "spell" then
+        tex = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(use.id or use.name)
     end
-    if btn.x ~= x or btn.y ~= top then
-        btn.x, btn.y = x, top
-        btn:ClearAllPoints()
-        btn:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, top)
+    return tex or NO_ICON
+end
+
+-- A use button's face: its icon alone, in the bubble, or the pill with
+-- its name.
+local function Wear(btn, use, icons)
+    local face = icons and "icon" or "pill"
+    if btn.worn ~= face then
+        btn.worn, btn.label, btn.tex = face, nil, nil
+        if icons and not btn.icon then
+            local icon = btn:CreateTexture(nil, "ARTWORK")
+            icon:SetAllPoints(btn)
+            icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+            btn.icon = icon
+            local cooldown = CreateFrame("Cooldown", nil, btn, "CooldownFrameTemplate")
+            cooldown:SetAllPoints(btn)
+            btn.cooldown = cooldown
+        end
+        btn.look:SetShown(not icons)
+        if btn.icon then
+            btn.icon:SetShown(icons)
+            -- A swipe shows itself when it is set; under a name it stays away.
+            if not icons then btn.cooldown:Clear() end
+        end
+        btn:SetHighlightTexture(icons and HILITE_ICON or HILITE_PILL, "ADD")
+        if icons then
+            btn.w = ICON
+            btn:SetSize(ICON, ICON)
+        end
     end
-    btn:Show()
+    if not icons then return Words(btn, use.label) end
+    local tex = UseTexture(use)
+    if btn.tex ~= tex then
+        btn.tex = tex
+        btn.icon:SetTexture(tex)
+    end
+end
+
+local function Swipe(cooldown, start, duration, enable)
+    local secret = issecretvalue
+    if not (start and duration) or enable == 0 or (secret and (secret(start) or secret(duration))) then
+        return cooldown:Clear()
+    end
+    if start > 0 and duration > 0 then cooldown:SetCooldown(start, duration) else cooldown:Clear() end
+end
+
+-- An icon's cooldown, as an action button shows it. A spell's comes as the
+-- client's duration object where it has one (its numbers are withheld in
+-- a fight); an item's is plain.
+local function UseCooldown(btn)
+    local use, cooldown = btn.use, btn.cooldown
+    if not (use and cooldown and btn.worn == "icon") then return end
+    if use.kind == "item" then
+        local read = C_Container and C_Container.GetItemCooldown or GetItemCooldown
+        if read then Swipe(cooldown, read(use.id)) end
+    elseif use.kind == "spell" then
+        local spell, spells = use.id or use.name, C_Spell
+        if spells and spells.GetSpellCooldownDuration and cooldown.SetCooldownFromDurationObject then
+            local length = spells.GetSpellCooldownDuration(spell)
+            if length then cooldown:SetCooldownFromDurationObject(length) else cooldown:Clear() end
+        elseif spells and spells.GetSpellCooldown then
+            local info = spells.GetSpellCooldown(spell)
+            if info then Swipe(cooldown, info.startTime, info.duration) else cooldown:Clear() end
+        else
+            -- The classic clients' own call.
+            local old = _G["GetSpellCooldown"]
+            if old then Swipe(cooldown, old(spell)) end
+        end
+    end
+end
+
+local function UseCooldowns()
+    for i = 1, #target.useBtns do
+        local btn = target.useBtns[i]
+        if btn:IsShown() then UseCooldown(btn) end
+    end
+end
+
+-- The plate's look behind the icons. A frame of its own on UIParent: one
+-- that held the buttons would lock with them in a fight.
+local function UseBubble()
+    local bubble = ns.GPSWorldPin.NewPlate(UIParent)
+    bubble:SetFrameStrata("LOW")
+    bubble:SetFrameLevel(mmax(0, (UIParent:GetFrameLevel() or 1) - 1))
+    bubble:EnableMouse(false)
+    bubble:Hide()
+    target.bubble = bubble
+    return bubble
+end
+
+local function Place(f, x, y)
+    if f.x == x and f.y == y then return end
+    f.x, f.y = x, y
+    f:ClearAllPoints()
+    f:SetPoint("TOP", UIParent, "BOTTOMLEFT", x, y)
+end
+
+local function PlacePool(pool, x, y)
+    for i = 1, #pool do
+        local f = pool[i]
+        if f.dx then Place(f, x + f.dx, y + f.dy) end
+    end
+end
+
+-- Every shown piece at its offset from the stack's top.
+local function PlaceStack(x, y)
+    target.x, target.y = x, y
+    PlacePool(target.btns, x, y)
+    PlacePool(target.useBtns, x, y)
+    local bubble = target.bubble
+    if bubble and bubble.dx then Place(bubble, x + bubble.dx, y + bubble.dy) end
 end
 
 -- The stack's top on UIParent: under the plate while the arrow shows; at
@@ -414,12 +592,37 @@ local function TargetRows()
     return rows
 end
 
+-- Cooldowns turn in a fight too (a swipe is no secure part); the rows and
+-- their places wait for its end, then catch up at once.
+local function Watch(on)
+    local events = target.events
+    if on and not events then
+        events = CreateFrame("Frame")
+        events:SetScript("OnEvent", function(_, event)
+            if event == "PLAYER_REGEN_ENABLED" then TargetTick() else UseCooldowns() end
+        end)
+        target.events = events
+    end
+    if not events or events.on == on then return end
+    events.on = on
+    for i = 1, #WATCHED do
+        if on then ns.Utils.RegisterEventIfValid(events, WATCHED[i]) else events:UnregisterEvent(WATCHED[i]) end
+    end
+end
+
+-- The arrow moved (a drag, a plate grown a line): the stack with it. Its
+-- buttons are secure, so never in a fight.
+StackFollow = function()
+    if target.live == 0 or InCombatLockdown() then return end
+    local x, y = TargetPlace()
+    if x ~= target.x or y ~= target.y then PlaceStack(x, y) end
+end
+
 TargetTick = function()
     if InCombatLockdown() then return end
     local rows = TargetRows()
     local mark = Arrow.TargetMark()
     local markIcon = mark > 0 and ("|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. mark .. ":14|t ") or ""
-    local x, y = TargetPlace()
     for i, row in ipairs(rows) do
         local btn = TargetButton(i)
         btn.row = row
@@ -435,34 +638,79 @@ TargetTick = function()
         local kind = KIND_ICON[row.kind]
         local label = markIcon .. (kind and ("|T" .. kind .. ":14|t ") or "")
             .. ((row.route and #rows == 1) and (_G["TARGET"] or "Target") or row.name)
-        PlaceRow(btn, label, x, y - (i - 1) * (ROW_H + ROW_GAP))
+        Words(btn, label)
     end
     for i = #rows + 1, #target.btns do
         if target.btns[i]:IsShown() then HideButton(target.btns[i]) end
     end
+    -- Two to a row where a pair fits, each its own pill: down counts the
+    -- stack's rows from its top.
+    local down, i, paired = 0, 1, Arrow.TargetPairs()
+    while i <= #rows do
+        local a, b = target.btns[i], paired and i < #rows and target.btns[i + 1] or nil
+        if b and a.w + PAIR_GAP + b.w <= PAIR_MAX_W then
+            local half = (a.w + PAIR_GAP + b.w) / 2
+            a.dx, a.dy, b.dx, b.dy = a.w / 2 - half, down, half - b.w / 2, down
+            i = i + 2
+        else
+            a.dx, a.dy = 0, down
+            i = i + 1
+        end
+        down = down - (ROW_H + ROW_GAP)
+    end
     -- A guide's things to use, under the targets: the press uses the item,
     -- casts the spell or runs the macro.
-    local used = 0
+    local used, icons = 0, Arrow.UseIcons()
     if target.uses then
         for _, use in ipairs(target.uses) do
             if used < USE_MAX and not target.closedUses[use] then
                 used = used + 1
                 local btn = UseButton(used)
+                local was, face = btn.use, btn.worn
                 btn.row = use
-                if btn.use ~= use then
+                if was ~= use then
                     btn.use = use
                     btn:SetAttribute("type", use.kind)
                     btn:SetAttribute("item", use.kind == "item" and ("item:" .. use.id) or nil)
                     btn:SetAttribute("spell", use.kind == "spell" and (use.name or use.id) or nil)
                     btn:SetAttribute("macrotext", use.kind == "macro" and use.macro or nil)
                 end
-                PlaceRow(btn, use.label, x, y - (#rows + used - 1) * (ROW_H + ROW_GAP))
+                Wear(btn, use, icons)
+                if was ~= use or face ~= btn.worn then UseCooldown(btn) end
             end
         end
     end
-    for i = used + 1, #target.useBtns do
-        if target.useBtns[i]:IsShown() then HideButton(target.useBtns[i]) end
+    for n = used + 1, #target.useBtns do
+        if target.useBtns[n]:IsShown() then HideButton(target.useBtns[n]) end
     end
+    -- As icons, side by side in one bubble; as pills, a row each.
+    local bubble = target.bubble
+    if icons and used > 0 then
+        bubble = bubble or UseBubble()
+        local w = used * ICON + (used - 1) * ICON_GAP + 2 * ICON_PAD
+        if bubble.w ~= w then
+            bubble.w = w
+            bubble:SetSize(w, ICON + 2 * ICON_PAD)
+        end
+        bubble.dx, bubble.dy = 0, down
+        for n = 1, used do
+            local btn = target.useBtns[n]
+            btn.dx, btn.dy = ICON_PAD + ICON / 2 - w / 2 + (n - 1) * (ICON + ICON_GAP), down - ICON_PAD
+        end
+    else
+        if bubble then bubble.dx, bubble.x, bubble.y = nil, nil, nil end
+        for n = 1, used do
+            local btn = target.useBtns[n]
+            btn.dx, btn.dy = 0, down
+            down = down - (ROW_H + ROW_GAP)
+        end
+    end
+    target.live = #rows + used
+    if target.live > 0 then PlaceStack(TargetPlace()) end
+    for n = 1, #rows do target.btns[n]:Show() end
+    for n = 1, used do target.useBtns[n]:Show() end
+    if bubble then bubble:SetShown(bubble.dx ~= nil) end
+    Watch(target.live > 0)
     if not (target.guide or target.npc or target.uses) and target.ticker then
         target.ticker:Cancel()
         target.ticker = nil
@@ -476,6 +724,20 @@ local function TargetSync()
     TargetTick()
 end
 
+function Arrow.SetUseIcons(on)
+    local db = DB()
+    if not db then return end
+    if on then db.gpsUseIcons = nil else db.gpsUseIcons = false end
+    TargetTick()
+end
+
+function Arrow.SetTargetPairs(on)
+    local db = DB()
+    if not db then return end
+    if on then db.gpsTargetPairs = nil else db.gpsTargetPairs = false end
+    TargetTick()
+end
+
 -- A guide's creatures, { name, kind = "kill" | "talk" } each, shown while
 -- set; nil or none takes them away. A new list opens rows closed before.
 function Arrow.SetTargets(list)
@@ -485,9 +747,9 @@ function Arrow.SetTargets(list)
 end
 
 -- A guide's things to use for its step, each { kind = "item" | "spell" |
--- "macro", id, name, icon, macro (its text) }: a button under the target
--- rows while set; nil or none takes them away. One with no kind or nothing
--- to press is left out.
+-- "macro", id, name, icon, macro (its text) }: under the target rows while
+-- set, as icons in one bubble or a named button each; nil or none takes
+-- them away. One with no kind or nothing to press is left out.
 function Arrow.SetUses(list)
     local uses
     for _, use in ipairs(type(list) == "table" and list or {}) do

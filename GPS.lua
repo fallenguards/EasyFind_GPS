@@ -7323,6 +7323,20 @@ EasyFind.API.RegisterAction("gps", "canNavigate", function(dest) return GPS:CanN
 -- A guide's creatures under the arrow, a Target button each: { name, kind }.
 EasyFind.API.RegisterAction("gps", "setTargets", function(list) if ns.GPSArrow then ns.GPSArrow.SetTargets(list) end end)
 EasyFind.API.RegisterAction("gps", "setUses", function(list) if ns.GPSArrow then ns.GPSArrow.SetUses(list) end end)
+-- No argument: whether the things to use show as icons in one bubble, and
+-- whether the Target buttons sit two to a row; true or false sets it.
+EasyFind.API.RegisterAction("gps", "useIcons", function(on)
+    local Arrow = ns.GPSArrow
+    if not Arrow then return nil end
+    if on == nil then return Arrow.UseIcons() end
+    Arrow.SetUseIcons(on and true or false)
+end)
+EasyFind.API.RegisterAction("gps", "targetPairs", function(on)
+    local Arrow = ns.GPSArrow
+    if not Arrow then return nil end
+    if on == nil then return Arrow.TargetPairs() end
+    Arrow.SetTargetPairs(on and true or false)
+end)
 -- No argument: whether the box under the arrow shows; true or false: show or hide it.
 EasyFind.API.RegisterAction("gps", "arrowBox", function(on)
     if on == nil then return GPS.ArrowBoxShown() end
