@@ -868,12 +868,25 @@ local function SpotWorld(p)
     return WorldPos(p.m, p.x, p.y)
 end
 
--- On a lift's platform: its doors flank the shaft, the platform between them.
+-- The car of a lift's step nearest (px, py): its two doors. A mesa's lift
+-- is two cars side by side, either one ridden (step.twin: the other's).
+-- A field, not a local: the file is at 200 locals.
+function GPS.LiftDoors(step, px, py)
+    local go, arrive, twin = step.go, step.arrive, step.twin
+    if not (twin and px and go and arrive and go.wx and arrive.wx) then return go, arrive end
+    local a, b = twin.go, twin.arrive
+    local own = (px - (go.wx + arrive.wx) / 2) ^ 2 + (py - (go.wy + arrive.wy) / 2) ^ 2
+    if (px - (a.wx + b.wx) / 2) ^ 2 + (py - (a.wy + b.wy) / 2) ^ 2 < own then return a, b end
+    return go, arrive
+end
+
+-- On a lift's platform: its doors flank the car, the platform between them.
 local function OnLift(step)
     if not (step.go and step.arrive) then return false end
     local ci, px, py = PlayerWorldPos()
-    local aci, ax, ay = SpotWorld(step.go)
-    local bci, bx, by = SpotWorld(step.arrive)
+    local go, arrive = GPS.LiftDoors(step, px, py)
+    local aci, ax, ay = SpotWorld(go)
+    local bci, bx, by = SpotWorld(arrive)
     if not (ci and ax and bx and aci == ci and bci == ci) then return false end
     return (px - (ax + bx) / 2) ^ 2 + (py - (ay + by) / 2) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD
 end
@@ -1281,16 +1294,19 @@ function GPS.LiftRidden(route, ci, px, py)
     end
     local e = w.e
     if e and (not fresh or e.from.ci ~= ci) then e, w.e = nil, nil end
+    -- A car (a lift's row, or its twin beside it) the player stands on.
+    local function Aboard(car)
+        local a, b = car.from, car.to
+        if not (a.ci == ci and b.ci == ci and a.wx and b.wx
+            and (px - (a.wx + b.wx) / 2) ^ 2 + (py - (a.wy + b.wy) / 2) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD) then return false end
+        -- Where it was boarded from: the tick before, beside one door.
+        local t = fresh and Through(car, lx, ly)
+        w.e, w.enter = car, t and (t < 0.25 or t > 0.75) and t or nil
+        return true
+    end
     if not e then
         for _, edge in ipairs(ns.GPSData and ns.GPSData.edges or {}) do
-            local a, b = edge.from, edge.to
-            if edge.kind == "elevator" and a.ci == ci and b.ci == ci and a.wx and b.wx
-                and (px - (a.wx + b.wx) / 2) ^ 2 + (py - (a.wy + b.wy) / 2) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD then
-                -- Where it was boarded from: the tick before, beside one door.
-                local t = fresh and Through(edge, lx, ly)
-                w.e, w.enter = edge, t and (t < 0.25 or t > 0.75) and t or nil
-                break
-            end
+            if edge.kind == "elevator" and (Aboard(edge) or (edge.twin and Aboard(edge.twin))) then break end
         end
         return nil
     end
@@ -1306,11 +1322,36 @@ function GPS.LiftRidden(route, ci, px, py)
         if s.kind == "elevator" then
             local aci, ax, ay = PointWorld(s.arrive)
             if aci == ci and ax and (ax - out.wx) ^ 2 + (ay - out.wy) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD then return k, false end
+            -- Its other car: the same lift.
+            local twin = s.twin and s.twin.arrive
+            if twin and twin.ci == ci and (twin.wx - out.wx) ^ 2 + (twin.wy - out.wy) ^ 2 <= LIFT_ABOARD * LIFT_ABOARD then
+                return k, false
+            end
             if s.arrive and s.arrive.area and s.arrive.area == out.area then return k, true end
             return nil
         end
     end
     return nil
+end
+
+-- A kept route's lift step from before the data's lifts changed (its door
+-- no car's now): true, and the route is planned again from where he stands.
+function GPS.LiftsChanged(route)
+    for k = route.active or 1, #(route.steps or {}) do
+        local go = route.steps[k].kind == "elevator" and route.steps[k].go
+        if go and go.wx then
+            local known = false
+            for _, e in ipairs(ns.GPSData and ns.GPSData.edges or {}) do
+                if e.kind == "elevator" and ((e.from.wx == go.wx and e.from.wy == go.wy)
+                    or (e.to.wx == go.wx and e.to.wy == go.wy)) then
+                    known = true
+                    break
+                end
+            end
+            if not known then return true end
+        end
+    end
+    return false
 end
 
 -- A plan of the same trip taken up: its steps and times, and its start
@@ -1500,6 +1541,12 @@ local function Tick()
     local ghost = UnitIsGhost("player") == true
     if ghost ~= (step.corpse == true) then GhostOrRisen() return end
     if ghost then return end
+    -- Kept from before its lift's doors changed: planned again from here.
+    if route.replan and not GPS:IsPlanning() then
+        route.replan = nil
+        Reroute(route)
+        return
+    end
     -- Reaching a crossing's spot changes what its step says: redraw then.
     local there = StepText(step, true) == (step.text or "")
     if route.there ~= there then
@@ -1533,6 +1580,13 @@ local function Tick()
         end
     else
         offRoute.ticks = 0
+    end
+    -- Aboard a car of the lift this walk leads to (a mesa's lift is two,
+    -- the walk ends at one's door): the walk there is done.
+    local lift = step.kind == "travel" and route.steps[(route.active or 1) + 1]
+    if not planned and lift and lift.kind == "elevator" and OnLift(lift) then
+        GPS.MoveOn(route, (route.active or 1) + 1)
+        return
     end
     -- A lift ridden while the route still had it ahead (the walk to it not
     -- counted, or another of the city's lifts taken): on from its far door.
@@ -1585,17 +1639,25 @@ local function Tick()
     -- level's name under the player (the hall's, the city's) has changed.
     if step.kind == "elevator" then
         local level = GetSubZoneText and GetSubZoneText() or ""
+        local go, far = GPS.LiftDoors(step, px, py)
         if not step.liftLevel then
-            local go = step.go
             if go and go.wx and (px - go.wx) ^ 2 + (py - go.wy) ^ 2 <= LIFT_YARDS * LIFT_YARDS then step.liftLevel = level end
             return
         end
         -- Off its platform through the far door: ridden, though the name
-        -- may stay (Undercity's east lift reads the Ruins at both ends).
+        -- may stay (Undercity's east lift reads the Ruins at both ends,
+        -- Thunder Bluff's map its lifts' feet). A mesa's foot is open
+        -- ground all round: leaving its car on the far door's side counts.
         if OnLift(step) then step.boarded = true end
         local through = step.boarded and ns.GPSFollow and ns.GPSFollow.ThroughLift(step, ci, px, py)
-        if level == step.liftLevel and (px - sx) ^ 2 + (py - sy) ^ 2 > LIFT_OFF * LIFT_OFF
-            and not (through and through >= 1) then return end
+        local _, fx, fy = PointWorld(far)
+        if not fx then fx, fy = sx, sy end
+        local ridden = through and through >= 1
+        if through and through > 0.5 and not ridden and go and go.wx then
+            local off = (px - (go.wx + fx) / 2) ^ 2 + (py - (go.wy + fy) / 2) ^ 2
+            ridden = off > LIFT_YARDS * LIFT_YARDS and off <= 4 * LIFT_YARDS * LIFT_YARDS
+        end
+        if level == step.liftLevel and (px - fx) ^ 2 + (py - fy) ^ 2 > LIFT_OFF * LIFT_OFF and not ridden then return end
     end
     local crossing = step.kind ~= "travel"
     -- A crossing to another continent is done the moment you are on it;
@@ -7438,6 +7500,7 @@ loginFrame:SetScript("OnEvent", function(self, event, unit, _, spellID)
         if c then c.route = nil end
         return
     end
+    route.replan = GPS.LiftsChanged(route) or nil
     StartTicker()
     -- The arrow, beacon and minimap line start for it now: the plan below
     -- refreshes them only if the planner is free, and at login it may not

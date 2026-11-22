@@ -65,7 +65,7 @@ function tests.theTicker_ridesALiftByTheLevelsName()
     H.assertTrue(src:find("GetSubZoneText", 1, true) ~= nil, "by the level's name")
     -- The east lift reads the Ruins at both ends (/efd gpslift, 2026-11-04).
     H.assertTrue(src:find("if OnLift(step) then step.boarded = true end", 1, true) ~= nil, "its platform stood on")
-    H.assertTrue(src:find("not (through and through >= 1)", 1, true) ~= nil, "then out through the far door")
+    H.assertTrue(src:find("local ridden = through and through >= 1", 1, true) ~= nil, "then out through the far door")
     H.assertTrue(src:find("step.reached, step.liftLevel, step.boarded = nil, nil, nil", 1, true) ~= nil,
         "a step tracked anew forgets the level it was boarded on and its platform")
 end
@@ -82,7 +82,7 @@ local function StepTextAt(pos)
     local s = assert(src:find("-- A spot's world place", 1, true), "SpotWorld not in GPS.lua")
     local e = assert(src:find("GPS.StepText = StepText", s, true), "end of StepText not found")
     local env = setmetatable({
-        ns = {}, L = {}, sformat = string.format,
+        ns = {}, L = {}, GPS = {}, sformat = string.format,
         PlayerWorldPos = function() return 0, pos.x, pos.y end,
         WorldPos = function() return nil end,
         DepartureText = function() return nil end,

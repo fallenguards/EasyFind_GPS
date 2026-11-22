@@ -1053,7 +1053,10 @@ local function Steps(g, path, goalName, goalStep)
                 (dockGap and dockGap * DOCK_ARRIVE) or (e.kind == "elevator" and LIFT_ARRIVE) or nil)
             -- The other faction's transport: said so on the step.
             if e.hostile then text = text .. " (" .. (_G["HOSTILE"] or "Hostile") .. ")" end
-            tinsert(steps, { kind = e.kind, text = text, hostile = e.hostile,
+            -- A mesa's lift is two cars side by side: the other car's doors, this way round.
+            local twin = e.edge.twin
+            if twin then twin = e.reverse and { go = twin.to, arrive = twin.from } or { go = twin.from, arrive = twin.to } end
+            tinsert(steps, { kind = e.kind, text = text, hostile = e.hostile, twin = twin,
                              mapID = from.p.m, x = from.p.x, y = from.p.y, go = from.p, arrive = node.p,
                              sec = e.sec - (e.hostile and HOSTILE_SECONDS or 0),
                              edgeSec = e.sec - (wait or 0) - (e.hostile and HOSTILE_SECONDS or 0), wait = wait,

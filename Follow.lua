@@ -123,11 +123,19 @@ local function Find(ci, sx, sy, now)
     walk.plan = Drawn(ci, walk, walk.tx, walk.ty, walk.near) or nil
 end
 
+-- The doors of the car of a lift's step nearest (x, y): a mesa's lift is two.
+local function Doors(step, x, y)
+    local LiftDoors = ns.GPS and ns.GPS.LiftDoors
+    if LiftDoors then return LiftDoors(step, x, y) end
+    return step.go, step.arrive
+end
+
 -- How far through a lift's shaft (x, y) lies along the line of its doors:
 -- 0 at the one boarded, 1 at the one it lets off at; nil off this continent.
 function Follow.ThroughLift(step, ci, x, y)
-    local gci, gx, gy = World(step.go)
-    local aci, ax, ay = World(step.arrive)
+    local go, arrive = Doors(step, x, y)
+    local gci, gx, gy = World(go)
+    local aci, ax, ay = World(arrive)
     if not (gx and ax and gci == ci and aci == ci) then return nil end
     local dx, dy = ax - gx, ay - gy
     local l2 = dx * dx + dy * dy
@@ -141,8 +149,9 @@ end
 local function AtLift(route, index, ci, px, py)
     local lift = route.steps[index - 1]
     if not (lift and lift.kind == "elevator") then return false end
-    local gci, gx, gy = World(lift.go)
-    local aci, ax, ay = World(lift.arrive)
+    local go, arrive = Doors(lift, px, py)
+    local gci, gx, gy = World(go)
+    local aci, ax, ay = World(arrive)
     if not (gx and ax and gci == ci and aci == ci) then return false end
     return (px - (gx + ax) / 2) ^ 2 + (py - (gy + ay) / 2) ^ 2 <= AT_LIFT * AT_LIFT
 end
@@ -316,7 +325,10 @@ local function Take(r, now)
     if step.kind == "elevator" and ci then
         local t = Follow.ThroughLift(step, ci, px, py)
         inLift = t ~= nil and t > LIFT_IN
-        if inLift then tci, tx, ty = World(step.arrive) end
+        if inLift then
+            local _, far = Doors(step, px, py)
+            tci, tx, ty = World(far)
+        end
     end
     if not (ci and tci == ci and tx) then return end
     r.route, r.index, r.ci, r.px, r.py, r.tx, r.ty = route, index, ci, px, py, tx, ty

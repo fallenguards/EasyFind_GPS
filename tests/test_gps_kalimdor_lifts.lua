@@ -110,5 +110,14 @@ function tests.orgrimmarToTheMesa_noFlightKnown_ridesALift()
     end
 end
 
+-- A mesa's lift is two cars side by side: its step carries the other
+-- car's doors, the way it rides.
+function tests.aLiftsStep_knowsItsOtherCar()
+    local lift = Lift(Route(CLIENTS[1])(THUNDER_BLUFF))
+    H.assertNotNil(lift and lift.twin, "the other car")
+    H.assertEq(lift.twin.go.area, lift.go.area, "boarded on the same level")
+    H.assertEq(lift.twin.arrive.area, lift.arrive.area, "let off on the same level")
+end
+
 local pass, fail, failures = H.runSuite("GPS Kalimdor lifts", tests)
 return { pass = pass, fail = fail, failures = failures }

@@ -17,7 +17,7 @@ local LIFTS = {
     { kind = "elevator", from = { ci = 0, wx = 1596, wy = 283, area = 153 }, to = { ci = 0, wx = 1596, wy = 302, area = 1497 } },
 }
 
-local function Ridden()
+local function Ridden(edges)
     local src = Source()
     local sizes = assert(src:match("\n(local LIFT_YARDS[^\n]*)"))
     local aboard = assert(src:match("\n(local LIFT_ABOARD[^\n]*)"))
@@ -25,7 +25,7 @@ local function Ridden()
     local _, e = src:find("\nend\r?\n", s)
     local clock = { now = 100 }
     local env = setmetatable({
-        GPS = {}, ns = { GPSData = { edges = LIFTS } },
+        GPS = {}, ns = { GPSData = { edges = edges or LIFTS } },
         GetTime = function() return clock.now end,
         PointWorld = function(p) return p.ci, p.wx, p.wy end,
     }, { __index = _G })
@@ -101,6 +101,47 @@ function tests.noLiftAhead_nothing()
     local route = UpBySouth()
     route.active = 3
     H.assertNil(Walk(NORTH_UP, route))
+end
+
+-- Thunder Bluff's north-east lift: a car and its twin beside it, each
+-- straight up and down (2026-11-22).
+local MESA = { { kind = "elevator",
+    from = { ci = 1, wx = -1043, wy = -45, area = 1638 }, to = { ci = 1, wx = -1032, wy = -53, area = 215 },
+    twin = { from = { ci = 1, wx = -1035, wy = -28, area = 1638 }, to = { ci = 1, wx = -1021, wy = -28, area = 215 } } } }
+
+local function DownTheMesa()
+    local car = MESA[1]
+    return { active = 1, steps = {
+        { kind = "travel", go = car.from },
+        { kind = "elevator", go = car.from, arrive = car.to, twin = { go = car.twin.from, arrive = car.twin.to } },
+        { kind = "travel", go = { ci = 1, wx = -400, wy = -900 } },
+    } }
+end
+
+local function MesaWalk(spots)
+    local ridden, clock = Ridden(MESA)
+    local route = DownTheMesa()
+    local k, other
+    for _, p in ipairs(spots) do
+        clock.now = clock.now + 1
+        k, other = ridden(route, 1, p[1], p[2])
+        if k then break end
+    end
+    return k, other
+end
+
+function tests.aMesasOtherCar_isTheRoutesOwnLift()
+    local k, other = MesaWalk({ { -1050, -28 }, { -1043, -28 }, { -1036, -28 }, { -1030, -28 }, { -1028, -28 },
+                                { -1028, -28 }, { -1022, -28 }, { -1016, -28 } })
+    H.assertEq(k, 2, "the walk to the lift not counted: its step all the same")
+    H.assertFalse(other, "the car beside the route's: on to the walk after it")
+end
+
+function tests.aMesasCar_riddenDownAndOffAtItsFoot()
+    local k, other = MesaWalk({ { -1052, -40 }, { -1046, -43 }, { -1041, -46 }, { -1037, -49 }, { -1037, -49 },
+                                { -1034, -52 }, { -1030, -55 }, { -1026, -58 } })
+    H.assertEq(k, 2)
+    H.assertFalse(other)
 end
 
 -- The ticker reads it before a walk's own checks.
