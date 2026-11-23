@@ -7316,7 +7316,7 @@ do
         local colorRow = CreateFrame("Frame", nil, page)
         colorRow:SetSize(kit.ROW_WIDTH, 24)
         colorRow:SetPoint("TOPLEFT", page, "TOPLEFT", 0, -6)
-        local colorHead = colorRow:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        local colorHead = colorRow:CreateFontString(nil, "ARTWORK", kit.Font("GameFontNormal"))
         colorHead:SetPoint("LEFT", colorRow, "LEFT", 8, 0)
         colorHead:SetText(L["GPS_LINE_COLORS"])
         local prevRow = colorRow
@@ -7339,7 +7339,7 @@ do
             local wrow = CreateFrame("Frame", nil, page)
             wrow:SetSize(kit.ROW_WIDTH, 22)
             wrow:SetPoint("TOPLEFT", prevRow, "BOTTOMLEFT", 0, prevRow == colorRow and -2 or 0)
-            local text = wrow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local text = wrow:CreateFontString(nil, "OVERLAY", kit.Font("GameFontHighlightSmall"))
             text:SetPoint("LEFT", wrow, "LEFT", 8, 0)
             text:SetText(label)
             local swatch = CreateFrame("Button", nil, wrow)
