@@ -4,6 +4,21 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.10.0] - 2026-11-22
+
+### Added
+- **Things to use, as icons**: the items, spells and macros a guide's step uses sit under the arrow as icons in one box, each with its tooltip on hover and its cooldown shown. A guide extension's options can put them back as named buttons
+- **Two targets to a row**: the Target buttons under the arrow pair up where two fit side by side
+- **Right-click clears Show on map**: a right-click on a group member's mark on the map clears it, and hovering the mark says whose it is
+
+### Fixed
+- **Lifts on the mesas**: riding Thunder Bluff's lifts, the Great Lift or Freewind Post's lift counts as soon as you step off, on either of its two cars. The route kept asking for the lift again at its foot
+- **Avoid switches take effect at once**: ticking a way of travel under Route planning > Avoid plans the route again right away, in the seconds after a route appears and on a route kept through a reload too. The switch stood on and the route still flew
+- **Buttons under the arrow keep up**: the Target and use buttons move with the arrow as it is moved, where they trailed behind it
+- **Departure times**: the boat and zeppelin times you have timed stay with your realm in a session where the game gives no realm name (with EasyFind 5.6.0)
+
+---
+
 ## [1.9.1] - 2026-11-21
 
 ### Fixed
