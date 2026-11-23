@@ -83,7 +83,7 @@ local function Load()
         function f:SetScript(name, fn) self[name] = fn end
         return f
     end
-    ns.ShowHintTooltip = function(owner, _, title, body) t.hint = { owner = owner, title = title, body = body } end
+    ns.ShowHintTooltip = function(owner, side, title, body) t.hint = { owner = owner, side = side, title = title, body = body } end
     ns.HideHintTooltip = function() t.hint = nil end
     ns.MapSearchFrames = {
         CreateHighlightBox = function(_, parent, opts)
@@ -237,8 +237,11 @@ function tests.showOnMap_aRightClickOnThemClearsIt()
     H.assertTrue(t.box.mouse, "the mark takes the mouse")
     H.assertEq(table.concat(t.box.passes or {}, " "), "LeftButton MiddleButton", "the map's own clicks pass: a drag still pans it")
     t.box.OnEnter(t.box)
-    H.assertEq(t.hint.title, "Friend", "whose mark it is")
-    H.assertEq(t.hint.body, "WP_DISMISS", "and how it goes")
+    -- The game's own tooltip names them, right of their dot: ours covered
+    -- it (snip 221718, 2026-11-22).
+    H.assertNil(t.hint.title, "no name of ours over the game's")
+    H.assertEq(t.hint.body, "WP_DISMISS", "only how it goes")
+    H.assertEq(t.hint.side, "ANCHOR_LEFT", "on the other side from the game's tooltip")
     t.box.OnMouseUp(t.box, "LeftButton")
     H.assertTrue(t.box.shown and not ticker.cancelled, "a left-click leaves it")
     t.box.OnMouseUp(t.box, "RightButton")
