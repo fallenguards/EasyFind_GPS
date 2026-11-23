@@ -211,7 +211,7 @@ function tests.aKeptRoutesOldLiftStep_isPlannedAgain()
         "a lift behind him is no matter")
     H.assertFalse(env.GPS.LiftsChanged({ active = 1, steps = { { kind = "travel" }, LiftDown() } }), "the data's own car")
     local tick = assert(gps:find("local function Tick()", 1, true))
-    H.assertTrue(gps:find("if route.replan and not GPS:IsPlanning() then", tick, true) ~= nil, "the ticker plans it again")
+    H.assertTrue(gps:find("if (route.replan or GPS.replanAsked) and not GPS:IsPlanning() then", tick, true) ~= nil, "the ticker plans it again")
     H.assertTrue(gps:find("route.replan = GPS.LiftsChanged(route) or nil", 1, true) ~= nil, "asked at login")
 end
 

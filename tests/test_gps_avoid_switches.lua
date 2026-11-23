@@ -20,8 +20,9 @@ local function Load(db, hasTeleports)
         GPS = GPS, L = L, DB = function() return db end,
         ns = { GPSRoute = { HasTeleports = function() return hasTeleports end } },
         Route = function() return { arrived = false } end,
-        Reroute = function() rerouted = rerouted + 1 end,
     }, { __index = _G })
+    -- Planned again at once, whatever the planner is at (test_gps_avoid_replan.lua).
+    GPS.PlanAgain = function() rerouted = rerouted + 1 end
     local chunk = Slice(src, "function GPS.Avoids()", "\n-- This character's slot")
         .. Slice(src, "function GPS.AvoidKinds()", "\n-- The menu row hiding the steps already done")
     assert(load(chunk, "=GPS.lua Avoid", "t", env))()

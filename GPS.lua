@@ -119,6 +119,21 @@ function GPS.Avoids()
     return avoid
 end
 
+-- The ways left out as one word (a route's own set, else the switches): a
+-- route keeps the word it was planned under, and one planned under another
+-- is planned again (kept through a reload from before a flip, 2026-11-23).
+GPS.AVOID_ORDER = { "taxi", "boat", "zeppelin", "portal", "hearth", "teleports", "danger", "offroad", "jumps" }
+function GPS.AvoidKey(own)
+    local avoid = own or GPS.Avoids()
+    local key = ""
+    if not avoid then return key end
+    for i = 1, #GPS.AVOID_ORDER do
+        local on = avoid[GPS.AVOID_ORDER[i]]
+        if on ~= nil then key = key .. GPS.AVOID_ORDER[i] .. (on and "+" or "-") end
+    end
+    return key
+end
+
 -- This character's slot: the route in progress and whether its pop-out was open.
 -- Style, dock slot and size are shared settings.
 local function CharKey()
@@ -1358,6 +1373,7 @@ end
 -- where the plan set out from (BuildStops), so the drawn way begins there.
 function GPS.Replanned(route, steps, total, advice)
     route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
+    route.avoidKey = GPS.AvoidKey(route.wayAvoid)
     if ns.GPSRoute and ns.GPSRoute.ShowWalks then ns.GPSRoute.ShowWalks(nil) end
     local here = GPS.RouteStart(route) or GPS.PlayerStart()
     route.from = here and { ci = here.ci, wx = here.wx, wy = here.wy } or nil
@@ -1365,15 +1381,35 @@ function GPS.Replanned(route, steps, total, advice)
 end
 
 -- The route again from where it stands (the start as set until reached,
--- the player from then on), to the same place. A stop to learn a flight
--- master stays until that master is learned.
-local function Reroute(route)
-    if GPS:IsPlanning() then return end
+-- the player from then on), to the same place, over whatever the planner
+-- is at. A stop to learn a flight master stays until that master is
+-- learned. A field: the file is at 200 locals.
+function GPS.Replan(route)
     local via = GPS.ViaLeft(route, ns.GPSRoute and ns.GPSRoute.recordedKnown)
     GPS:Plan(nil, function() return GPS:BuildStops(route, via, route.wayAvoid, true, "first") end,
         function(steps, total, advice)
             if steps and Route() == route then GPS.Rerouted(route, via, steps, total, advice) end
         end)
+end
+
+-- The ticker's own (strayed, another lift taken): never over a plan under way.
+local function Reroute(route)
+    if GPS:IsPlanning() then return end
+    GPS.Replan(route)
+end
+
+-- A switch the route depends on was flipped: planned again at once, over
+-- what the planner works out behind a shown route (its walks, its other
+-- ways; a flip in those seconds was dropped, 2026-11-23). Behind a route
+-- still being found, the ticker plans again once it is.
+function GPS.PlanAgain()
+    local route = Route()
+    if not route or route.arrived then return end
+    if GPS.planning then
+        GPS.replanAsked = true
+        return
+    end
+    GPS.Replan(route)
 end
 
 function GPS.Rerouted(route, via, steps, total, advice)
@@ -1386,7 +1422,7 @@ function GPS.Rerouted(route, via, steps, total, advice)
     CharDB().route = { dest = route.dest, steps = steps, active = 1, t = time(), eta = total, total = total, advice = advice,
                        via = via, from = ci and { ci = ci, wx = wx, wy = wy } or nil, report = report,
                        origin = route.origin, joined = route.joined, stops = route.stops, skipLearn = route.skipLearn,
-                       wayAvoid = route.wayAvoid, dangerSeen = route.dangerSeen }
+                       wayAvoid = route.wayAvoid, avoidKey = GPS.AvoidKey(route.wayAvoid), dangerSeen = route.dangerSeen }
     closing.step = nil
     if GPS.AfterRoute then GPS.AfterRoute() end
     if ns.GPSPreview and ns.GPSPreview.Reset then ns.GPSPreview:Reset() end
@@ -1541,9 +1577,18 @@ local function Tick()
     local ghost = UnitIsGhost("player") == true
     if ghost ~= (step.corpse == true) then GhostOrRisen() return end
     if ghost then return end
-    -- Kept from before its lift's doors changed: planned again from here.
-    if route.replan and not GPS:IsPlanning() then
-        route.replan = nil
+    -- Kept from before its lift's doors changed, or a switch flipped while
+    -- a route was being found: planned again from here.
+    if (route.replan or GPS.replanAsked) and not GPS:IsPlanning() then
+        route.replan, GPS.replanAsked = nil, nil
+        Reroute(route)
+        return
+    end
+    -- Planned under other switches than stand now (kept through a reload
+    -- from before a flip): planned again, once a change.
+    local avoidKey = GPS.AvoidKey(route.wayAvoid)
+    if route.avoidKey ~= avoidKey and not GPS:IsPlanning() then
+        route.avoidKey = avoidKey
         Reroute(route)
         return
     end
@@ -1789,7 +1834,7 @@ function GPS.Navigated(dest, steps, total, advice, stops, avoid)
     local same = old and old.dest and old.dest.name == dest.name and old.dest.mapID == dest.mapID
     CharDB().route = { dest = dest, steps = steps, active = 1, t = time(), eta = total, total = total, advice = advice,
                        from = from, origin = origin, stops = stops or { dest }, skipLearn = same and old.skipLearn or nil,
-                       dangerSeen = same and old.dangerSeen or nil, wayAvoid = avoid,
+                       dangerSeen = same and old.dangerSeen or nil, wayAvoid = avoid, avoidKey = GPS.AvoidKey(avoid),
                        report = { from = start, total = total, t = time(), fly = flies,
                                   steps = Engine and Engine.StepsCode and Engine.StepsCode(steps) or nil } }
     if GPS.AfterRoute then GPS.AfterRoute() end
@@ -2117,6 +2162,7 @@ function GPS:TakeOtherWay(other)
             if not (steps and Route() == route) then return end
             GPS.Replanned(route, steps, total, advice)
             route.wayAvoid, route.others = other.avoid, nil
+            route.avoidKey = GPS.AvoidKey(route.wayAvoid)
             TrackStep(1)
             AfterRoute()
         end)
@@ -4351,8 +4397,10 @@ function GPS.AvoidRow(kind)
             d.gpsAvoid = GPS.Avoids() or {}
             on = on and true or false
             if on == default then d.gpsAvoid[kind] = nil else d.gpsAvoid[kind] = on end
+            -- A route that keeps its own set (a way picked, a guide's) takes the switch too.
             local route = Route()
-            if route and not route.arrived then Reroute(route) end
+            if route and route.wayAvoid then route.wayAvoid[kind] = d.gpsAvoid[kind] end
+            GPS.PlanAgain()
         end }
 end
 
@@ -7217,10 +7265,7 @@ do
                 if ns.GPSPreview and ns.GPSPreview.ColorsChanged then ns.GPSPreview.ColorsChanged() end
             end)
         end
-        Switch("gpsZoneSteps", L["GPS_ZONE_STEPS"], L["GPS_ZONE_STEPS_TT"], function()
-            local route = Route()
-            if route and not route.arrived then Reroute(route) end
-        end)
+        Switch("gpsZoneSteps", L["GPS_ZONE_STEPS"], L["GPS_ZONE_STEPS_TT"], GPS.PlanAgain)
         Switch("gpsRowButton", L["GPS_ROW_BUTTON"], L["GPS_ROW_BUTTON_TT"], function()
             if ns.Search and ns.Search.RefreshResults then ns.Search:RefreshResults() end
             if ns.MapTab and ns.MapTab.RefreshIfOpen then ns.MapTab:RefreshIfOpen() end
