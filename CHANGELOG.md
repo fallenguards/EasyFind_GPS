@@ -4,6 +4,17 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [1.10.1] - 2026-11-22
+
+### Changed
+- **Show on map is a switch**: on a group member's right-click menu the row wears a check while their mark is on the map, and the same row takes the mark away
+- **Game version 12.1.7**: listed, so the 12.1.7 test realm no longer marks the addon out of date
+
+### Fixed
+- **The mark's hint**: hovering a group member's mark no longer covers the game's own tooltip for them: the hint sits on the other side, at a readable size however far the map is zoomed out
+
+---
+
 ## [1.10.0] - 2026-11-22
 
 ### Added
