@@ -78,8 +78,13 @@ local function Load()
         function f:ClearAllPoints() self.at = nil end
         function f:SetPoint(_, rel, _, x, y) self.at = { rel = rel, x = x, y = y } end
         function f:GetParent() return parent end
+        function f:EnableMouse(on) self.mouse = on end
+        function f:SetPassThroughButtons(...) self.passes = { ... } end
+        function f:SetScript(name, fn) self[name] = fn end
         return f
     end
+    ns.ShowHintTooltip = function(owner, _, title, body) t.hint = { owner = owner, title = title, body = body } end
+    ns.HideHintTooltip = function() t.hint = nil end
     ns.MapSearchFrames = {
         CreateHighlightBox = function(_, parent, opts)
             t.box = Mark(parent)
@@ -219,6 +224,28 @@ function tests.showOnMap_opensTheirZone_andMarksThem_movingWithThem()
     ticker.fn()
     H.assertTrue(ticker.cancelled, "the map closed: done")
     H.assertFalse(t.box.shown or t.ind.shown)
+end
+
+-- "why no way to right click clear the tracking after show on map"
+-- (2026-11-23): the mark took no clicks at all.
+function tests.showOnMap_aRightClickOnThemClearsIt()
+    local t = Load()
+    Member(t)
+    Menu(t, "PARTY", "party1")[3].fn()
+    local ticker = t.tickers[#t.tickers]
+    H.assertTrue(t.box.mouse, "the mark takes the mouse")
+    H.assertEq(table.concat(t.box.passes or {}, " "), "LeftButton MiddleButton", "the map's own clicks pass: a drag still pans it")
+    t.box.OnEnter(t.box)
+    H.assertEq(t.hint.title, "Friend", "whose mark it is")
+    H.assertEq(t.hint.body, "WP_DISMISS", "and how it goes")
+    t.box.OnMouseUp(t.box, "LeftButton")
+    H.assertTrue(t.box.shown and not ticker.cancelled, "a left-click leaves it")
+    t.box.OnMouseUp(t.box, "RightButton")
+    H.assertFalse(t.box.shown or t.ind.shown, "cleared")
+    H.assertTrue(ticker.cancelled, "no longer watched")
+    H.assertNil(t.hint, "its tooltip goes with it")
+    Menu(t, "PARTY", "party1")[3].fn()
+    H.assertTrue(t.box.shown, "shown again from the menu")
 end
 
 function tests.showOnMap_inAFight_marksNothing()

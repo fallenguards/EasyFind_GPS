@@ -213,9 +213,10 @@ if Menu and Menu.ModifyMenu then
     end
 
     -- Show on map: the member's zone on the world map, EasyFind's highlight
-    -- and indicator on them, moving with them till the map closes.
+    -- and indicator on them, moving with them till the map closes or a
+    -- right-click on them clears it, as on EasyFind's own pins.
     local SHOW_EVERY = 0.1
-    local shown = {}   -- guid, box, ind, ticker
+    local shown = {}   -- guid, name, box, ind, ticker
 
     local function Unshow()
         if shown.ticker then shown.ticker:Cancel() end
@@ -223,8 +224,15 @@ if Menu and Menu.ModifyMenu then
         if shown.box then
             shown.box:Hide()
             shown.ind:Hide()
+            ns.HideHintTooltip()
         end
     end
+
+    local function ShownClick(_, button)
+        if button == "RightButton" then Unshow() end
+    end
+    local function ShownEnter(self) ns.ShowHintTooltip(self, nil, shown.name, L["WP_DISMISS"]) end
+    local function ShownLeave() ns.HideHintTooltip() end
 
     -- On whatever map the world map shows that holds them (their zone, its
     -- continent); hidden on one that does not.
@@ -273,8 +281,14 @@ if Menu and Menu.ModifyMenu then
                                                                  color = ns.YELLOW_HIGHLIGHT })
             shown.ind = Frames.CreateIndicatorFrame(nil, canvas, { strata = "TOOLTIP", level = 2001, size = ns.ICON_SIZE })
             shown.ind:Hide()
+            -- The map's own clicks pass through it: a drag still pans the map.
+            shown.box:EnableMouse(true)
+            Utils.SafeCallMethod(shown.box, "SetPassThroughButtons", "LeftButton", "MiddleButton")
+            shown.box:SetScript("OnMouseUp", ShownClick)
+            shown.box:SetScript("OnEnter", ShownEnter)
+            shown.box:SetScript("OnLeave", ShownLeave)
         end
-        shown.guid = guid
+        shown.guid, shown.name = guid, UnitName(unit)
         PlaceShown()
         shown.ticker = C_Timer.NewTicker(SHOW_EVERY, PlaceShown)
     end
