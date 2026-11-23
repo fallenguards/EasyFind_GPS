@@ -909,7 +909,12 @@ end
 local function StepText(step, active)
     -- A walk that jumps down a ledge says how (Jumps.lua).
     local jump = ns.GPSJumps and ns.GPSJumps.StepText(step)
-    if jump then return (step.text or "") .. ". " .. jump end
+    if jump then
+        local text = step.text or ""
+        -- "Talk to Tal." took a second period (2026-11-23).
+        local sep = text == "" and "" or (text:find("[%.!?]$") and " " or ". ")
+        return text .. sep .. jump
+    end
     if active and step and step.kind == "elevator" and step.aboardText and OnLift(step) then return step.aboardText end
     -- On board, docked or under way: stay on until it lands.
     local Boats = ns.GPSBoats

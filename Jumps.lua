@@ -171,12 +171,15 @@ function Jumps.HasCast(step)
     return (spellID or itemID) ~= nil
 end
 
--- A walk that jumps down a ledge says where, and with what lands the
--- character safely when the drop is past what a fall leaves; near the
--- place the highest one is (the map marks each).
+-- A walk whose ledge is past what a fall leaves says what lands the
+-- character safely, and near where; a ledge full health survives says
+-- nothing: the drawn path shows it, and "jump down" read on a mesa's
+-- top could send someone off it (2026-11-23).
 function Jumps.StepText(step)
     local top, high, survive, ci = Drop(step)
     if not top then return nil end
+    local helper = (not survive or high > survive) and Jumps.Helper()
+    if not helper then return nil end
     local jumps = step.jumps
     -- By its jump list: a walk split by zone copies its other fields.
     local place = Jumps.placeOf[jumps]
@@ -186,14 +189,9 @@ function Jumps.StepText(step)
     end
     place = place or nil
     local yd = mfloor(high + 0.5)
-    local helper = (not survive or high > survive) and Jumps.Helper()
-    if helper then
-        local key = helper.wear and "GPS_JUMP_WEAR" or "GPS_JUMP_HELPER"
-        if place then return sformat(L[key .. "_AT_FMT"], helper.name, place, yd) end
-        return sformat(L[key .. "_FMT"], helper.name, yd)
-    end
-    if place then return sformat(L["GPS_JUMP_AT_FMT"], place, yd) end
-    return sformat(L["GPS_JUMP_FMT"], yd)
+    local key = helper.wear and "GPS_JUMP_WEAR" or "GPS_JUMP_HELPER"
+    if place then return sformat(L[key .. "_AT_FMT"], helper.name, place, yd) end
+    return sformat(L[key .. "_FMT"], helper.name, yd)
 end
 
 -- With nothing to land safely from any height: what the shop item would

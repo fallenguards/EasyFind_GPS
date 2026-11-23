@@ -22,10 +22,8 @@ local function Load(opts)
     env.EasyFind._ns = ns
     ns.Caps = { forever = opts.forever }
     ns.GPSNav = { DropHeights = function() if opts.noData then return nil end return 12.4, 20 end }
-    ns.L.GPS_JUMP_FMT = "full %d"
     ns.L.GPS_JUMP_HELPER_FMT = "use %s %d"
     ns.L.GPS_JUMP_WEAR_FMT = "wear %s %d"
-    ns.L.GPS_JUMP_AT_FMT = "full at %s %d"
     ns.L.GPS_JUMP_HELPER_AT_FMT = "use %s at %s %d"
     ns.L.GPS_JUMP_WEAR_AT_FMT = "wear %s at %s %d"
     H.loadModule("Jumps.lua", env, ns)
@@ -59,13 +57,18 @@ function tests.limit_byWhatTheCharacterHas()
     H.assertNil(Load({ noData = true }).Limit(0), "no drops in the data")
 end
 
-function tests.stepText_saysHowToJump()
+-- A ledge full health survives says nothing: the drawn path shows it, and
+-- "jump down the ledge near Thunder Bluff" on the mesa's top could send a
+-- player off it (2026-11-23). Past survival, what lands the character.
+function tests.stepText_onlyWhereSomethingMustLandYou()
     local J = Load({})
     H.assertNil(J.StepText({ text = "Walk" }), "no jump, nothing to say")
-    H.assertEq(J.StepText({ jumps = { { h = 14.6 }, { h = 17.2 } } }), "full 17", "the highest, at full health")
+    H.assertNil(J.StepText({ jumps = { { h = 14.6 }, { h = 17.2 } } }), "survivable: the path shows it")
     J = Load({ items = { [260810] = 1 } })
     H.assertEq(J.StepText({ jumps = { { h = 30 } } }), "wear item 260810 30", "past survival: the helper, put on first")
-    H.assertEq(J.StepText({ jumps = { { h = 15 } } }), "full 15", "survivable needs no helper")
+    H.assertNil(J.StepText({ jumps = { { h = 15 } } }), "survivable needs no helper and no words")
+    H.assertEq(Load({ known = { [130] = true } }).StepText({ jumps = { { h = 15 }, { h = 30 } } }), "use spell 130 30",
+        "the highest ledge decides")
 end
 
 -- The step's button: a teleport's spell or item, and at a ledge past what
@@ -99,18 +102,18 @@ local function Placed(ns, areas, statics)
 end
 
 function tests.stepText_namesWhereTheLedgeIs()
-    local J, ns, env = Load({})
+    local J, ns, env = Load({ known = { [130] = true } })
     env.C_Map = { GetAreaInfo = function(id) return id == 7 and "Valley of Heroes" or nil end }
     Placed(ns, { 7, 0.5, 0.5 }, {})
-    local step = { arrive = { ci = 0 }, jumps = { { h = 12, x = 100, y = 100 }, { h = 23, x = 520, y = 480 } } }
-    H.assertEq(J.StepText(step), "full at Valley of Heroes 23", "the highest one's place")
+    local step = { arrive = { ci = 0 }, jumps = { { h = 12, x = 100, y = 100 }, { h = 33, x = 520, y = 480 } } }
+    H.assertEq(J.StepText(step), "use spell 130 at Valley of Heroes 33", "the highest one's place")
     Placed(ns, {}, { { name = "Bank", category = "bank", x = 0.55, y = 0.5 }, { name = "Alchemy", category = "prof_alchemy", x = 0.52, y = 0.48 } })
-    H.assertEq(J.StepText({ arrive = { ci = 0 }, jumps = { { h = 23, x = 520, y = 480 } } }), "full at Bank 23",
+    H.assertEq(J.StepText({ arrive = { ci = 0 }, jumps = { { h = 33, x = 520, y = 480 } } }), "use spell 130 at Bank 33",
         "a city: a landmark, not a trainer")
     Placed(ns, {}, {})
-    H.assertEq(J.StepText({ arrive = { ci = 0 }, jumps = { { h = 23, x = 520, y = 480 } } }), "full at Stormwind City 23")
+    H.assertEq(J.StepText({ arrive = { ci = 0 }, jumps = { { h = 33, x = 520, y = 480 } } }), "use spell 130 at Stormwind City 33")
     ns.GPS = nil
-    H.assertEq(J.StepText({ arrive = { ci = 0 }, jumps = { { h = 23, x = 520, y = 480 } } }), "full 23", "nowhere to name")
+    H.assertEq(J.StepText({ arrive = { ci = 0 }, jumps = { { h = 33, x = 520, y = 480 } } }), "use spell 130 33", "nowhere to name")
 end
 
 function tests.any_findsAStepThatJumps()
