@@ -303,7 +303,11 @@ if Menu and Menu.ModifyMenu then
             if not (Plain(guid) and Plain(name) and MemberSpot(unit)) then return end
             root:CreateDivider()
             root:CreateButton(L["GPS_MENU_EASYFIND_DIRECTIONS"], function() Follow(guid, name) end)
-            root:CreateButton(L["GPS_MENU_SHOW_ON_MAP"], function() ShowOnMap(guid) end)
+            -- Checked while their mark is up: the same row takes it away.
+            root:CreateCheckbox(L["GPS_MENU_SHOW_ON_MAP"], function() return shown.guid == guid end, function()
+                if shown.guid == guid then Unshow() else ShowOnMap(guid) end
+                return MenuResponse and MenuResponse.Close
+            end)
             return
         end
         local id = NpcID(unit)

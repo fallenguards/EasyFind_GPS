@@ -111,6 +111,7 @@ local function Menu(t, which, unit)
     local root = {}
     function root:CreateDivider() rows[#rows + 1] = "divider" end
     function root:CreateButton(label, fn) rows[#rows + 1] = { label = label, fn = fn } end
+    function root:CreateCheckbox(label, checked, fn) rows[#rows + 1] = { label = label, fn = fn, checked = checked } end
     t.mods["MENU_UNIT_" .. which](nil, root, { unit = unit })
     return rows
 end
@@ -246,6 +247,23 @@ function tests.showOnMap_aRightClickOnThemClearsIt()
     H.assertNil(t.hint, "its tooltip goes with it")
     Menu(t, "PARTY", "party1")[3].fn()
     H.assertTrue(t.box.shown, "shown again from the menu")
+end
+
+-- "im still confused how to stop map tracking a party member"
+-- (2026-11-22): the row that starts it wears a check while their mark is
+-- up, and takes it away.
+function tests.showOnMap_isASwitch_onTheMembersMenu()
+    local t = Load()
+    Member(t)
+    local row = Menu(t, "PARTY", "party1")[3]
+    H.assertFalse(row.checked(), "no mark yet")
+    row.fn()
+    H.assertTrue(t.box.shown)
+    row = Menu(t, "PARTY", "party1")[3]
+    H.assertTrue(row.checked(), "checked while their mark is up")
+    row.fn()
+    H.assertFalse(t.box.shown or t.ind.shown, "the same row takes it away")
+    H.assertFalse(Menu(t, "PARTY", "party1")[3].checked())
 end
 
 function tests.showOnMap_inAFight_marksNothing()
