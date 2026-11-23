@@ -1,9 +1,11 @@
--- Alt-click for directions: a spot on the world map or a pin on it (the
--- game's own waypoint pin says so in its tooltip), or a map pin linked in
--- chat; a right-click on a pin or a quest's objective area opens its menu
--- with the directions. Read from the mouse events and after the client's
--- own handling, never inside its click: a hook there would run the rest
--- of the pin's click in our name.
+-- Alt-click for directions: a spot on the world map, a pin on it (the
+-- game's own waypoint pin says so in its tooltip) or a quest's objective
+-- area, or a map pin linked in chat; a right-click on a pin or a quest's
+-- objective area opens its menu with the directions. Read from the mouse
+-- events, never inside the client's click: a hook there would run the rest
+-- of the pin's click in our name. Where the map calls handlers securely,
+-- an Alt-click is claimed so the pin's own click (a quest's tracking) and
+-- the map's zoom skip it.
 local EasyFind = EasyFind
 local ns = EasyFind and EasyFind._ns
 if not ns or select(2, ...).tooOld then return end
@@ -122,17 +124,21 @@ watch:SetScript("OnEvent", function(_, event, button)
             pressedPin = TargetUnder(map, claims)
             return
         end
-        local pin = PinUnder(map)
-        local x, y
-        if pin then x, y = pin:GetPosition() end
-        if not x then x, y = map:GetNormalizedCursorPosition() end
-        pressed = { mapID = map:GetMapID(), x = x, y = y, name = PinName(pin), questID = pin and QuestOf(pin) }
+        -- A pin or a quest's objective area, else the spot.
+        pressed = TargetUnder(map, claims)
+        if not pressed then
+            local x, y = map:GetNormalizedCursorPosition()
+            pressed = { mapID = map:GetMapID(), x = x, y = y }
+        end
     elseif pressed then
         local p = pressed
         pressed = nil
-        Utils.SafeAfter(0, function()
-            if map:IsShown() and map:GetMapID() ~= p.mapID then ns.MapSearch.TurnMap(p.mapID) end
-        end)
+        -- Unclaimed (no secure map handlers), the click zoomed in: back.
+        if not claims then
+            Utils.SafeAfter(0, function()
+                if map:IsShown() and map:GetMapID() ~= p.mapID then ns.MapSearch.TurnMap(p.mapID) end
+            end)
+        end
         Go(p.mapID, p.x, p.y, p.name, p.questID)
     elseif pressedPin and button == "RightButton" then
         local p = pressedPin
@@ -156,13 +162,24 @@ function MapClick.Install()
     end)
     if map:IsShown() then map:GetScript("OnShow")(map) end
 
-    -- Last in line, after the client's own handlers (a report on a group
-    -- member's dot in a battleground).
     if MapCanvasSecureUtil and map.AddCanvasClickHandler then
         claims = true
+        -- A right-click last in line, after the client's own handlers (a
+        -- report on a group member's dot in a battleground).
         map:AddCanvasClickHandler(function(_, button)
             return button == "RightButton" and TargetUnder(map, true) ~= nil
         end, -10)
+        -- An Alt-click first in line: no quest area's own click, no zoom.
+        map:AddCanvasClickHandler(function(_, button)
+            return button == "LeftButton" and IsAltKeyDown()
+        end, 10)
+        -- An Alt-click on a pin: its press, release and click skip the pin's
+        -- own (a quest's would change its tracking).
+        if map.AddGlobalPinMouseActionHandler then
+            map:AddGlobalPinMouseActionHandler(function(_, _, button)
+                return button == "LeftButton" and IsAltKeyDown()
+            end, 10)
+        end
     end
 
     -- The game's waypoint pin: its tooltip names the Alt-click beside its own.

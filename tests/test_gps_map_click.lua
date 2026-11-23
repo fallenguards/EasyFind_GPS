@@ -4,7 +4,9 @@
 -- menu with the directions, and so does one on a quest's objective area
 -- where the map lets us claim the click (its zoom out skipped). Plain and
 -- Shift clicks stay the game's (Shift shares a pin in chat), and so does
--- a right-click on the bare map.
+-- a right-click on the bare map. There an Alt-click is claimed too: a
+-- quest's pin kept its own click, which changed the quest's tracking, and
+-- an Alt-click on its objective area gave a bare spot (2026-11-23).
 local H = require("Harness")
 
 local function Load(classic)
@@ -59,8 +61,15 @@ local function Load(classic)
             return template == "QuestBlobPinTemplate" and self.blobs[i] or nil
         end
     end
-    local claim
-    function map:AddCanvasClickHandler(fn, priority) claim = { fn = fn, priority = priority } end
+    local canvas, pins = {}, {}
+    function map:AddCanvasClickHandler(fn, priority) canvas[#canvas + 1] = { fn = fn, priority = priority } end
+    function map:AddGlobalPinMouseActionHandler(fn, priority) pins[#pins + 1] = { fn = fn, priority = priority } end
+    -- The right-click's handler runs after the client's, the Alt-click's before.
+    local function Handler(list, first)
+        for _, h in ipairs(list) do
+            if (h.priority > 0) == first then return h end
+        end
+    end
     env.WorldMapFrame = map
     local foci = {}
     env.GetMouseFoci = function() return foci end
@@ -89,7 +98,9 @@ local function Load(classic)
         end,
         link = function(link, button) itemRef(link, "[Map Pin]", button or "LeftButton") end,
         watching = function() return watch.events.GLOBAL_MOUSE_DOWN == true end,
-        claim = function() return claim end,
+        claim = function() return Handler(canvas, false) end,
+        altClaim = function() return Handler(canvas, true) end,
+        pinClaim = function() return Handler(pins, true) end,
         area = function(questID)
             local blob = { shown = true }
             function blob:IsShown() return self.shown end
@@ -105,8 +116,45 @@ end
 
 local tests = {}
 
-function tests.altClickOnTheMap_routesToTheSpot_andTheZoomGoesBack()
+function tests.altClickOnTheMap_routesToTheSpot_withNoZoom()
     local t = Load()
+    t.scripts.OnShow(t.map)
+    t.alt(true)
+    H.assertTrue(t.altClaim().fn(t.map, "LeftButton"), "the Alt-click claimed before the map zooms")
+    t.press()
+    H.assertEq(t.went[1].mapID, 84)
+    H.assertEq(t.went[1].name, "Map 84 25.0, 75.0")
+    H.assertEq(#t.turned, 0, "nothing to turn back")
+    t.alt(false)
+    H.assertFalse(t.altClaim().fn(t.map, "LeftButton"), "a plain click is the game's")
+end
+
+function tests.altClickOnAQuestPin_skipsThePinsOwnClick()
+    local t = Load()
+    local h = t.pinClaim()
+    H.assertTrue(h ~= nil and h.priority > 0, "a pin handler, first in line")
+    t.alt(true)
+    for _, action in ipairs({ "Down", "Up", "Click" }) do
+        H.assertTrue(h.fn(t.map, action, "LeftButton"), action .. " claimed")
+    end
+    H.assertFalse(h.fn(t.map, "Click", "RightButton"), "a right-click is the pin's")
+    t.alt(false)
+    H.assertFalse(h.fn(t.map, "Click", "LeftButton"), "a plain click is the pin's")
+end
+
+function tests.altClickOnAQuestsArea_routesToThatQuest()
+    local t = Load()
+    t.scripts.OnShow(t.map)
+    t.area(31)
+    t.alt(true)
+    t.press()
+    H.assertEq(t.went[1].questID, 31, "the quest, for its tracking on the last step")
+    H.assertEq(t.went[1].name, "Quest 31")
+    H.assertEq(t.went[1].x, 0.25, "where it was clicked in the area")
+end
+
+function tests.whereTheMapCallsHandlersBare_theAltZoomGoesBack()
+    local t = Load(true)
     t.scripts.OnShow(t.map)
     H.assertTrue(t.watching(), "the mouse watched while the map is up")
     t.alt(true)
@@ -268,6 +316,8 @@ end
 function tests.whereTheMapCallsHandlersBare_noneIsAdded()
     local t = Load(true)
     H.assertNil(t.claim())
+    H.assertNil(t.altClaim())
+    H.assertNil(t.pinClaim())
     t.scripts.OnShow(t.map)
     t.area(42)
     t.press("RightButton")
