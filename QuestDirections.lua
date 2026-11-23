@@ -232,8 +232,24 @@ if Menu and Menu.ModifyMenu then
         if button == "RightButton" then Unshow() end
     end
     -- The game's own tooltip names the member, to the right of their dot:
-    -- ours says only how the mark goes, on the other side.
-    local function ShownEnter(self) ns.ShowHintTooltip(self, "ANCHOR_LEFT", nil, L["WP_DISMISS"]) end
+    -- ours says only how the mark goes, on the other side. A hint takes
+    -- its owner's scale, and the mark's is the map's zoom (the text came
+    -- out tiny): it is owned by a stand-in of the map window's own scale,
+    -- laid over the mark.
+    local function ShownEnter(self)
+        local tip = shown.tip
+        if not tip then
+            tip = CreateFrame("Frame", nil, WorldMapFrame)
+            shown.tip = tip
+        end
+        local left, bottom, width, height = self:GetRect()
+        if not left then return end
+        local k = self:GetEffectiveScale() / tip:GetEffectiveScale()
+        tip:ClearAllPoints()
+        tip:SetSize(width * k, height * k)
+        tip:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left * k, bottom * k)
+        ns.ShowHintTooltip(tip, "ANCHOR_LEFT", nil, L["WP_DISMISS"])
+    end
     local function ShownLeave() ns.HideHintTooltip() end
 
     -- On whatever map the world map shows that holds them (their zone, its

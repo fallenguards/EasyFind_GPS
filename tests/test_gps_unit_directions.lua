@@ -79,12 +79,21 @@ local function Load()
         function f:SetPoint(_, rel, _, x, y) self.at = { rel = rel, x = x, y = y } end
         function f:GetParent() return parent end
         function f:EnableMouse(on) self.mouse = on end
+        -- On the map's canvas: zoomed out to 0.4, 30 wide at 100, 200.
+        function f:GetEffectiveScale() return 0.4 end
+        function f:GetRect() return 100, 200, 30, 30 end
         function f:SetPassThroughButtons(...) self.passes = { ... } end
         function f:SetScript(name, fn) self[name] = fn end
         return f
     end
     ns.ShowHintTooltip = function(owner, side, title, body) t.hint = { owner = owner, side = side, title = title, body = body } end
     ns.HideHintTooltip = function() t.hint = nil end
+    -- A frame of the map window's own: at the window's scale, not the canvas's zoom.
+    env.CreateFrame = function(_, _, parent)
+        local f = Mark(parent)
+        function f:GetEffectiveScale() return 1 end
+        return f
+    end
     ns.MapSearchFrames = {
         CreateHighlightBox = function(_, parent, opts)
             t.box = Mark(parent)
@@ -242,6 +251,15 @@ function tests.showOnMap_aRightClickOnThemClearsIt()
     H.assertNil(t.hint.title, "no name of ours over the game's")
     H.assertEq(t.hint.body, "WP_DISMISS", "only how it goes")
     H.assertEq(t.hint.side, "ANCHOR_LEFT", "on the other side from the game's tooltip")
+    -- "why the font so small on that tooltip": a hint takes its owner's
+    -- scale, and the mark's is the map's zoom. Its owner is a stand-in at
+    -- the map window's scale, laid over the mark.
+    local owner = t.hint.owner
+    H.assertTrue(owner ~= t.box, "not owned by the mark on the canvas")
+    H.assertEq(owner:GetEffectiveScale(), 1, "at the map window's own scale")
+    H.assertEq(owner.size, 12, "as large on screen as the mark (30 at 0.4)")
+    H.assertEq(owner.at.x, 40, "and where it is")
+    H.assertEq(owner.at.y, 80)
     t.box.OnMouseUp(t.box, "LeftButton")
     H.assertTrue(t.box.shown and not ticker.cancelled, "a left-click leaves it")
     t.box.OnMouseUp(t.box, "RightButton")
