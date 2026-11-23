@@ -375,6 +375,9 @@ EasyFind.API.RegisterSearchProvider({
     label = QUESTS_LABEL or "Quests",
     extension = "gps",
     words = { "quest", "quests" },
+    -- A quest's name alone finds it: loaded once a search finds little,
+    -- then searched every time after.
+    lowResults = true,
     -- The game's small "?" is lost in the map's art on its pin.
     iconWell = true,
     rows = Rows,
