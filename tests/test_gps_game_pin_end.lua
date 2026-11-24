@@ -44,9 +44,10 @@ local function Load(pins, waypointPins)
         CreateVector2D = function(x, y) return { x = x, y = y } end,
         WorldMapFrame = { pinPools = { QuestPinTemplate = pool, WaypointLocationPinTemplate = waypoints } },
         Canvas = function() return canvas end,
+        GetTime = function() return 0 end,
         Preview = {},
     }, { __index = _G })
-    return assert(load(src:sub(s, e) .. "\nreturn GamePinAtEnd", "=Preview.lua game pin", "t", env))()
+    return assert(load(src:sub(s, e) .. "\nreturn GamePinAtEnd, PinOnStepEnd", "=Preview.lua game pin", "t", env))()
 end
 
 local MAP = 1429
@@ -69,10 +70,28 @@ function tests.aPinBesideTheEnd_aHiddenOne_orALayer_isNot()
 end
 
 -- The game's waypoint pin is the one GPS sets on each step's end: never
--- the place's own icon (our end mark stays over it).
+-- the place's own icon (the line still runs into the end).
 function tests.theGamesWaypointPin_isNotThePlacesIcon()
     local GamePinAtEnd = Load({}, { Pin(0.4, 0.6, 32) })
     H.assertNil(GamePinAtEnd(Route(0.4, 0.6), MAP))
+end
+
+-- One mark to a spot: our dot, the game's waypoint pin and a quest's icon
+-- stood on one step's end (2026-11-24). A pin of the map's on the shown
+-- step's end, the waypoint pin among them, is the mark there.
+function tests.aStepsEnd_underTheGamesPinOrAQuestIcon_wearsNoMarkOfOurs()
+    local waypoint = Pin(0.4, 0.6, 32)
+    local _, PinOnStepEnd = Load({}, { waypoint })
+    H.assertEq(PinOnStepEnd({ 0.4 * CANVAS_W, -0.6 * CANVAS_H }), waypoint, "the game's pin")
+    local quest = Pin(0.2, 0.3, 32)
+    local _, OnQuest = Load({ quest })
+    H.assertEq(OnQuest({ 0.2 * CANVAS_W, -0.3 * CANVAS_H }), quest, "a quest's icon")
+    H.assertNil(OnQuest({ 0.5 * CANVAS_W, -0.5 * CANVAS_H }), "a bare spot keeps our dot")
+    local f = assert(io.open(H.Path("Preview.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    H.assertTrue(src:find("or (not (hovered.final and questGlyph) and PinOnStepEnd(hovered.b))", 1, true) ~= nil,
+        "the draw pass asks it before any mark of ours")
 end
 
 function tests.anEndOffTheMapShown_hasNone()

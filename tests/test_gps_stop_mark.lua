@@ -63,7 +63,7 @@ function tests.theEndWearsTheMapsPinFromAnyPick()
         "a place with a face, an icon or a kind gets the pin; a map click (none of those) keeps the emblem alone")
     H.assertTrue(src:find("local x, y = EndOnMap%(route, mapID%)%s+if not x or PinAtEnd%(route, mapID%) then return end%s+MapSearch:PinRouteEnd%(dest, x, y%)") ~= nil,
         "on the spot where the end falls on the map shown, its own map or another")
-    H.assertTrue(src:find("if hovered and hovered%.b and hovered%.final and %(gamePin or PinAtEnd%(route, mapID%)%) then") ~= nil,
+    H.assertTrue(src:find("if hovered and hovered%.b and %(%(hovered%.final and %(gamePin or PinAtEnd%(route, mapID%)%)%)") ~= nil,
         "with the pin on the end, nothing of ours is drawn over it")
     local nav = Read("MapSearch/Navigation.lua")
     H.assertTrue(nav:find("function MapSearch:PinRouteEnd%(dest, x, y%)%s+if self%._previewing") ~= nil)

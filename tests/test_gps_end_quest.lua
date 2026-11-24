@@ -3,6 +3,9 @@
 -- end, drew over the quest's own icon after the map reopened (Forever,
 -- 2026-11-10). The beacon stands on the tracked quest, and the watch that
 -- lets go of the route when the player picks a quest leaves this one be.
+-- Any step whose end has a log quest's icon on it tracks that quest too:
+-- our dot, the game's pin and the quest's icon stood on one spot
+-- (2026-11-24).
 local H = require("Harness")
 
 local function Read(path)
@@ -12,14 +15,18 @@ local function Read(path)
     return src
 end
 
-local function LoadEndQuest(inLog, superTrack)
+-- onMap: the quests the map shows, { questID, x, y } each; a map is 1000
+-- yards a side.
+local function LoadEndQuest(inLog, superTrack, onMap)
     local src = Read("GPS.lua")
-    local s = assert(src:find("function GPS.EndQuest(route, index)", 1, true))
-    local _, e = assert(src:find("\nend\n", s, true))
+    local s = assert(src:find("GPS.QUEST_AT_YARDS = ", 1, true))
+    local _, e = assert(src:find("\nend\n", src:find("function GPS.EndQuest(route, index)", 1, true), true))
     local env = setmetatable({
         GPS = {},
         C_SuperTrack = superTrack ~= false and { SetSuperTrackedQuestID = function() end } or nil,
-        C_QuestLog = { GetLogIndexForQuestID = function(id) return inLog[id] end },
+        C_QuestLog = { GetLogIndexForQuestID = function(id) return inLog[id] end,
+                       GetQuestsOnMap = function() return onMap or {} end },
+        WorldPos = function(_, x, y) return 0, x * 1000, y * 1000 end,
     }, { __index = _G })
     assert(load(src:sub(s, e), "=GPS.lua EndQuest", "t", env))()
     return env.GPS.EndQuest
@@ -43,6 +50,29 @@ function tests.aQuestNotInTheLog_orNoQuestTracking_keepsThePin()
     H.assertNil(LoadEndQuest({})(Route(42, 1), 1), "a quest to take: our button, the pin under it")
     H.assertNil(LoadEndQuest({ [42] = 1 }, false)(Route(42, 1), 1), "a client without quest tracking")
     H.assertNil(LoadEndQuest({ [42] = 1 })(Route(nil, 1), 1), "no quest")
+end
+
+-- A walk step ending where the map shows a log quest's icon.
+local function StepRoute(n, index, x, y)
+    local route = Route(nil, n)
+    route.dest = { name = "Somewhere" }
+    route.steps[index] = { kind = "travel", mapID = 1411, x = x, y = y }
+    return route
+end
+
+function tests.aStepEndingOnALogQuestsIcon_tracksThatQuest()
+    local EndQuest = LoadEndQuest({}, nil, { { questID = 77, x = 0.5, y = 0.505 } })
+    H.assertEq(EndQuest(StepRoute(3, 2, 0.5, 0.5), 2), 77, "5 yards off: the icon is the step's mark")
+end
+
+function tests.aQuestIconFurtherOff_keepsThePin()
+    local EndQuest = LoadEndQuest({}, nil, { { questID = 77, x = 0.5, y = 0.53 } })
+    H.assertNil(EndQuest(StepRoute(3, 2, 0.5, 0.5), 2), "30 yards off: another spot")
+end
+
+function tests.theLastStepWithoutAQuest_looksForAnIconToo()
+    local EndQuest = LoadEndQuest({}, nil, { { questID = 77, x = 0.5, y = 0.5 } })
+    H.assertEq(EndQuest(StepRoute(3, 3, 0.5, 0.5), 3), 77)
 end
 
 function tests.trackStep_theWatch_andTheBeacon_takeTheQuest()

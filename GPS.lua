@@ -788,13 +788,29 @@ function GPS.TrackGamePin(on)
         GPS.GamePinChange("track", function() C_SuperTrack.SetSuperTrackedUserWaypoint(on) end)
     end
 end
--- The quest a route's last step tracks in place of the game's pin: the
--- destination's, while it is in the log and the client tracks quests.
+-- The quest a step tracks in place of the game's pin, while the client
+-- tracks quests: on the last step the destination's while in the log; on
+-- any step one in the log whose icon stands at the step's end. Its icon is
+-- the mark there: the game's pin drew over it (one mark to a spot,
+-- 2026-11-24).
+GPS.QUEST_AT_YARDS = 12
 function GPS.EndQuest(route, index)
-    local quest = route.dest and route.dest.questID
-    if not (quest and index == #route.steps and C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID) then return nil end
+    if not (C_SuperTrack and C_SuperTrack.SetSuperTrackedQuestID) then return nil end
     local QL = C_QuestLog
-    return QL and QL.GetLogIndexForQuestID and QL.GetLogIndexForQuestID(quest) and quest or nil
+    local quest = index == #route.steps and route.dest and route.dest.questID
+    if quest then return QL and QL.GetLogIndexForQuestID and QL.GetLogIndexForQuestID(quest) and quest or nil end
+    local step = route.steps[index]
+    if not (step and step.mapID and step.x and step.y and QL and QL.GetQuestsOnMap) then return nil end
+    local ci, sx, sy = WorldPos(step.mapID, step.x, step.y)
+    if not ci then return nil end
+    local near = GPS.QUEST_AT_YARDS * GPS.QUEST_AT_YARDS
+    for _, q in ipairs(QL.GetQuestsOnMap(step.mapID) or {}) do
+        if q.questID and q.x and q.y then
+            local qci, qx, qy = WorldPos(step.mapID, q.x, q.y)
+            if qci == ci and qx and (qx - sx) ^ 2 + (qy - sy) ^ 2 <= near then return q.questID end
+        end
+    end
+    return nil
 end
 function GPS.TrackQuest(quest)
     GPS.GamePinChange("quest", function() C_SuperTrack.SetSuperTrackedQuestID(quest) end)
@@ -960,9 +976,10 @@ TrackStep = function(index)
     -- None for a spot in a building's hall: on the city's map it reads as
     -- the ground outside and the game leads back out (Buildings.lua); the
     -- pin set before goes too, and the arrow and minimap line lead.
-    -- The last step to a quest in the log tracks the quest itself: its own
-    -- icon is the end's mark (the game's pin drew over it), and the beacon
-    -- stands on the game's way to it.
+    -- A step to a quest in the log (the route's, or one whose icon stands at
+    -- the step's end) tracks the quest itself: its own icon is the mark
+    -- there (the game's pin drew over it), and the beacon stands on the
+    -- game's way to it.
     local MapSearch = ns.MapSearch
     local mapID, x, y
     local quest = GPS.EndQuest(route, index)

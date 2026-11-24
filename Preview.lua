@@ -610,13 +610,14 @@ end
 -- only: a layer pin (a quest's areas, the group's dots) spans the map.
 -- The game's waypoint pin is ours, set on each step's end: no place's own.
 local NOT_THE_PLACES = { WaypointLocationPinTemplate = true }
-local function GamePinAtEnd(route, mapID)
+-- An icon-sized pin of the map's standing on a spot (map fractions), but
+-- those of the templates skipped.
+local function IconPinAt(x, y, skip)
     local map, canvas = WorldMapFrame, Canvas()
-    local x, y = EndOnMap(route, mapID)
     if not (x and map and map.pinPools and canvas) then return nil end
     local cw, ch = canvas:GetWidth(), canvas:GetHeight()
     for template, pool in pairs(map.pinPools) do
-        if not NOT_THE_PLACES[template] then
+        if not (skip and skip[template]) then
             for pin in pool:EnumerateActive() do
                 local pinX, pinY
                 if pin.GetPosition and pin:IsShown() then pinX, pinY = pin:GetPosition() end
@@ -628,6 +629,26 @@ local function GamePinAtEnd(route, mapID)
         end
     end
     return nil
+end
+
+local function GamePinAtEnd(route, mapID)
+    local x, y = EndOnMap(route, mapID)
+    return IconPinAt(x, y, NOT_THE_PLACES)
+end
+
+-- A pin of the map's on the shown step's end, the game's waypoint pin
+-- among them: it is the mark there, one to a spot (our dot under the
+-- game's pin and a quest's icon read as three marks, 2026-11-24). Looked
+-- for again each second, as the map redraws while the player moves.
+local spotCheck = { at = 0 }
+local function PinOnStepEnd(b)
+    local canvas = Canvas()
+    if not (b and canvas) then return nil end
+    local now = GetTime()
+    if spotCheck.x == b[1] and spotCheck.y == b[2] and now - spotCheck.at < 1 then return spotCheck.pin end
+    spotCheck.x, spotCheck.y, spotCheck.at = b[1], b[2], now
+    spotCheck.pin = IconPinAt(b[1] / canvas:GetWidth(), -b[2] / canvas:GetHeight())
+    return spotCheck.pin
 end
 
 -- Whether the map's own pin stands on the journey's end on this map.
@@ -863,9 +884,11 @@ local function Draw()
     -- own (its own pin is under the stop, not to be covered).
     local place = hovered and hovered.b and (hovered.final and route.dest or hovered.step.tripStop) or nil
     local own = place and not place.zone and (place.displayID or place.icon) or nil
-    if hovered and hovered.b and hovered.final and (gamePin or PinAtEnd(route, mapID)) then
-        -- A pin of the map's, or ours from the map tab, stands on the end:
-        -- it is the mark, nothing of ours over it.
+    if hovered and hovered.b and ((hovered.final and (gamePin or PinAtEnd(route, mapID)))
+            or (not (hovered.final and questGlyph) and PinOnStepEnd(hovered.b))) then
+        -- A pin of the map's (the game's waypoint pin, a quest's icon), or
+        -- ours from the map tab, stands on the end: it is the mark, nothing
+        -- of ours over it.
         marks.stop:Hide()
         marks.symbol:Hide()
     elseif hovered and hovered.b and hovered.final and questGlyph then
