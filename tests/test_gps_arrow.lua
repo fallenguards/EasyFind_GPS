@@ -45,7 +45,8 @@ local function fresh(planned, opts)
                 len = len + math.sqrt((pts[2 * v - 1] - pts[2 * v - 3]) ^ 2 + (pts[2 * v] - pts[2 * v - 2]) ^ 2)
                 cum[v] = len
             end
-            return { pts = pts, cum = cum, len = len }
+            local doors = opts.doors and sx == 0 and sy == 0 and opts.doors or nil
+            return { pts = pts, cum = cum, len = len, doors = doors }
         end,
     }
     ns.GPSNav = { Straight = function() return clear.v end }
@@ -145,6 +146,22 @@ function tests.offTheWayItLeadsBackOntoTheWalkAhead()
     player.x, player.y = 74, 36
     Aim()
     H.assertEq(#finds, 2, "on the way back: nothing asked again")
+end
+
+-- A walk into a cave 120 yd along: the way back joins it short of the
+-- cave's mouth, never inside, where a point by x and y alone lies on the
+-- hill over the cave (Azurelode Mine, 2026-11-25: the way back from the
+-- road ran straight over the hill to a point of the walk inside the mine).
+function tests.theWayBack_joinsShortOfTheWalksNextDoor()
+    local CAVE = { tx = 1000, ty = 0, pts = straightOff, doors = { from = false, { at = 120, x = 120, y = 0, inside = true } } }
+    local Aim, player, finds, now = fresh(true, CAVE)
+    player.x = 50
+    Aim()
+    player.y = 40
+    now.t = now.t + 5
+    Aim()
+    local tx = finds[#finds][3]
+    H.assertTrue(tx < 120 and tx >= 110, "joined just short of the mouth, not 290 yd along: " .. tostring(tx))
 end
 
 -- Keeping on 40 yd beside the walk: the way back is asked anew from where

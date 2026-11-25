@@ -25,6 +25,11 @@ local REJOIN_YD, REJOIN_SECONDS, REJOIN_OFF = 5, 1, 3
 -- times the yards off, at most this far. It then runs into the walk at a
 -- shallow angle, the quickest way on from here, not sideways onto it.
 local JOIN_AHEAD, JOIN_PER_OFF, JOIN_MAX = 80, 6, 400
+-- Never past the walk's next door (in or out of a cave or a building): the
+-- way back is searched to a point by its x and y alone, and past a door
+-- that point lies over another floor (inside Azurelode Mine the way back
+-- ran straight over the hill above it, 2026-11-25). Short of it by this.
+local DOOR_SHORT = 3
 local MARGIN_YD = 25           -- a whole way from here takes over only when shorter by this
 local BACK, ON = 2, 12         -- stretches searched behind and ahead of the last one matched
 local RIDES = { taxi = true, boat = true, ferry = true, zeppelin = true, skyship = true, tram = true }
@@ -241,6 +246,14 @@ local function Rejoin(ci, px, py, now)
         local seg, along, offPlan, qx, qy = Nearest(plan, px, py, ref)
         ref.seg = seg
         local at = mmin(plan.len, along + mmin(JOIN_MAX, mmax(JOIN_AHEAD, JOIN_PER_OFF * offPlan)))
+        local doors = plan.doors
+        for k = 1, doors and #doors or 0 do
+            local door = doors[k].at
+            if door and door > along then
+                at = mmin(at, mmax(along, door - DOOR_SHORT))
+                break
+            end
+        end
         local jx, jy = Follow.PointAt(plan, at, seg)
         j = { fx = px, fy = py, tx = jx, ty = jy, from = along, qx = qx, qy = qy, along = at, at = now }
         walk.join = j
