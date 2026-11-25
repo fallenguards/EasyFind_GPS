@@ -2365,26 +2365,33 @@ local function BagSlotOf(itemID)
     return nil
 end
 
--- The swipe follows the spell's or item's cooldown.
+-- The swipe follows the spell's or item's cooldown. A spell's comes as the
+-- client's duration object where it has one, as Arrow.lua's use icons:
+-- its numbers are secret in a fight and SetCooldown refuses secrets from
+-- an addon (thousands of errors a dungeon run, 2026-11-25).
 local function UpdateCooldown(btn)
-    if not (btn and btn.cd) then return end
-    local start, duration, rate = 0, 0, nil
+    local cd = btn and btn.cd
+    if not cd then return end
+    local start, duration, rate
     if btn.itemID and C_Container and C_Container.GetItemCooldown then
         local ok, s, d = pcall(C_Container.GetItemCooldown, btn.itemID)
-        if ok then start, duration = s or 0, d or 0 end
-    elseif btn.spellID and C_Spell and C_Spell.GetSpellCooldown then
-        local ok, info = pcall(C_Spell.GetSpellCooldown, btn.spellID)
-        if ok and info then start, duration, rate = info.startTime or 0, info.duration or 0, info.modRate end
+        if ok then start, duration = s, d end
+    elseif btn.spellID and C_Spell then
+        if C_Spell.GetSpellCooldownDuration and cd.SetCooldownFromDurationObject then
+            local length = C_Spell.GetSpellCooldownDuration(btn.spellID, true)
+            if not (length and pcall(cd.SetCooldownFromDurationObject, cd, length)) then cd:Clear() end
+            return
+        end
+        if C_Spell.GetSpellCooldown then
+            local ok, info = pcall(C_Spell.GetSpellCooldown, btn.spellID)
+            if ok and info then start, duration, rate = info.startTime, info.duration, info.modRate end
+        end
     end
-    -- A secret cooldown (WoW Forever withholds the numbers in a fight) still
-    -- draws: the swipe takes secret values, a comparison of them errors.
-    if issecretvalue and (issecretvalue(start) or issecretvalue(duration)) then
-        btn.cd:SetCooldown(start, duration, rate)
-    elseif duration and duration > 1.5 then
-        btn.cd:SetCooldown(start, duration, rate)
-    else
-        btn.cd:Clear()
+    local secret = issecretvalue
+    if not (start and duration) or (secret and (secret(start) or secret(duration) or secret(rate))) then
+        return cd:Clear()
     end
+    if duration > 1.5 then cd:SetCooldown(start, duration, rate) else cd:Clear() end
 end
 
 local castButtons = {}   -- every cast button, hidden as a fight begins
