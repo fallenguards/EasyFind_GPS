@@ -39,6 +39,7 @@ local function Load(route)
     function GPS:IsPlanning() return false end
     function GPS.ViaLeft() return nil end
     function GPS.AvoidKey() return "" end
+    function GPS.MarkStartIndoors() end
     local env = setmetatable({ GPS = GPS, ns = ns, closing = {}, time = os.time,
         Route = function() return char.route end, CharDB = function() return char end,
         TrackStep = function() end, UnitIsGhost = function() return false end }, { __index = _G })

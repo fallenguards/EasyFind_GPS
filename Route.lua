@@ -1718,6 +1718,7 @@ function Route:Build(dest, opts)
         end
     end
     if not start then return nil end
+    if opts.startIndoors and Floors and Floors.Indoors then Floors.Indoors(start.ci, start.wx, start.wy) end
     local gate = dest.zone and data.gates and data.gates[dest.mapID]
     -- A city with several ways in: the nearest.
     if gate and gate[1] then
@@ -1893,10 +1894,15 @@ end
 -- a walk is drawn again: a release's walk rules may differ (a route kept
 -- through a reload brought back its walk to the hill over Azurelode Mine
 -- after the fix, 2026-11-25).
+-- KEPT_WALK_RULES fingerprints the walking code and grids (Nav.lua,
+-- Floors.lua, the Walk files' sizes; tests/test_kept_walk_rules.lua holds
+-- it to them): a change there finds kept walks again, in development too
+-- (a walk out of a mine came back straight after its fix, 2026-11-25).
+local KEPT_WALK_RULES = "354ba495"
 local KEPT_WALK_VER
 do
     local Meta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
-    KEPT_WALK_VER = "5:" .. tostring(Meta and Meta("EasyFind_GPS", "Version") or "")
+    KEPT_WALK_VER = "6:" .. KEPT_WALK_RULES .. ":" .. tostring(Meta and Meta("EasyFind_GPS", "Version") or "")
 end
 function Route.SaveWalk(ci, sx, sy, tx, ty, near)
     local path = shown[EndsKey(ci, sx, sy, tx, ty, near)]

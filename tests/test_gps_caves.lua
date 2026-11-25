@@ -72,6 +72,24 @@ function tests.azurelode_outOfTheMine_fromWhereThePlayerStandsIndoors()
     H.assertTrue(out > 300, ("indoors: out through the tunnels, %.0f yd for 152 straight"):format(out))
 end
 
+-- A route planned from inside the mine: its first walk sets out on the
+-- tunnel's floor however far the player has moved since (his run, 18:48:
+-- the route's own walk from -838.7, 125.5 drawn straight, 931 yd for 927).
+function tests.azurelode_aRouteFromInsideTheMine_keepsItsIndoorStart()
+    local ns = Load("Walk_EasternKingdoms.lua")
+    local Nav, Floors = ns.GPSNav, ns.GPSFloors
+    local ROAD_OUT = { -681.2, 132.6 }
+    local function Len(from)
+        local pts = Nav.Path(0, from[1], from[2], ROAD_OUT[1], ROAD_OUT[2])
+        local len = 0
+        for i = 3, pts and #pts or 0, 2 do len = len + math.sqrt((pts[i] - pts[i - 2]) ^ 2 + (pts[i + 1] - pts[i - 1]) ^ 2) end
+        return len
+    end
+    H.assertTrue(Len({ -812, 98 }) < 200, "unmarked, with the player gone: the hill (the cause)")
+    Floors.Indoors(0, -832, 118)
+    H.assertTrue(Len({ -832, 118 }) > 300, "marked indoors at the plan: out through the tunnels")
+end
+
 function tests.azurelode_aNearEnd_staysInTheMine()
     local Nav = Load("Walk_EasternKingdoms.lua").GPSNav
     local exact = Nav.Walk(0, ROAD[1], ROAD[2], HACKETT[1], HACKETT[2])

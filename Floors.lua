@@ -230,6 +230,11 @@ function Floors.Goal(ci, x, y)
     goals[k], goalsN = true, goalsN + 1
 end
 
+-- (x, y) is known to be under a roof: a route set out from inside a mine,
+-- its walks from there take an indoor floor as at a journey's end, once the
+-- player has moved off that spot too.
+Floors.Indoors = Floors.Goal
+
 -- What picks (x, y)'s floor in a stacked city: the player's sub-zone at
 -- the player's spot (unless spawnOnly), what it was there once he left,
 -- else the height a planned walk stood at there (Floors.Walked), else

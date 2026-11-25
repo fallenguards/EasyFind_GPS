@@ -1391,14 +1391,23 @@ function GPS.LiftsChanged(route)
     return false
 end
 
+-- A route set out from indoors (a mine's tunnel): its start an indoor spot.
+function GPS.MarkStartIndoors(route)
+    local from, Floors = route and route.from, ns.GPSFloors
+    if from and from.inside and from.wx and Floors and Floors.Indoors then Floors.Indoors(from.ci, from.wx, from.wy) end
+end
+
 -- A plan of the same trip taken up: its steps and times, and its start
 -- where the plan set out from (BuildStops), so the drawn way begins there.
 function GPS.Replanned(route, steps, total, advice)
     route.steps, route.eta, route.total, route.advice, route.t, route.there = steps, total, total, advice, time(), nil
     route.avoidKey = GPS.AvoidKey(route.wayAvoid)
     if ns.GPSRoute and ns.GPSRoute.ShowWalks then ns.GPSRoute.ShowWalks(nil) end
-    local here = GPS.RouteStart(route) or GPS.PlayerStart()
-    route.from = here and { ci = here.ci, wx = here.wx, wy = here.wy } or nil
+    local set = GPS.RouteStart(route)
+    local here = set or GPS.PlayerStart()
+    -- Set out from where the player stands indoors (a mine): its walks keep an indoor floor there.
+    route.from = here and { ci = here.ci, wx = here.wx, wy = here.wy, inside = not set and IsIndoors and IsIndoors() or nil } or nil
+    GPS.MarkStartIndoors(route)
     closing.step = nil
 end
 
@@ -1846,7 +1855,8 @@ function GPS.Navigated(dest, steps, total, advice, stops, avoid)
     -- Planned from elsewhere: the route waits there until the player comes.
     local origin = StartPoint()
     local here = origin or GPS.PlayerStart()
-    local from = here and { ci = here.ci, wx = here.wx, wy = here.wy } or nil
+    local from = here and { ci = here.ci, wx = here.wx, wy = here.wy,
+                            inside = not origin and IsIndoors and IsIndoors() or nil } or nil
     local Engine = ns.GPSRoute
     local flies = Engine and select(2, Engine.Riding(ns.GPSData)) ~= nil
     -- The report's start: the world spot and the map spot it was on.
@@ -1859,6 +1869,7 @@ function GPS.Navigated(dest, steps, total, advice, stops, avoid)
                        dangerSeen = same and old.dangerSeen or nil, wayAvoid = avoid, avoidKey = GPS.AvoidKey(avoid),
                        report = { from = start, total = total, t = time(), fly = flies,
                                   steps = Engine and Engine.StepsCode and Engine.StepsCode(steps) or nil } }
+    GPS.MarkStartIndoors(CharDB().route)
     if GPS.AfterRoute then GPS.AfterRoute() end
     EasyFind.API.Fire("gps", "routeStarted", dest)
     -- A new route opens up, whatever the last one was folded to.
@@ -7592,5 +7603,6 @@ loginFrame:SetScript("OnEvent", function(self, event, unit, _, spellID)
     local Floors, last = ns.GPSFloors, route.steps and route.steps[#route.steps]
     local p = last and (last.go or last.arrive)
     if Floors and Floors.Goal and route.dest and not route.dest.zone and p and p.wx then Floors.Goal(p.ci, p.wx, p.wy) end
+    GPS.MarkStartIndoors(route)
     AfterRoute(route.others ~= nil)
 end)
