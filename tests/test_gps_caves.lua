@@ -25,7 +25,24 @@ local CAVE = { -215, -3215 }      -- in the cave under Thorn Hill's hill (floor 
 local CAMP = { -100, -2950 }      -- the Razormane camp on Thorn Hill
 local MINER = { -9738.1, 136.2 }  -- a Kobold Miner in Fargodeep Mine, Elwynn Forest
 
+local HACKETT = { -850.8, 70.3 }  -- Miner Hackett, deep in Azurelode Mine (height 3; the hill over him ~50)
+local ROAD = { -760, 130 }        -- the road north of the mine
+
 local tests = {}
+
+-- A goal reached only the long way round is walked to near it; near is
+-- never the hill over a mine (Forever, 2026-11-25: "Dangerous!" to Miner
+-- Hackett "routing me to the spot at ground level which is wrong ... and
+-- then should guide through the cave"). A near floor is on the goal's own
+-- side, in or out, as the floor under an upstairs trainer still is.
+function tests.azurelode_aNearEnd_staysInTheMine()
+    local Nav = Load("Walk_EasternKingdoms.lua").GPSNav
+    local exact = Nav.Walk(0, ROAD[1], ROAD[2], HACKETT[1], HACKETT[2])
+    local near = Nav.Walk(0, ROAD[1], ROAD[2], HACKETT[1], HACKETT[2], { near = 8 })
+    local straight = math.sqrt((ROAD[1] - HACKETT[1]) ^ 2 + (ROAD[2] - HACKETT[2]) ^ 2)
+    H.assertTrue(exact and exact > straight * 2.5, "in by the mine's mouth: " .. tostring(exact))
+    H.assertTrue(near and near > exact - 20, ("near him is still in the mine, not the hilltop: %s"):format(tostring(near)))
+end
 
 function tests.thornHill_aJourneysEndOfUnknownHeight_isTheCave()
     local ns = Load("Walk_Kalimdor.lua")

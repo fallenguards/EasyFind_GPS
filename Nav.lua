@@ -1189,6 +1189,11 @@ local function NearEnd(w, x, y, r, fromKey, rev)
     -- Where floors stack, only those at the level wanted (not the ring
     -- over an auction house).
     local want = Floors and Floors.Want(w.ci, x, y)
+    -- And on the goal's own side, in or out: the floor under an upstairs
+    -- trainer is near, the hill over a mine is not (Miner Hackett in
+    -- Azurelode Mine was walked to on the hilltop, 2026-11-25).
+    local goalTile, goalFloor = Locate(w, x, y, nil, 0)
+    local inside = goalFloor and sbyte(goalTile.fl, goalFloor) % 4 >= 2
     for _, cx in ipairs({ x - r, x + r }) do
         for _, cy in ipairs({ y - r, y + r }) do
             local key, sx, sy = TileOf(cx, cy)
@@ -1201,7 +1206,8 @@ local function NearEnd(w, x, y, r, fromKey, rev)
                     for g = first, t and U16(t.cf, cc + 2) - 1 or 0 do
                         local gx, gy = FloorXY(w, t, g)
                         local d = msqrt((gx - x) ^ 2 + (gy - y) ^ 2)
-                        if d <= r and (not want or Floors.OnLevel(w.ci, key, cc, g - first, want)) then
+                        if d <= r and (not want or Floors.OnLevel(w.ci, key, cc, g - first, want))
+                           and (inside == nil or (sbyte(t.fl, g) % 4 >= 2) == inside) then
                             seeds = seeds or {}
                             seeds[g] = d
                         end
