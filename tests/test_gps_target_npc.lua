@@ -30,6 +30,14 @@ local function fresh(opts)
         f.CreateTexture = function()
             local t = H.newFrame()
             t.SetTexture = function(_, tex) t.tex = tex end
+            t.SetColorTexture = function(_, r, g, b, a) t.color = { r, g, b, a } end
+            return t
+        end
+        f.CreateFontString = function()
+            local t = H.newFrame()
+            local said = ""
+            t.SetText = function(_, v) said = v == nil and "" or tostring(v) end
+            t.GetText = function() return said end
             return t
         end
         f.SetCooldown = function(_, start, duration) f.swipe = { start, duration } end
@@ -78,6 +86,26 @@ local function fresh(opts)
         GetSpellTexture = function() return 134414 end,
         GetSpellCooldownDuration = function(spell) return cooldowns.spell[spell] end,
     }
+    -- The units the game knows: the target and the nameplates, by name.
+    local units = { target = nil, plates = {} }
+    env.UnitExists = function(u)
+        if u == "target" then return units.target ~= nil end
+        return units.plates[u] ~= nil
+    end
+    env.UnitName = function(u) if u == "target" then return units.target end return units.plates[u] end
+    env.UnitIsDead = function() return false end
+    env.C_NamePlate = { GetNamePlates = function()
+        local out = {}
+        for unit in pairs(units.plates) do out[#out + 1] = { namePlateUnitToken = unit } end
+        return out
+    end }
+    local bags = {}
+    env.C_Item = { GetItemCount = function(id) return bags[id] or 0 end }
+    local faces = {}
+    env.SetPortraitTextureFromCreatureDisplayID = function(tex, display) faces[tex] = display end
+    env._G = env
+    ns.Npcs = { DisplayOfID = function(id) return id == 589 and 2345 or nil end,
+                ByName = function(name) return name == "Marshal McBride" and { displayID = 1100 } or nil end }
     local route = { dest = { name = "Kelm Hargunth", npc = "Kelm Hargunth", mapID = 1413, x = 0.5, y = 0.6 },
                     steps = { { kind = "travel" } }, active = 1 }
     local state = { route = route }
@@ -107,7 +135,8 @@ local function fresh(opts)
     ns.HideHintTooltip = function() hint.owner = nil end
     H.loadModule("Arrow.lua", env, ns)
     local w = { Arrow = ns.GPSArrow, player = player, state = state, combat = combat, ticks = ticks, db = db,
-                menu = menu, frames = frames, tip = tip, hint = hint, cooldowns = cooldowns }
+                menu = menu, frames = frames, tip = tip, hint = hint, cooldowns = cooldowns, units = units,
+                bags = bags, faces = faces }
     function w.button(i)
         local name = (i or 1) == 1 and "EasyFindGPSTarget" or ("EasyFindGPSTarget" .. i)
         for _, f in ipairs(frames) do if f.name == name then return f end end
@@ -579,6 +608,97 @@ function tests.theStack_movesWithTheArrow_atOnce()
     events:GetScript("OnEvent")(events, "PLAYER_REGEN_ENABLED")
     H.assertEq(btn.x, 800, "caught up as the fight ends")
     H.assertEq(use.y, 500 - 26 - 5)
+end
+
+-- ==== tiles (a caller that asks for them: the Polestar extension) ===========
+
+local PILLAGER = { name = "Defias Pillager", kind = "kill", npcID = 589, verb = "kill", have = 3, need = 8,
+                   item = "Linen Cloth", chance = 35 }
+local MCBRIDE = { name = "Marshal McBride", kind = "talk", verb = "turnin" }
+local RUFFIAN = { name = "Grimtotem Ruffian", kind = "kill", elite = true, have = 0, need = 1 }
+
+local function Tiles(rows)
+    local list = { tiles = true }
+    for i, r in ipairs(rows) do
+        local copy = {}
+        for k, v in pairs(r) do copy[k] = v end
+        list[i] = copy
+    end
+    return list
+end
+
+function tests.tiles_onlyWhereTheCallerAsks_aGuidesPlainRowsKeepTheirButtons()
+    local w = fresh()
+    w.Arrow.SetTargets({ { name = "Defias Pillager", kind = "kill" } })
+    H.assertNil(w.button(1).tiled, "a guide's plain list (RestedXP): its buttons as before")
+    w.Arrow.SetTargets(Tiles({ PILLAGER }))
+    H.assertTrue(w.button(1).tiled == true, "asked for: a tile")
+    H.assertEq(w.button(1).badge:GetText(), "3/8", "its count in the corner")
+    H.assertEq(w.faces[w.button(1).face], 2345, "its face, the creature's model by its id")
+    H.assertEq(w.button(1).bar.color[1], 0.9, "a creature to kill: the red bar")
+end
+
+function tests.tiles_markTheirVerbs_andColorByKind()
+    local w = fresh()
+    w.Arrow.SetTargets(Tiles({ MCBRIDE, RUFFIAN }))
+    H.assertEq(w.button(1).badge:GetText(), "?", "a hand-in: the question mark")
+    H.assertEq(w.faces[w.button(1).face], 1100, "no id: the face by its name")
+    H.assertEq(w.button(1).bar.color[2], 0.85, "an NPC: green")
+    H.assertEq(w.button(2).badge:GetText(), "0/1")
+    H.assertEq(w.button(2).bar.color[1], 1, "an elite: gold")
+end
+
+function tests.aFight_turnsTheCountsAndTheGlow_theMacroWaits()
+    local w = fresh()
+    w.Arrow.SetTargets(Tiles({ PILLAGER, MCBRIDE }))
+    local macro = w.button(1):GetAttribute("macrotext")
+    H.assertTrue(macro:find("/cleartarget", 1, true) ~= nil, "nothing of that name targeted: cleared first")
+    w.combat.v = true
+    w.units.plates.nameplate3 = "Defias Pillager"
+    local now = Tiles({ PILLAGER, MCBRIDE })
+    now[1].have = 4
+    w.Arrow.SetTargets(now)
+    w.tick()
+    H.assertEq(w.button(1).badge:GetText(), "4/8", "the count turned in the fight")
+    H.assertTrue(w.button(1).glow:IsShown(), "one of that name near: lit")
+    H.assertFalse(w.button(2).glow:IsShown())
+    H.assertEq(w.button(1):GetAttribute("macrotext"), macro, "the macro waits for the fight's end")
+end
+
+function tests.thePlate_saysTheNearOne_elseTheFirst()
+    local w = fresh()
+    w.Arrow.SetTargets(Tiles({ MCBRIDE, PILLAGER }))
+    local card = w.Arrow._stack.card
+    H.assertTrue(card ~= nil and card:IsShown(), "a plate under the strip")
+    H.assertTrue(card.text:GetText():find("Marshal McBride", 1, true) ~= nil, "none near: the first")
+    w.units.target = "Defias Pillager"
+    w.tick()
+    local said = card.text:GetText()
+    H.assertTrue(said:find("Defias Pillager", 1, true) and said:find("3/8", 1, true) and said:find("Linen Cloth  35%", 1, true),
+        "the near one: its name, count and loot: " .. said)
+end
+
+function tests.aLivingTarget_ofThatName_isKept_thePressTakesTheNext()
+    local w = fresh()
+    w.units.target = "Defias Pillager"
+    w.Arrow.SetTargets(Tiles({ PILLAGER }))
+    H.assertEq(w.button(1):GetAttribute("macrotext"):sub(1, 12), "/targetexact", "no /cleartarget first")
+end
+
+function tests.anItemToUse_showsHowManyAreInTheBags()
+    local w = fresh()
+    w.bags[6948] = 5
+    w.Arrow.SetUses({ { kind = "item", id = 6948, name = "Hearthstone" } })
+    local btn
+    for _, f in ipairs(w.frames) do if f.name == "EasyFindGPSUse1" then btn = f end end
+    H.assertEq(btn.count and btn.count:GetText(), "5")
+end
+
+function tests.theCapability_isAskedByName()
+    local f = assert(io.open(H.Path("GPS.lua"), "rb"))
+    local src = f:read("*a")
+    f:close()
+    H.assertTrue(src:find('RegisterAction("gps", "targetCards"', 1, true) ~= nil)
 end
 
 local pass, fail, failures = H.runSuite("GPSTargetNpc", tests)

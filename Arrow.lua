@@ -15,6 +15,9 @@ local Arrow = {}
 ns.GPSArrow = Arrow
 
 local mmax, mmin, mabs, matan2, mpi = math.max, math.min, math.abs, math.atan2 or math.atan, math.pi
+local mfloor, sformat = math.floor, string.format
+local SetPortraitTextureFromCreatureDisplayID = _G.SetPortraitTextureFromCreatureDisplayID
+local UseCount
 
 local TEX_ARROW = "Interface\\AddOns\\EasyFind\\MapSearch\\Images\\arrow-hq"   -- points down as drawn
 local SIZE = 44
@@ -272,7 +275,16 @@ local target = { btns = {}, rows = {}, closedNames = {}, useBtns = {}, closedUse
 Arrow._stack = target   -- tests
 local USE_MAX = 4
 local USE_KINDS = { item = true, spell = true, macro = true }
-local WATCHED = { "PLAYER_REGEN_ENABLED", "SPELL_UPDATE_COOLDOWN", "BAG_UPDATE_COOLDOWN" }
+local WATCHED = { "PLAYER_REGEN_ENABLED", "SPELL_UPDATE_COOLDOWN", "BAG_UPDATE_COOLDOWN", "BAG_UPDATE_DELAYED" }
+-- Tiles, for a caller that asks for them (list.tiles: the Polestar
+-- extension): a face each in a strip, a count or mark in its corner, a bar
+-- along its foot by kind, lit while a living one of that name is near; the
+-- near one's (else the first's) name, count and loot on a plate under it.
+local TILE, TILE_GAP, TILE_BAR, TILE_PAD = 38, 4, 4, 3
+local TILE_COLOR = { npc = { 0.35, 0.85, 0.45 }, elite = { 1, 0.78, 0.2 }, mob = { 0.9, 0.3, 0.25 } }
+local NEAR_FILL = { 0.25, 0.8, 0.4, 0.22 }
+local VERB_MARK = { turnin = "?", accept = "!" }
+local CARD_LINE_H, CARD_PAD = 15, 6
 
 -- The things to use as icons in one bubble, and the targets two to a row:
 -- each on unless switched off (a guide extension's settings page).
@@ -433,6 +445,153 @@ local function Words(btn, label)
     btn:SetSize(btn.w, ROW_H)
 end
 
+-- A tile's kind for its bar: an elite (rare, boss) gold, a creature to kill red, the rest green.
+local function TileKind(row)
+    if row.elite then return "elite" end
+    return row.kind == "kill" and "mob" or "npc"
+end
+
+local function TileBadge(row)
+    if row.have and row.need then return row.have .. "/" .. row.need end
+    return VERB_MARK[row.verb] or ""
+end
+
+-- A creature's model for the face: by its id where the catalog has it
+-- (EasyFind 5.8), else by its name.
+local function TileDisplay(row)
+    local Npcs = ns.Npcs
+    if not Npcs then return nil end
+    if row.npcID and Npcs.DisplayOfID then
+        local display = Npcs.DisplayOfID(row.npcID)
+        if display then return display end
+    end
+    local hit = Npcs.ByName and Npcs.ByName(row.name)
+    return hit and hit.displayID or nil
+end
+
+local function TileParts(btn)
+    if btn.face then return end
+    local face = btn:CreateTexture(nil, "ARTWORK")
+    face:SetPoint("TOPLEFT", btn, "TOPLEFT", TILE_PAD, -TILE_PAD)
+    face:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -TILE_PAD, TILE_PAD + TILE_BAR)
+    btn.face = face
+    local bar = btn:CreateTexture(nil, "ARTWORK")
+    bar:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", TILE_PAD, TILE_PAD)
+    bar:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -TILE_PAD, TILE_PAD)
+    bar:SetHeight(TILE_BAR)
+    btn.bar = bar
+    local glow = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
+    glow:SetAllPoints(btn)
+    glow:SetColorTexture(NEAR_FILL[1], NEAR_FILL[2], NEAR_FILL[3], NEAR_FILL[4])
+    btn.glow = glow
+    local badge = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    badge:SetPoint("BOTTOMRIGHT", face, "BOTTOMRIGHT", -1, 1)
+    btn.badge = badge
+end
+
+-- A target button worn as a tile, or back to its pill.
+local function WearTile(btn, row)
+    TileParts(btn)
+    if not btn.tiled then
+        btn.tiled, btn.label, btn.display = true, nil, nil
+        btn.look.text:SetText("")
+        btn.w = TILE
+        btn:SetSize(TILE, TILE + TILE_BAR)
+        btn:SetHighlightTexture(HILITE_ICON, "ADD")
+    end
+    for _, part in ipairs({ btn.face, btn.bar, btn.badge }) do part:Show() end
+    local display = TileDisplay(row)
+    if display ~= btn.display or btn.faceName ~= row.name then
+        btn.display, btn.faceName = display, row.name
+        if display and SetPortraitTextureFromCreatureDisplayID then
+            SetPortraitTextureFromCreatureDisplayID(btn.face, display)
+        else
+            btn.face:SetTexture(KIND_ICON[row.kind] or NO_ICON)
+        end
+    end
+    local c = TILE_COLOR[TileKind(row)]
+    btn.bar:SetColorTexture(c[1], c[2], c[3], 1)
+    btn.badge:SetText(TileBadge(row))
+end
+
+local function WearPill(btn)
+    if not btn.tiled then return end
+    btn.tiled, btn.label = nil, nil
+    for _, part in ipairs({ btn.face, btn.bar, btn.badge, btn.glow }) do part:Hide() end
+    btn:SetHighlightTexture(HILITE_PILL, "ADD")
+end
+
+-- Whether a living one of that name is the target or on a nameplate; a
+-- name or state the game withholds counts as not.
+local function Plain(v) return not (issecretvalue and issecretvalue(v)) end
+local function LivingNamed(unit, name)
+    if not (UnitExists and UnitExists(unit)) then return false end
+    local n, dead = UnitName(unit), UnitIsDead and UnitIsDead(unit)
+    return Plain(n) and Plain(dead) and not dead and n == name
+end
+
+local function NearNamed(name)
+    if LivingNamed("target", name) then return true end
+    local plates = C_NamePlate and C_NamePlate.GetNamePlates and C_NamePlate.GetNamePlates()
+    for _, p in ipairs(plates or {}) do
+        local unit = p.namePlateUnitToken
+        if unit and LivingNamed(unit, name) then return true end
+    end
+    return false
+end
+
+local function CardPlate()
+    local card = ns.GPSWorldPin.NewPlate(UIParent)
+    card:SetFrameStrata("LOW")
+    card:EnableMouse(false)
+    card:Hide()
+    target.card = card
+    return card
+end
+
+local function CardText(row)
+    local c = TILE_COLOR[TileKind(row)]
+    local line = sformat("|cff%02x%02x%02x%s|r", mfloor(c[1] * 255 + 0.5), mfloor(c[2] * 255 + 0.5),
+        mfloor(c[3] * 255 + 0.5), row.name)
+    if row.have and row.need then line = line .. "  " .. row.have .. "/" .. row.need end
+    if row.item then
+        line = line .. "\n" .. row.item .. (row.chance and ("  " .. mfloor(row.chance + 0.5) .. "%") or "")
+        return line, 2
+    end
+    return line, 1
+end
+
+-- The tiles' plain parts, in a fight too: each one's count from the
+-- guide's newest list, its glow, and the plate's words and size. Only the
+-- macros and the places wait for a fight's end.
+local function CardTick()
+    local card = target.card
+    if not (target.tiles and card and card:IsShown()) then return end
+    local newest = {}
+    for _, row in ipairs(target.guide or {}) do newest[row.name] = row end
+    local first, near
+    for i = 1, #target.rows do
+        local btn = target.btns[i]
+        local row = btn and btn.tiled and btn.row
+        if row then
+            local now = newest[row.name] or row
+            btn.badge:SetText(TileBadge(now))
+            local lit = NearNamed(row.name)
+            btn.glow:SetShown(lit)
+            first = first or now
+            if lit and not near then near = now end
+        end
+    end
+    local show = near or first
+    if not show then return end
+    local text, lines = CardText(show)
+    if card.shown ~= text then
+        card.shown = text
+        card.text:SetText(text)
+        card:SetSize(card.text:GetStringWidth() + 2 * CARD_PAD + 12, lines * CARD_LINE_H + 2 * CARD_PAD)
+    end
+end
+
 local function UseTexture(use)
     if use.icon then return use.icon end
     local tex
@@ -442,6 +601,23 @@ local function UseTexture(use)
         tex = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(use.id or use.name)
     end
     return tex or NO_ICON
+end
+
+-- An item icon's count in the bags, as an action button shows it.
+UseCount = function(btn)
+    local use = btn.use
+    local count = use and use.kind == "item" and btn.worn == "icon" and C_Item and C_Item.GetItemCount
+        and C_Item.GetItemCount(use.id) or nil
+    if not count then
+        if btn.count then btn.count:Hide() end
+        return
+    end
+    if not btn.count then
+        btn.count = btn:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
+        btn.count:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+    end
+    btn.count:SetText(count > 1 and count or "")
+    btn.count:Show()
 end
 
 -- A use button's face: its icon alone, in the bubble, or the pill with
@@ -471,12 +647,16 @@ local function Wear(btn, use, icons)
             btn:SetSize(ICON, ICON)
         end
     end
-    if not icons then return Words(btn, use.label) end
+    if not icons then
+        if btn.count then btn.count:Hide() end
+        return Words(btn, use.label)
+    end
     local tex = UseTexture(use)
     if btn.tex ~= tex then
         btn.tex = tex
         btn.icon:SetTexture(tex)
     end
+    UseCount(btn)
 end
 
 local function Swipe(cooldown, start, duration, enable)
@@ -515,7 +695,10 @@ end
 local function UseCooldowns()
     for i = 1, #target.useBtns do
         local btn = target.useBtns[i]
-        if btn:IsShown() then UseCooldown(btn) end
+        if btn:IsShown() then
+            UseCooldown(btn)
+            UseCount(btn)
+        end
     end
 end
 
@@ -552,6 +735,8 @@ local function PlaceStack(x, y)
     PlacePool(target.useBtns, x, y)
     local bubble = target.bubble
     if bubble and bubble.dx then Place(bubble, x + bubble.dx, y + bubble.dy) end
+    local card = target.card
+    if card and card.dx then Place(card, x + card.dx, y + card.dy) end
 end
 
 -- The stack's top on UIParent: under the plate while the arrow shows; at
@@ -623,11 +808,15 @@ TargetTick = function()
     local rows = TargetRows()
     local mark = Arrow.TargetMark()
     local markIcon = mark > 0 and ("|TInterface\\TargetingFrame\\UI-RaidTargetingIcon_" .. mark .. ":14|t ") or ""
+    local tiles = target.tiles
     for i, row in ipairs(rows) do
         local btn = TargetButton(i)
         btn.row = row
-        -- Cleared first: a name not found leaves no other unit to mark.
-        local macro = "/cleartarget\n/targetexact " .. row.name
+        -- Cleared first: a name not found leaves no other unit to mark. On a
+        -- tile whose name the living target has, kept: the press takes the
+        -- next one of that name.
+        local keep = tiles and LivingNamed("target", row.name)
+        local macro = (keep and "" or "/cleartarget\n") .. "/targetexact " .. row.name
         if mark > 0 then macro = macro .. "\n/tm [@target,exists] !" .. mark end
         if btn.macro ~= macro then
             btn.macro = macro
@@ -635,10 +824,15 @@ TargetTick = function()
             btn:SetAttribute("macrotext", macro)
         end
         -- The route's NPC alone keeps the plain word; among others, names.
-        local kind = KIND_ICON[row.kind]
-        local label = markIcon .. (kind and ("|T" .. kind .. ":14|t ") or "")
-            .. ((row.route and #rows == 1) and (_G["TARGET"] or "Target") or row.name)
-        Words(btn, label)
+        if tiles then
+            WearTile(btn, row)
+        else
+            WearPill(btn)
+            local kind = KIND_ICON[row.kind]
+            local label = markIcon .. (kind and ("|T" .. kind .. ":14|t ") or "")
+                .. ((row.route and #rows == 1) and (_G["TARGET"] or "Target") or row.name)
+            Words(btn, label)
+        end
     end
     for i = #rows + 1, #target.btns do
         if target.btns[i]:IsShown() then HideButton(target.btns[i]) end
@@ -646,6 +840,25 @@ TargetTick = function()
     -- Two to a row where a pair fits, each its own pill: down counts the
     -- stack's rows from its top.
     local down, i, paired = 0, 1, Arrow.TargetPairs()
+    local card = target.card
+    if tiles and #rows > 0 then
+        local w = #rows * TILE + (#rows - 1) * TILE_GAP
+        for n = 1, #rows do
+            local btn = target.btns[n]
+            btn.dx, btn.dy = -w / 2 + TILE / 2 + (n - 1) * (TILE + TILE_GAP), down
+        end
+        down = down - (TILE + TILE_BAR + TILE_GAP)
+        card = card or CardPlate()
+        card.dx, card.dy, card.shown = 0, down, nil
+        card:Show()
+        CardTick()
+        local _, h = card:GetSize()
+        down = down - ((h or 0) + ROW_GAP)
+        i = #rows + 1
+    elseif card then
+        card.dx, card.x, card.y = nil, nil, nil
+        card:Hide()
+    end
     while i <= #rows do
         local a, b = target.btns[i], paired and i < #rows and target.btns[i + 1] or nil
         if b and a.w + PAIR_GAP + b.w <= PAIR_MAX_W then
@@ -719,7 +932,10 @@ end
 
 local function TargetSync()
     if (TargetNpc() or target.guide or target.uses) and not target.ticker then
-        target.ticker = C_Timer.NewTicker(TARGET_EVERY, TargetTick)
+        target.ticker = C_Timer.NewTicker(TARGET_EVERY, function()
+            TargetTick()
+            CardTick()
+        end)
     end
     TargetTick()
 end
@@ -740,8 +956,11 @@ end
 
 -- A guide's creatures, { name, kind = "kill" | "talk" } each, shown while
 -- set; nil or none takes them away. A new list opens rows closed before.
+-- list.tiles: tiles instead of buttons, each row with npcID, verb, elite,
+-- have, need, item, chance where it knows them (the Polestar extension).
 function Arrow.SetTargets(list)
     target.guide = type(list) == "table" and #list > 0 and list or nil
+    target.tiles = target.guide ~= nil and list.tiles == true or nil
     wipe(target.closedNames)
     TargetSync()
 end

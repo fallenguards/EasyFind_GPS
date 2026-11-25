@@ -7458,6 +7458,8 @@ EasyFind.API.RegisterAction("gps", "navigateTrip", function(list, opts) return G
 EasyFind.API.RegisterAction("gps", "canNavigate", function(dest) return GPS:CanNavigate(dest) end)
 -- A guide's creatures under the arrow, a Target button each: { name, kind }.
 EasyFind.API.RegisterAction("gps", "setTargets", function(list) if ns.GPSArrow then ns.GPSArrow.SetTargets(list) end end)
+-- Tiles for a guide's targets (list.tiles on setTargets): asked for by name.
+EasyFind.API.RegisterAction("gps", "targetCards", function() return true end)
 EasyFind.API.RegisterAction("gps", "setUses", function(list) if ns.GPSArrow then ns.GPSArrow.SetUses(list) end end)
 -- No argument: whether the things to use show as icons in one bubble, and
 -- whether the Target buttons sit two to a row; true or false sets it.
