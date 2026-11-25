@@ -18,7 +18,7 @@ local function Load(walk)
     env.GetLocale = function() return "enUS" end
     for _, f in ipairs({ walk, "Floors_Forever.lua", "Floors.lua", "Nav.lua" }) do H.loadModule(f, env, ns) end
     ns.GPS = { PlayerWorldPos = function() return nil end }
-    return ns
+    return ns, env
 end
 
 local CAVE = { -215, -3215 }      -- in the cave under Thorn Hill's hill (floor 74-99, hill 104-173)
@@ -50,6 +50,26 @@ function tests.azurelode_aNearWalk_isDrawnInByTheMouth()
     for i = 3, pts and #pts or 0, 2 do len = len + math.sqrt((pts[i] - pts[i - 2]) ^ 2 + (pts[i + 1] - pts[i - 1]) ^ 2) end
     H.assertTrue(cost and cost > 300, "priced through the mine: " .. tostring(cost))
     H.assertTrue(len > cost * 0.8, ("drawn the way it was priced: %.0f yd drawn for %.0f priced"):format(len, cost or 0))
+end
+
+-- Out of the mine: where the game says the player is indoors, the walk
+-- from where he stands sets out on the tunnel's floor, not the hill over
+-- it (Forever, 2026-11-25: "guiding out of the cave isn't working", the
+-- line straight through the rock).
+function tests.azurelode_outOfTheMine_fromWhereThePlayerStandsIndoors()
+    local ns, env = Load("Walk_EasternKingdoms.lua")
+    local Nav = ns.GPSNav
+    local HERE, ROAD_OUT = { -832, 118 }, { -681.2, 132.6 }
+    ns.GPS.PlayerWorldPos = function() return 0, HERE[1], HERE[2] end
+    local function Len()
+        local pts = Nav.Path(0, HERE[1], HERE[2], ROAD_OUT[1], ROAD_OUT[2])
+        local len = 0
+        for i = 3, pts and #pts or 0, 2 do len = len + math.sqrt((pts[i] - pts[i - 2]) ^ 2 + (pts[i + 1] - pts[i - 1]) ^ 2) end
+        return len
+    end
+    env.IsIndoors = function() return true end
+    local out = Len()
+    H.assertTrue(out > 300, ("indoors: out through the tunnels, %.0f yd for 152 straight"):format(out))
 end
 
 function tests.azurelode_aNearEnd_staysInTheMine()

@@ -241,8 +241,14 @@ function Floors.Want(ci, x, y, spawnOnly)
     local pci, px, py
     if not spawnOnly then pci, px, py = PlayerSpot() end
     if not city then
-        -- A room names no floor: the player's own is not known.
-        if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS then return nil end
+        -- A room names no floor: the player's own is not known, but where
+        -- the game says indoors it is an indoor one (a walk out of a mine
+        -- set out from the hill over it, 2026-11-25).
+        if pci == ci and px and (px - x) ^ 2 + (py - y) ^ 2 <= PLAYER_YARDS * PLAYER_YARDS then
+            if not (IsIndoors and IsIndoors()) then return nil end
+            want.city, want.sub, want.z, want.inside = nil, nil, nil, true
+            return want
+        end
         local z = data and (RoomSpawn(ci, x, y) or walked[SpotKey(ci, x, y)])
         if z then
             want.city, want.sub, want.z, want.inside = nil, nil, z, nil
