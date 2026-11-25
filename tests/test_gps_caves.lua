@@ -35,6 +35,23 @@ local tests = {}
 -- Hackett "routing me to the spot at ground level which is wrong ... and
 -- then should guide through the cave"). A near floor is on the goal's own
 -- side, in or out, as the floor under an upstairs trainer still is.
+-- And drawn where it was priced: the near end's floor was picked again for
+-- the drawing with neither test, so a walk priced through the mine (387
+-- yd) was drawn straight to the hill over it (127 yd; his own positions,
+-- /efd gpsahead, 2026-11-25: the map and minimap at odds, flipping).
+function tests.azurelode_aNearWalk_isDrawnInByTheMouth()
+    local ns = Load("Walk_EasternKingdoms.lua")
+    local Nav = ns.GPSNav
+    local SPOT, FROM = { -790.0, 77.0 }, { -681.2, 132.6 }
+    ns.GPSFloors.Goal(0, SPOT[1], SPOT[2])
+    local cost = Nav.Walk(0, FROM[1], FROM[2], SPOT[1], SPOT[2], { near = 8 })
+    local pts = Nav.Path(0, FROM[1], FROM[2], SPOT[1], SPOT[2], { near = 8 })
+    local len = 0
+    for i = 3, pts and #pts or 0, 2 do len = len + math.sqrt((pts[i] - pts[i - 2]) ^ 2 + (pts[i + 1] - pts[i - 1]) ^ 2) end
+    H.assertTrue(cost and cost > 300, "priced through the mine: " .. tostring(cost))
+    H.assertTrue(len > cost * 0.8, ("drawn the way it was priced: %.0f yd drawn for %.0f priced"):format(len, cost or 0))
+end
+
 function tests.azurelode_aNearEnd_staysInTheMine()
     local Nav = Load("Walk_EasternKingdoms.lua").GPSNav
     local exact = Nav.Walk(0, ROAD[1], ROAD[2], HACKETT[1], HACKETT[2])

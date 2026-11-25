@@ -1163,6 +1163,22 @@ end
 -- taken unless the walk starts in a tile the circle touches (fromKey),
 -- where the way inside that tile is needed. rev: the costs into the
 -- circle instead (nearIn baked where a drop makes them differ).
+-- Which floors near (x, y) stand for it: at the level Floors wants where
+-- floors stack (not the ring over an auction house), and on the goal's own
+-- side, in or out: the floor under an upstairs trainer is near, the hill
+-- over a mine is not (Azurelode Mine, 2026-11-25). Pricing and drawing
+-- ask the same (the walk was priced through the mine, drawn to the hill).
+local function NearSide(w, x, y)
+    local want = Floors and Floors.Want(w.ci, x, y)
+    local goalTile, goalFloor = Locate(w, x, y, nil, 0)
+    return want, goalFloor and sbyte(goalTile.fl, goalFloor) % 4 >= 2
+end
+
+local function NearKeeps(w, t, key, cc, g, first, want, inside)
+    return (not want or Floors.OnLevel(w.ci, key, cc, g - first, want))
+        and (inside == nil or (sbyte(t.fl, g) % 4 >= 2) == inside)
+end
+
 local function NearEnd(w, x, y, r, fromKey, rev)
     local nk = mfloor(x) .. ":" .. mfloor(y) .. ":" .. r
     local rk = rev and (nk .. "<") or nk
@@ -1186,14 +1202,7 @@ local function NearEnd(w, x, y, r, fromKey, rev)
         end
     end
     local out, outT, floors, floorsT
-    -- Where floors stack, only those at the level wanted (not the ring
-    -- over an auction house).
-    local want = Floors and Floors.Want(w.ci, x, y)
-    -- And on the goal's own side, in or out: the floor under an upstairs
-    -- trainer is near, the hill over a mine is not (Miner Hackett in
-    -- Azurelode Mine was walked to on the hilltop, 2026-11-25).
-    local goalTile, goalFloor = Locate(w, x, y, nil, 0)
-    local inside = goalFloor and sbyte(goalTile.fl, goalFloor) % 4 >= 2
+    local want, inside = NearSide(w, x, y)
     for _, cx in ipairs({ x - r, x + r }) do
         for _, cy in ipairs({ y - r, y + r }) do
             local key, sx, sy = TileOf(cx, cy)
@@ -1206,8 +1215,7 @@ local function NearEnd(w, x, y, r, fromKey, rev)
                     for g = first, t and U16(t.cf, cc + 2) - 1 or 0 do
                         local gx, gy = FloorXY(w, t, g)
                         local d = msqrt((gx - x) ^ 2 + (gy - y) ^ 2)
-                        if d <= r and (not want or Floors.OnLevel(w.ci, key, cc, g - first, want))
-                           and (inside == nil or (sbyte(t.fl, g) % 4 >= 2) == inside) then
+                        if d <= r and NearKeeps(w, t, key, cc, g, first, want, inside) then
                             seeds = seeds or {}
                             seeds[g] = d
                         end
@@ -1770,14 +1778,19 @@ end
 local function NearFloor(w, t, g, x, y, r)
     local cost = TileSearch(w, t, g, nil, nil, nil, true)
     local N, cell = w.N, w.cell
+    local want, inside = NearSide(w, x, y)
     local best, bestC
     for row = mmax(0, mfloor((x - r - t.sx) / cell)), mmin(N - 1, mfloor((x + r - t.sx) / cell)) do
         for col = mmax(0, mfloor((y - r - t.sy) / cell)), mmin(N - 1, mfloor((y + r - t.sy) / cell)) do
             local cc = row * N + col
-            for f = U16(t.cf, cc + 1), U16(t.cf, cc + 2) - 1 do
+            local first = U16(t.cf, cc + 1)
+            for f = first, U16(t.cf, cc + 2) - 1 do
                 local fx, fy = FloorXY(w, t, f)
                 local c = cost[f] and cost[f] + msqrt((fx - x) ^ 2 + (fy - y) ^ 2)
-                if c and (fx - x) ^ 2 + (fy - y) ^ 2 <= r * r and (not bestC or c < bestC) then best, bestC = f, c end
+                if c and (fx - x) ^ 2 + (fy - y) ^ 2 <= r * r and (not bestC or c < bestC)
+                   and NearKeeps(w, t, t.key, cc, f, first, want, inside) then
+                    best, bestC = f, c
+                end
             end
         end
     end
