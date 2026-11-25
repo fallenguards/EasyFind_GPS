@@ -1889,8 +1889,15 @@ end
 
 -- A drawn walk as a route keeps it (GPS.lua), nil when not drawn; KeepWalk
 -- puts one back, so a way an earlier session found is not searched again.
--- KEPT_WALK_VER: kept in another layout, a walk is drawn again.
-local KEPT_WALK_VER = 4
+-- KEPT_WALK_VER: kept in another layout or by another release of the GPS,
+-- a walk is drawn again: a release's walk rules may differ (a route kept
+-- through a reload brought back its walk to the hill over Azurelode Mine
+-- after the fix, 2026-11-25).
+local KEPT_WALK_VER
+do
+    local Meta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata
+    KEPT_WALK_VER = "5:" .. tostring(Meta and Meta("EasyFind_GPS", "Version") or "")
+end
 function Route.SaveWalk(ci, sx, sy, tx, ty, near)
     local path = shown[EndsKey(ci, sx, sy, tx, ty, near)]
     if path == nil then path = walkPaths[WalkKey(ci, sx, sy, tx, ty, near)] end

@@ -1023,6 +1023,9 @@ function tests.walk_splitAgain_eachPieceKeepsItsJumps()
     kept.ver = nil
     Route.KeepWalk(kept)
     H.assertNil(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true), "a walk kept in an older layout is drawn again")
+    kept.ver = "5:0.0.1"
+    Route.KeepWalk(kept)
+    H.assertNil(Route.WalkPath(1, a.wx, a.wy, b.wx, b.wy, true), "and one kept by another release of the GPS")
 end
 
 -- Forever, 2026-11-17: a walk into Undercity through its sewers read only
