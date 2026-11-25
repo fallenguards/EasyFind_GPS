@@ -4,6 +4,13 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Caves and mines**: a route to something inside a cave (a quest's creature deep in a mine) leads in by the cave's mouth and through it, on the map, the minimap and the arrow alike, instead of straight to the ground above it, and stays that way as you move about
+
+---
+
 ## [1.10.1] - 2026-11-22
 
 ### Changed
