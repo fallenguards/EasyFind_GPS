@@ -122,6 +122,12 @@ local function Drawn(ci, w, tx, ty, near)
     return path
 end
 
+-- Where the player stands indoors, kept so for the walk asked from there.
+local function MarkHere(ci, x, y)
+    local Floors = ns.GPSFloors
+    if Floors and Floors.Inside and IsIndoors and IsIndoors() then Floors.Inside(ci, x, y) end
+end
+
 local function Find(ci, sx, sy, now)
     walk.found, walk.fx, walk.fy, walk.seg, walk.wide, walk.path, walk.asked = now, sx, sy, 1, true, nil, nil
     walk.plan, walk.ref, walk.cand, walk.join, walk.detour, walk.fromStart = nil, nil, nil, nil, nil, nil
@@ -161,25 +167,52 @@ local function AtLift(route, index, ci, px, py)
     return (px - (gx + ax) / 2) ^ 2 + (py - (gy + ay) / 2) ^ 2 <= AT_LIFT * AT_LIFT
 end
 
+-- Over a cave under open ground, the player's side of a walk's doors:
+-- true indoors, false outdoors; nil where one kind of floor is under him.
+-- Read at most every SIDE_SECONDS.
+local SIDE_SECONDS = 0.25
+local sideSeen = { at = -mhuge }
+local function PlayerSide(ci, x, y, now)
+    if now - sideSeen.at < SIDE_SECONDS and sideSeen.ci == ci then return sideSeen.side end
+    local Nav, side = ns.GPSNav, nil
+    if Nav and Nav.InsideAt and IsIndoors and Nav.InsideAt(ci, x, y) ~= nil then side = IsIndoors() and true or false end
+    sideSeen.at, sideSeen.ci, sideSeen.side = now, ci, side
+    return side
+end
+
 -- A walk's nearest point to (x, y), looked for near the stretch w matched
 -- last (all of a walk just found): its stretch, the yards along the walk
--- there, how far off, and the point.
-local function Nearest(path, x, y, w)
+-- there, how far off, and the point. With side, only stretches on that side
+-- of the walk's doors (the walk out of a mine runs over it; any if none).
+local function Nearest(path, x, y, w, side)
     local pts, cum = path.pts, path.cum
+    local doors = side ~= nil and path.doors or nil
     local bestD, bestSeg, bestAlong, bestX, bestY = mhuge, w.seg, 0, x, y
     local lo, hi = mmax(1, w.seg - BACK), mmin(#pts / 2 - 1, w.seg + ON)
     if w.wide then lo, hi, w.wide = 1, #pts / 2 - 1, false end
-    for s = lo, hi do
-        local ax, ay = pts[2 * s - 1], pts[2 * s]
-        local dx, dy = pts[2 * s + 1] - ax, pts[2 * s + 2] - ay
-        local l2 = dx * dx + dy * dy
-        local t = l2 > 0 and mmax(0, mmin(1, ((x - ax) * dx + (y - ay) * dy) / l2)) or 0
-        local qx, qy = ax + t * dx, ay + t * dy
-        local d = msqrt((x - qx) ^ 2 + (y - qy) ^ 2)
-        if d < bestD then
-            bestD, bestSeg, bestX, bestY = d, s, qx, qy
-            bestAlong = cum[s] + t * (cum[s + 1] - cum[s])
+    for pass = 1, doors and 2 or 1 do
+        local inside, k = doors and doors.from, 1
+        for s = lo, hi do
+            local mine = pass == 2 or not doors
+            if not mine then
+                while doors[k] and doors[k].at <= cum[s] do inside, k = doors[k].inside, k + 1 end
+                -- A stretch through a door is on both sides.
+                mine = (inside and true or false) == side or (doors[k] ~= nil and doors[k].at < cum[s + 1])
+            end
+            if mine then
+                local ax, ay = pts[2 * s - 1], pts[2 * s]
+                local dx, dy = pts[2 * s + 1] - ax, pts[2 * s + 2] - ay
+                local l2 = dx * dx + dy * dy
+                local t = l2 > 0 and mmax(0, mmin(1, ((x - ax) * dx + (y - ay) * dy) / l2)) or 0
+                local qx, qy = ax + t * dx, ay + t * dy
+                local d = msqrt((x - qx) ^ 2 + (y - qy) ^ 2)
+                if d < bestD then
+                    bestD, bestSeg, bestX, bestY = d, s, qx, qy
+                    bestAlong = cum[s] + t * (cum[s + 1] - cum[s])
+                end
+            end
         end
+        if bestD < mhuge then break end
     end
     return bestSeg, bestAlong, bestD, bestX, bestY
 end
@@ -219,9 +252,19 @@ local function Stitch(way, path, j)
             jumps[#jumps + 1] = { at = p.at - at + way.len, x = p.x, y = p.y, h = p.h }
         end
     end
+    -- The way's doors, then the walk's past the join.
+    local doors
+    if way.doors or path.doors then
+        doors = { from = way.doors and way.doors.from or false }
+        for k = 1, way.doors and #way.doors or 0 do doors[#doors + 1] = way.doors[k] end
+        for k = 1, path.doors and #path.doors or 0 do
+            local d = path.doors[k]
+            if d.at > at then doors[#doors + 1] = { at = d.at - at + way.len, x = d.x, y = d.y, inside = d.inside } end
+        end
+    end
     local t = 1
     while t < #pc and pc[t + 1] <= j.from do t = t + 1 end
-    return { pts = pts, cum = cum, len = len, time = (way.time or way.len) + rest, jumps = jumps,
+    return { pts = pts, cum = cum, len = len, time = (way.time or way.len) + rest, jumps = jumps, doors = doors,
              trail = { path = path, seg = t, x = j.qx, y = j.qy } }
 end
 
@@ -229,7 +272,7 @@ end
 -- far ahead on it, drawn in the planner's slices and joined to that way's
 -- rest; asked anew as the player moves on, the last one kept until it is
 -- drawn. No way there: nothing until moved on. True once joined.
-local function Rejoin(ci, px, py, now)
+local function Rejoin(ci, px, py, now, side)
     local plan = walk.plan
     if not plan then return false end
     local j = walk.join
@@ -243,18 +286,24 @@ local function Rejoin(ci, px, py, now)
         local ref = walk.ref
         if not ref then ref = { seg = 1 } walk.ref = ref end
         ref.wide = true
-        local seg, along, offPlan, qx, qy = Nearest(plan, px, py, ref)
+        local seg, along, offPlan, qx, qy = Nearest(plan, px, py, ref, side)
         ref.seg = seg
         local at = mmin(plan.len, along + mmin(JOIN_MAX, mmax(JOIN_AHEAD, JOIN_PER_OFF * offPlan)))
         local doors = plan.doors
+        local inside = doors and doors.from
         for k = 1, doors and #doors or 0 do
             local door = doors[k].at
             if door and door > along then
                 at = mmin(at, mmax(along, door - DOOR_SHORT))
                 break
             end
+            if door then inside = doors[k].inside end
         end
         local jx, jy = Follow.PointAt(plan, at, seg)
+        MarkHere(ci, px, py)
+        -- A join on the walk's indoor stretch: an indoor floor there too.
+        local Floors = ns.GPSFloors
+        if inside and Floors and Floors.Inside then Floors.Inside(ci, jx, jy) end
         j = { fx = px, fy = py, tx = jx, ty = jy, from = along, qx = qx, qy = qy, along = at, at = now }
         walk.join = j
     end
@@ -273,13 +322,14 @@ end
 -- over once drawn; from a way back far round, once drawn and clearly
 -- shorter than the walk from here. A way no shorter is dropped. True
 -- when it took over.
-local function Challenge(ci, px, py, now, path, along, off)
+local function Challenge(ci, px, py, now, path, along, off, side)
     local c = walk.cand
     if not c then
         local j = walk.join
         if not ((j and j.path == false) or walk.detour) or now - walk.found < REFIND then return false end
         c = { fx = px, fy = py, at = now, seg = 1, wide = true }
         walk.cand = c
+        MarkHere(ci, px, py)
     end
     local way = c.path
     if way == nil then way = Drawn(ci, c, walk.tx, walk.ty, walk.near) end
@@ -287,7 +337,7 @@ local function Challenge(ci, px, py, now, path, along, off)
         if way == false then walk.cand = nil end
         return false
     end
-    local seg, along2, off2 = Nearest(way, px, py, c)
+    local seg, along2, off2 = Nearest(way, px, py, c, side)
     c.seg = seg
     local j = walk.join
     if (j and j.path == false) or Left(way, along2, off2) < Left(path, along, off) - MARGIN_YD then
@@ -357,6 +407,7 @@ local function Take(r, now)
             Find(ci, sx, sy, -mhuge)
             walk.fromStart = true
         else
+            MarkHere(ci, px, py)
             Find(ci, px, py, now)
         end
     end
@@ -368,23 +419,25 @@ local function Take(r, now)
         path = Drawn(ci, walk, walk.tx, walk.ty, walk.near)
         walk.plan = path or nil
     end
+    local side = PlayerSide(ci, px, py, now)
     local seg, along, off, qx, qy
-    if path then seg, along, off, qx, qy = Nearest(path, px, py, walk) end
+    if path then seg, along, off, qx, qy = Nearest(path, px, py, walk, side) end
     if path == false then
         -- No way from where it was found: found again from here, once moved on.
         if not atLift and now - walk.found > REFIND and (walk.fx - px) ^ 2 + (walk.fy - py) ^ 2 > OFF_WAY * OFF_WAY then
+            MarkHere(ci, px, py)
             Find(ci, px, py, now)
             path = walk.path
-            if path then seg, along, off, qx, qy = Nearest(path, px, py, walk) end
+            if path then seg, along, off, qx, qy = Nearest(path, px, py, walk, side) end
         end
     elseif path and not atLift then
-        if (off > OFF_WAY or (walk.join and off > REJOIN_OFF)) and Rejoin(ci, px, py, now) then
+        if (off > OFF_WAY or (walk.join and off > REJOIN_OFF)) and Rejoin(ci, px, py, now, side) then
             path = walk.path
-            seg, along, off, qx, qy = Nearest(path, px, py, walk)
+            seg, along, off, qx, qy = Nearest(path, px, py, walk, side)
         end
-        if Challenge(ci, px, py, now, path, along, off) then
+        if Challenge(ci, px, py, now, path, along, off, side) then
             path = walk.path
-            seg, along, off, qx, qy = Nearest(path, px, py, walk)
+            seg, along, off, qx, qy = Nearest(path, px, py, walk, side)
         end
     end
     if not path then return end

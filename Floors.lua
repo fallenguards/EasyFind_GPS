@@ -30,6 +30,7 @@ local want = {}                                    -- Want's answer, one at a ti
 -- Journeys' ends: one with no spawn's height known takes the indoor floor
 -- where one stacks under open ground (a cave under its hill).
 local goals, goalsN = {}, 0
+local inside, insideN = {}, 0  -- the follower's indoor spots (Floors.Inside)
 -- What the client named a spot while the player stood there, kept once he
 -- has left: a trip's start keeps its floor (gone, the highest was taken).
 local told, toldN = {}, 0
@@ -235,6 +236,15 @@ end
 -- player has moved off that spot too.
 Floors.Indoors = Floors.Goal
 
+-- A spot the follower asks a walk from or to under a roof, kept once the
+-- player walks on: the planner searches it later, past PLAYER_YARDS.
+function Floors.Inside(ci, x, y)
+    local k = SpotKey(ci, x, y)
+    if inside[k] then return end
+    if insideN >= TOLD_KEPT then inside, insideN = {}, 0 end
+    inside[k], insideN = true, insideN + 1
+end
+
 -- What picks (x, y)'s floor in a stacked city: the player's sub-zone at
 -- the player's spot (unless spawnOnly), what it was there once he left,
 -- else the height a planned walk stood at there (Floors.Walked), else
@@ -259,7 +269,8 @@ function Floors.Want(ci, x, y, spawnOnly)
             want.city, want.sub, want.z, want.inside = nil, nil, z, nil
             return want
         end
-        if not goals[SpotKey(ci, x, y)] then return nil end
+        local k = SpotKey(ci, x, y)
+        if not (goals[k] or inside[k]) then return nil end
         want.city, want.sub, want.z, want.inside = nil, nil, nil, true
         return want
     end

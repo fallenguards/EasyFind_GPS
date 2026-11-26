@@ -30,6 +30,128 @@ local ROAD = { -760, 130 }        -- the road north of the mine
 
 local tests = {}
 
+local MOUTH = { -848.1, 214.5 }               -- Azurelode Mine's way out
+local STEP_END = { -246.6, -587.5 }           -- his route's first step out of the mine
+
+local function Len(pts)
+    local len = 0
+    for i = 3, pts and #pts or 0, 2 do len = len + math.sqrt((pts[i] - pts[i - 2]) ^ 2 + (pts[i + 1] - pts[i - 1]) ^ 2) end
+    return len
+end
+
+-- A walk as Route hands it to the follower: its doors by yards along.
+local function PathOf(pts, doors)
+    local cum = { 0 }
+    for v = 2, #pts / 2 do cum[v] = cum[v - 1] + Len({ pts[2 * v - 3], pts[2 * v - 2], pts[2 * v - 1], pts[2 * v] }) end
+    local d
+    if doors then
+        d = { from = doors.from }
+        for k = 1, #doors do d[k] = { at = cum[doors[k].v], x = doors[k].x, y = doors[k].y, inside = doors[k].inside } end
+    end
+    return { pts = pts, cum = cum, len = cum[#cum], time = cum[#cum], doors = d }
+end
+
+-- The follower in Azurelode Mine on the shipped grid. Its walks are
+-- searched in the planner's slices (Plan), the player 14 yd off by then.
+local function Follower(planned)
+    local ns, env = Load("Walk_EasternKingdoms.lua")
+    local Nav = ns.GPSNav
+    local now, player = { t = 100 }, { x = 0, y = 0 }
+    env.GetTime = function() return now.t end
+    env.IsIndoors = function() return true end
+    local route = { steps = { { kind = "travel", go = { ci = 0, wx = STEP_END[1], wy = STEP_END[2] } } }, active = 1,
+                    from = planned and { ci = 0, wx = planned[1], wy = planned[2] } or nil }
+    if planned then ns.GPSFloors.Indoors(0, planned[1], planned[2]) end
+    local queue, drawn = {}, {}
+    local function Key(sx, sy, tx, ty) return ("%.2f:%.2f>%.2f:%.2f"):format(sx, sy, tx, ty) end
+    ns.GPS.CurrentRoute = function() return route end
+    ns.GPS.PlayerWorldPos = function() return 0, player.x, player.y end
+    ns.GPS.DrawWalk = function(_, sx, sy, tx, ty)
+        queue[#queue + 1] = { sx, sy, tx, ty }
+        return true
+    end
+    ns.GPSRoute = { WalkPath = function(_, sx, sy, tx, ty) return drawn[Key(sx, sy, tx, ty)] end }
+    H.loadModule("Follow.lua", env, ns)
+    local function Plan()
+        local x, y = player.x, player.y
+        player.x, player.y, now.t = x + 10, y + 10, now.t + 1
+        for _, a in ipairs(queue) do
+            local pts, _, _, _, _, doors = Nav.Path(0, a[1], a[2], a[3], a[4])
+            drawn[Key(a[1], a[2], a[3], a[4])] = pts and PathOf(pts, doors) or false
+        end
+        queue = {}
+        player.x, player.y, now.t = x, y, now.t + 1
+    end
+    return ns.GPSFollow, player, Plan, Nav
+end
+
+-- The nearest a walk comes to (x, y).
+local function Passes(pts, x, y)
+    local best = math.huge
+    for i = 3, #pts, 2 do
+        local ax, ay, dx, dy = pts[i - 2], pts[i - 1], pts[i] - pts[i - 2], pts[i + 1] - pts[i - 1]
+        local l2 = dx * dx + dy * dy
+        local t = l2 > 0 and math.max(0, math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) or 0
+        best = math.min(best, math.sqrt((ax + t * dx - x) ^ 2 + (ay + t * dy - y) ^ 2))
+    end
+    return best
+end
+
+-- Out of the mine the follower's walks are its own, from where the player
+-- stands; the planner searched them once he had walked on, past the 3 yd
+-- the game's indoors covers, and they ran over the hill as the crow flies
+-- (Forever, 2026-11-26). His spot and the join keep their indoor floor.
+function tests.azurelode_theFollowersWalkFromHere_leavesByTheMouth()
+    local Follow, player, Plan = Follower(nil)
+    player.x, player.y = -816.5, 105.1
+    Follow.Now()
+    Plan()
+    local f = Follow.Now()
+    H.assertTrue(f and f.path, "a walk followed")
+    local miss = Passes(f.path.pts, MOUTH[1], MOUTH[2])
+    H.assertTrue(miss < 12, ("out by the mouth, not over the hill: %.0f yd off it, %.0f yd"):format(miss, f.path.len))
+end
+
+-- The walk out runs over the mine once out of its mouth: in the tunnel
+-- under it the player was matched to that stretch on the hill (2 yd off
+-- on the map) and the line ran on from there, straight.
+function tests.azurelode_inTheTunnel_theWalkOutIsFollowedThroughIt()
+    local Follow, player, Plan = Follower({ -846.9, 115.0 })
+    player.x, player.y = -846.9, 115.0
+    Follow.Now()
+    Plan()
+    local f
+    -- His own walk in the mine (/efd gpsahead, 18:48).
+    for _, p in ipairs({ { -845.1, 124.8 }, { -827.6, 113.5 }, { -816.5, 105.1 } }) do
+        player.x, player.y = p[1], p[2]
+        Follow.Now()
+        Plan()
+        f = Follow.Now()
+    end
+    H.assertTrue(f and f.path and f.path.doors, "a walk followed, with its doors")
+    local out
+    for k = 1, #f.path.doors do
+        if f.path.doors[k].inside == false then out = f.path.doors[k].at break end
+    end
+    H.assertTrue(out and f.along < out,
+        ("in the tunnel short of the way out (%.0f yd), not on the hill past it: %.0f yd along"):format(out or -1, f.along))
+end
+
+function tests.azurelode_theWayBackOntoTheWalkOut_staysInTheTunnels()
+    local Follow, player, Plan, Nav = Follower({ -846.9, 115.0 })
+    player.x, player.y = -816.5, 105.1
+    Follow.Now()
+    Plan()
+    Follow.Now()
+    Plan()
+    Follow.Now()
+    local j = Follow._walk.join
+    H.assertTrue(j and j.path, "a way back onto the walk")
+    local tunnels = Nav.Path(0, j.fx, j.fy, j.tx, j.ty, { indoorsA = true, indoorsB = true })
+    H.assertTrue(math.abs(j.path.len - Len(tunnels)) < 2,
+        ("through the tunnels (%.0f yd), not over the hill: %.0f yd"):format(Len(tunnels), j.path.len))
+end
+
 -- A goal reached only the long way round is walked to near it; near is
 -- never the hill over a mine (Forever, 2026-11-25: "Dangerous!" to Miner
 -- Hackett "routing me to the spot at ground level which is wrong ... and
