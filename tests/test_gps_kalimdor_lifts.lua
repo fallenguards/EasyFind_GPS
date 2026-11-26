@@ -10,6 +10,7 @@ local tests = {}
 local RECTS = {
     [1456] = { -1545.83, -527.08, -850.0, 516.67 },
     [1454] = { 1338.46, -5083.21, 2273.88, -3680.6 },
+    [1442] = { -339.58, -1637.5, 2916.67, 3245.83 },   -- Stonetalon Mountains
 }
 
 local CLIENTS = {
@@ -117,6 +118,22 @@ function tests.aLiftsStep_knowsItsOtherCar()
     H.assertNotNil(lift and lift.twin, "the other car")
     H.assertEq(lift.twin.go.area, lift.go.area, "boarded on the same level")
     H.assertEq(lift.twin.arrive.area, lift.arrive.area, "let off on the same level")
+end
+
+-- Hgarth, Sun Rock Retreat's enchanter, stands on a ledge whose trail is
+-- too steep for the grid's bake: the build dropped the ledge and every way
+-- to him was "No way found" (Forever, 2026-11-26). The nearest ground the
+-- walk reaches, then straight to him.
+function tests.hgarth_onALedgeTheGridLost_isWalkedToTheNearestGround()
+    local HGARTH = { name = "Hgarth", mapID = 1442, x = 0.4918, y = 0.5718 }
+    local INN = { ci = 1, wx = 893.65, wy = 927.95, m = 1442, x = 0.4747, y = 0.5543 }
+    for _, c in ipairs({ CLIENTS[1], CLIENTS[2] }) do
+        local steps = Route(c)(HGARTH, INN)
+        H.assertTrue(steps ~= nil and #steps > 0, c.data .. ": a way there")
+        for _, s in ipairs(steps or {}) do H.assertNil(s.noWay, c.data .. ": no step without a way") end
+        local last = steps and steps[#steps]
+        H.assertEq(last and last.near, 60, c.data .. ": its last walk ends near him, the rest straight")
+    end
 end
 
 local pass, fail, failures = H.runSuite("GPS Kalimdor lifts", tests)

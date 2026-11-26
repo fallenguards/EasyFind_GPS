@@ -429,6 +429,10 @@ local BOARD, BOARD_NEAR = { near = 40 }, 600
 -- Only then: a floor under an upstairs trainer is near too.
 local GOAL_NEAR = 8
 local goalOpts = { near = GOAL_NEAR }
+-- A goal on ground the grid lost (Hgarth's ledge, its trail too steep for
+-- the bake): the nearest ground reached within this, the rest straight.
+local LOST_NEAR = 60
+local lostOpts = { near = LOST_NEAR }
 -- A zone's goal is its map's middle, which can be off the ground the walks
 -- know (Winterspring's is): the nearest ground this many cells off stands
 -- for it.
@@ -478,6 +482,16 @@ local function PriceWalk(g, i, j, room)
                 g.walkNear[key] = GOAL_NEAR
             elseif not cost and nb then
                 beyond = true
+            end
+            if not cost and not beyond and not g.zoneGoal then
+                lostOpts.limit = limit
+                local lc, lb, lt = Nav.Walk(a.ci, a.wx, a.wy, b.wx, b.wy, lostOpts)
+                if lc then
+                    cost, beyond, time = lc, lb, lt
+                    g.walkNear[key] = LOST_NEAR
+                elseif lb then
+                    beyond = true
+                end
             end
         end
         if cost then
