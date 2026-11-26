@@ -527,9 +527,10 @@ local function PenTo(x, y)
 end
 
 -- A walk traced from `from` yards along it (x, y, on stretch s) to its
--- end: pen(red) as it starts and wherever it enters or leaves ground
--- deadly to the player on continent ci (nil: none), to(x, y) per point.
-function Preview.Trace(path, ci, s, x, y, from, pen, to)
+-- end, or to `upto` yards: pen(red) as it starts and wherever it enters or
+-- leaves ground deadly to the player on continent ci (nil: none), to(x, y)
+-- per point.
+function Preview.Trace(path, ci, s, x, y, from, pen, to, upto)
     local Npcs = ns.Npcs
     local db = EasyFind and EasyFind.db
     local d = ci and Npcs and Npcs.DeadlyAlong and not (db and db.gpsDangerRed == false)
@@ -541,15 +542,21 @@ function Preview.Trace(path, ci, s, x, y, from, pen, to)
     to(x, y)
     local pts, cum = path.pts, path.cum
     for v = s + 1, #pts / 2 do
+        local stop = upto ~= nil and cum[v] >= upto
+        local reach = stop and upto or cum[v]
         while r < n do
             local edge = red and d[r + 1] or d[r]
-            if edge >= cum[v] then break end
+            if edge >= reach then break end
             local ex, ey = ns.GPSFollow.PointAt(path, edge, v - 1)
             to(ex, ey)
             if red then r = r + 2 end
             red = not red
             pen(red)
             to(ex, ey)
+        end
+        if stop then
+            to(ns.GPSFollow.PointAt(path, upto, v - 1))
+            return
         end
         to(pts[2 * v - 1], pts[2 * v])
     end

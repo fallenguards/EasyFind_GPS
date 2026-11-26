@@ -415,5 +415,29 @@ function tests.aLaterStepsWay_isAskedWithItsReach()
     H.assertEq(asked, 25)
 end
 
+-- In a mine the walk out runs on over the land above it: the minimap drew
+-- that over the tunnels (Azurelode Mine, 2026-11-26: "we should not be
+-- showing the out-of-cave path while we're still in the cave"). Under a
+-- roof the line stops where the walk comes out; past there, all of it.
+function tests.underARoof_theLineStopsWhereTheWalkComesOut()
+    local drawn, _, now, Mini = fresh()
+    local find = Mini._ns.GPSRoute.WalkPath
+    Mini._ns.GPSRoute.WalkPath = function(...)
+        local path = find(...)
+        if path then path.doors = { from = true, { at = 150, x = 50, y = 0, inside = false } } end
+        return path
+    end
+    Mini._ns.GPSFollow.Reset()
+    now.t = now.t + 1
+    Mini:Refresh()
+    local a = drawn.pieces[#drawn.pieces].pts
+    H.assertTrue(near(a[#a], 25), "in the tunnel: up to the way out, 50 yd ahead: " .. a[#a])
+    Mini._ns.GPS.PlayerWorldPos = function() return 1, 160, 0 end
+    now.t = now.t + 1
+    Mini._Draw()
+    a = drawn.pieces[#drawn.pieces].pts
+    H.assertTrue(near(a[#a], RIM), "out of it: on to the rim: " .. a[#a])
+end
+
 local pass, fail, failures = H.runSuite("GPSMinimap", tests)
 return { pass = pass, fail = fail, failures = failures }

@@ -171,6 +171,20 @@ local function Walk(route, i, ci, sci, sx, sy, tx, ty)
     return path
 end
 
+-- Under a roof on the walk (a mine's tunnel), where it next comes out: past
+-- there it runs on the land over or beside the roof, shown once out.
+local function WayOut(path, along)
+    local doors = path.doors
+    if not doors then return nil end
+    local inside, k = doors.from, 1
+    while doors[k] and doors[k].at <= along do inside, k = doors[k].inside, k + 1 end
+    if not inside then return nil end
+    for n = k, #doors do
+        if doors[n].inside == false then return doors[n].at end
+    end
+    return nil
+end
+
 local function Hide()
     if lines then lines:Hide() end
     if mark then mark:Hide() end
@@ -254,7 +268,9 @@ local function Draw()
                     To(f.qx, f.qy)
                 end
                 traceColor, traceAlpha = color, alpha
-                Preview.Trace(f.path, f.ci, f.seg, f.qx, f.qy, f.along, TracePen, To)
+                local out = WayOut(f.path, f.along)
+                Preview.Trace(f.path, f.ci, f.seg, f.qx, f.qy, f.along, TracePen, To, out)
+                if out then break end
             elseif fromHere and i == fromHere.index then
                 Pen(color, alpha)
                 To(px, py)
