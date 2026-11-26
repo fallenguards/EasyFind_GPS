@@ -1912,7 +1912,7 @@ end
 -- Floors.lua, the Walk files' sizes; tests/test_kept_walk_rules.lua holds
 -- it to them): a change there finds kept walks again, in development too
 -- (a walk out of a mine came back straight after its fix, 2026-11-25).
-local KEPT_WALK_RULES = "8736132e"
+local KEPT_WALK_RULES = "e407bba7"
 local KEPT_WALK_VER
 do
     local Meta = C_AddOns and C_AddOns.GetAddOnMetadata or GetAddOnMetadata

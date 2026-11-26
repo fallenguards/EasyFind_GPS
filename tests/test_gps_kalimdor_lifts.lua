@@ -122,17 +122,22 @@ end
 
 -- Hgarth, Sun Rock Retreat's enchanter, stands on a ledge whose trail is
 -- too steep for the grid's bake: the build dropped the ledge and every way
--- to him was "No way found" (Forever, 2026-11-26). The nearest ground the
--- walk reaches, then straight to him.
-function tests.hgarth_onALedgeTheGridLost_isWalkedToTheNearestGround()
+-- to him was "No way found" (Forever, 2026-11-26). Forever's grid has the
+-- trail drawn (dev/tools/navmesh/paths.txt): walked to him. A grid without
+-- it: the nearest ground the walk reaches, then straight to him.
+function tests.hgarth_onALedgeTheGridLost_isWalkedTo()
     local HGARTH = { name = "Hgarth", mapID = 1442, x = 0.4918, y = 0.5718 }
     local INN = { ci = 1, wx = 893.65, wy = 927.95, m = 1442, x = 0.4747, y = 0.5543 }
-    for _, c in ipairs({ CLIENTS[1], CLIENTS[2] }) do
+    for i, c in ipairs({ CLIENTS[1], CLIENTS[2] }) do
         local steps = Route(c)(HGARTH, INN)
         H.assertTrue(steps ~= nil and #steps > 0, c.data .. ": a way there")
         for _, s in ipairs(steps or {}) do H.assertNil(s.noWay, c.data .. ": no step without a way") end
         local last = steps and steps[#steps]
-        H.assertEq(last and last.near, 60, c.data .. ": its last walk ends near him, the rest straight")
+        if i == 1 then
+            H.assertNil(last and last.near, c.data .. ": up the drawn trail, to him")
+        else
+            H.assertEq(last and last.near, 60, c.data .. ": its last walk ends near him, the rest straight")
+        end
     end
 end
 
