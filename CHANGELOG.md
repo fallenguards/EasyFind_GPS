@@ -4,10 +4,26 @@ All notable changes to EasyFind: GPS Navigation Extension are documented in this
 
 ---
 
-## [Unreleased]
+## [1.11.0] - 2026-11-26
+
+### Added
+- **Directions from the map's quests**: Alt-click a quest's objective or area on the world map for directions there; the quest stays tracked
+- **A quest's name finds its row**: searching a quest by name gives its row with directions
+
+### Changed
+- **One mark at a step's end**: the GPS dot, the game's pin or the quest's icon, never all three; a quest's icon is kept
+- **Fewer jump warnings**: a step no longer warns of a ledge a full-health character survives
+- **Longer jumps on WoW Forever**: walks take drops a full-health character survives, up to 50 yards
 
 ### Fixed
-- **Caves and mines**: a route to something inside a cave (a quest's creature deep in a mine) leads in by the cave's mouth and through it, on the map, the minimap and the arrow alike, instead of straight to the ground above it, and stays that way as you move about. Leaving a cave works the same way: the way out leads back through the tunnels to the mouth, and the minimap shows the route beyond the mouth only once you are out
+- **Errors in a fight**: a spell button under the arrow (a mage's teleport) threw an error with every cooldown update in a fight, thousands in a dungeon
+- **Caves and mines**: a route to something inside a cave leads in by its mouth and through it, on the map, the minimap and the arrow alike, and stays that way as you move about. Leaving a cave works the same way: back through the tunnels to the mouth, and the minimap shows the route beyond the mouth only once you are out
+- **Outer Gnomeregan on WoW Forever**: routes to Sprok, Namdo and the area under Dun Morogh ride the entrance lift down instead of a straight line
+- **NPCs on ledges**: a route to an NPC on ground the walks did not reach no longer says "No way found": it walks to the nearest ground and on to them. Hgarth's trail at Sun Rock Retreat is walked on WoW Forever
+- **Settings**: the line color rows use the page's own font
+
+### Technical Notes
+- **Target tiles for guides**: a guide extension may ask for its targets as tiles under the arrow (face, count, the one nearby)
 
 ---
 
